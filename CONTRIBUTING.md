@@ -88,7 +88,7 @@ Community proposals for lightweight, automated formatting rules are *very* welco
 Examples:
 
 ```
-fix(runtime): handle division by zero
+fix(bytecode): handle division by zero
 feat(lsp): add hover documentation for enums
 ```
 

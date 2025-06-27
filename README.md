@@ -37,9 +37,6 @@ cd gamescript
 
 # Build the toolchain
 dotnet build -c Release
-
-# Run a sample script
-dotnet run --project examples/HelloWorld.gsproj
 ````
 
 > **Note**
