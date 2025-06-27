@@ -16,6 +16,7 @@
 		EndOfFile,
 		Indent,
 		Dedent,
-		Comment
+		Comment,
+		Colon
 	}
 }

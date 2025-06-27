@@ -12,6 +12,7 @@ namespace GameScript.Language.Symbols
 		List<string>? typeNames,
 		TypeInfo? paramTypes,
 		List<string>? paramNames,
+		string? summary,
 		string filePath,
 		FileRange fileRange)
 	{
@@ -21,6 +22,7 @@ namespace GameScript.Language.Symbols
 		public List<string>? TypeNames { get; } = typeNames;
 		public TypeInfo? ParamTypes { get; } = paramTypes;
 		public List<string>? ParamNames { get; } = paramNames;
+		public string? Summary { get; } = summary;
 		public string FilePath { get; } = filePath;
 		public FileRange FileRange { get; } = fileRange;
 		public string Signature { get; } = CreateSignature(identifierType, name, type, typeNames, paramTypes, paramNames);
@@ -44,16 +46,19 @@ namespace GameScript.Language.Symbols
 			var vsb = new ValueStringBuilder(buffer);
 			if ((identifierType & IdentifierType.Method) != IdentifierType.Unknown)
 			{
-				vsb.Append(GetIdentifierKeyword(identifierType));
-				vsb.Append(' ');
+				if (identifierType != IdentifierType.Trigger)
+				{
+					vsb.Append(GetIdentifierKeyword(identifierType));
+					vsb.Append(' ');
+				}
 				vsb.Append(name);
 
+				vsb.Append('(');
 				if (paramTypes != null)
 				{
-					vsb.Append('(');
 					AppendTypes(ref vsb, paramTypes, paramNames);
-					vsb.Append(')');
 				}
+				vsb.Append(')');
 
 				if (type != null)
 				{

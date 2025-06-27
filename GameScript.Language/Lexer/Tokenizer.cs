@@ -78,6 +78,7 @@ namespace GameScript.Language.Lexer
 				case '(': _column++; return new Token(TokenType.OpenParen, "(".AsSpan(), CurrentRange(pos));
 				case ')': _column++; return new Token(TokenType.CloseParen, ")".AsSpan(), CurrentRange(pos));
 				case ',': _column++; return new Token(TokenType.Comma, ",".AsSpan(), CurrentRange(pos));
+				case ':': _column++; return new Token(TokenType.Colon, ":".AsSpan(), CurrentRange(pos));
 			}
 
 			/*──────────────────────────────────────────────────────────────

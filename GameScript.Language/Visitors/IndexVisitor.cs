@@ -26,6 +26,7 @@ namespace GameScript.Language.Visitors
 				null,
 				null,
 				null,
+				node.Name.Summary,
 				_context.FilePath,
 				node.Name.FileRange
 			);
@@ -43,6 +44,7 @@ namespace GameScript.Language.Visitors
 				node.ReturnTypes?.Select(x => x.Name?.Name ?? string.Empty).ToList(),
 				_context.Types.GetTuple(node.Parameters?.Select(x => x.Type.Name)),
 				node.Parameters?.Select(x => x.Name.Name).ToList(),
+				node.Name.Summary,
 				_context.FilePath,
 				node.Name.FileRange
 			);
@@ -70,6 +72,7 @@ namespace GameScript.Language.Visitors
 					null,
 					null,
 					null,
+					varName.Summary,
 					_context.FilePath,
 					varName.FileRange
 				);
@@ -88,6 +91,7 @@ namespace GameScript.Language.Visitors
 				null,
 				null,
 				null,
+				node.Name.Summary,
 				_context.FilePath,
 				node.Name.FileRange
 			);

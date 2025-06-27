@@ -1,10 +1,12 @@
 using GameScript.Language.Ast;
 using GameScript.Language.Index;
+using GameScript.Language.Symbols;
 using GameScript.LanguageServer.Caches;
 using GameScript.LanguageServer.Extensions;
 using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Protocol.Document;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
+using System.Text;
 
 namespace GameScript.LanguageServer.Handlers;
 
@@ -25,14 +27,14 @@ internal sealed class HoverHandler(
 			return null;
 		}
 
-		var astNode = rootData.Root.FindNodeAtPosition(request.Position.Line, request.Position.Character);
+		var (astNode, parent) = rootData.Root.FindNodeAndParentAtPosition(request.Position.Line, request.Position.Character);
 		if (astNode == null)
 		{
 			return null;
 		}
 
 		var localIndex = rootData.GetLocalIndex(request.Position.Line, request.Position.Character);
-		return GetHover(astNode, localIndex);
+		return GetHover(astNode, parent, localIndex);
 	}
 
 	public HoverRegistrationOptions GetRegistrationOptions(HoverCapability capability, ClientCapabilities clientCapabilities)
@@ -43,13 +45,15 @@ internal sealed class HoverHandler(
 		};
 	}
 
-	private Hover? GetHover(AstNode astNode, LocalIndex? localIndex)
+	private Hover? GetHover(AstNode astNode, AstNode? parent, LocalIndex? localIndex)
 	{
 		return astNode switch
 		{
-			MethodDefinitionNode methodDefinitionNode => CreateMethodHover(methodDefinitionNode.Name.Name),
+			MethodDefinitionNode methodDefinitionNode => CreateMethodHover(methodDefinitionNode.SymbolName),
 			IdentifierNode identifierNode => GetHover(identifierNode.Type, identifierNode.Name, localIndex),
-			IdentifierDeclarationNode identifierDeclarationNode => GetHover(identifierDeclarationNode.Type, identifierDeclarationNode.Name, localIndex),
+			IdentifierDeclarationNode identifierDeclarationNode => parent is MethodDefinitionNode parentMethod
+						? CreateMethodHover(parentMethod.SymbolName)
+						: GetHover(identifierDeclarationNode.Type, identifierDeclarationNode.Name, localIndex),
 			_ => null
 		};
 	}
@@ -72,16 +76,9 @@ internal sealed class HoverHandler(
 	{
 		var symbol = _symbols.GetSymbol(symbolName);
 		if (symbol == null)
-		{
 			return null;
-		}
 
-		var md = new MarkupContent
-		{
-			Kind = MarkupKind.PlainText,
-			Value = symbol.Signature
-		};
-
+		var md = CreateFromSymbol(symbol);
 		return new Hover
 		{
 			Contents = new MarkedStringsOrMarkupContent(md),
@@ -93,20 +90,29 @@ internal sealed class HoverHandler(
 	{
 		var symbol = localIndex?.GetSymbol(symbolName) ?? _symbols.GetSymbol(symbolName);
 		if (symbol == null)
-		{
 			return null;
-		}
-		
-		var md = new MarkupContent
-		{
-			Kind = MarkupKind.PlainText,
-			Value = symbol.Signature
-		};
 
+		var md = CreateFromSymbol(symbol);
 		return new Hover
 		{
 			Contents = new MarkedStringsOrMarkupContent(md),
 			Range = symbol.FileRange.ConvertRange()
 		};
+	}
+
+	private static MarkupContent CreateFromSymbol(SymbolInfo symbol)
+	{
+		var builder = new StringBuilder();
+		if (!string.IsNullOrEmpty(symbol.Summary))
+			builder.AppendLine($"{symbol.Summary}");
+		builder.AppendLine();
+		builder.AppendLine($"`{symbol.Signature}`");
+
+		var md = new MarkupContent
+		{
+			Kind = MarkupKind.Markdown,
+			Value = builder.ToString()
+		};
+		return md;
 	}
 }

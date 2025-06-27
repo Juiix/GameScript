@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
+using System.Text;
 using GameScript.Language.File;
 using GameScript.Language.Lexer;
 
@@ -15,6 +16,8 @@ namespace GameScript.Language.Ast
 		private Token _peek;
 		private readonly List<FileError> _errors = [];
 		private readonly List<CommentNode> _comments = [];
+		private StringBuilder? _summaryBuilder;
+		private FilePosition _lastSummaryPosition;
 
 		public AstParser(string filePath, ReadOnlySpan<char> source) : this()
 		{
@@ -113,7 +116,7 @@ namespace GameScript.Language.Ast
 		{
 			return _current.Type switch
 			{
-				TokenType.Keyword => _current.Value.ToString() switch
+				TokenType.Keyword => _current.Value switch
 				{
 					"if" => ParseIfStatement(),
 					"while" => ParseWhileStatement(),
@@ -129,6 +132,7 @@ namespace GameScript.Language.Ast
 
 		private MethodDefinitionNode ParseMethodDefinition(IdentifierType idType)
 		{
+			var summary = GetSummary();
 			var start = _current.Start;
 
 			// leading keyword (func / label / command / trigger)
@@ -138,9 +142,22 @@ namespace GameScript.Language.Ast
 
 			// method name
 			var nameTok = Expect(TokenType.Identifier, "Expected method name", "funcName".AsSpan());
-			var nameNode = new IdentifierDeclarationNode(
-							   nameTok.Value.TrimStart("~@".AsSpan()).ToString(),
-							   idType, _filePath, PreviousRange);
+			var nameStart = _previous.Start;
+			IdentifierDeclarationNode nameNode;
+			if (idType == IdentifierType.Trigger && Match(TokenType.Colon))
+			{
+				var comTok = Expect(TokenType.Identifier, "Expected component identifier", "component".AsSpan());
+				var combined = $"{nameTok.Value.TrimStart("~@".AsSpan()).ToString()}:{comTok.Value.TrimStart("~@".AsSpan()).ToString()}";
+				nameNode = new IdentifierDeclarationNode(
+								   combined, idType, summary,
+								   _filePath, new FileRange(nameStart, _previous.End));
+			}
+			else
+			{
+				nameNode = new IdentifierDeclarationNode(
+								   nameTok.Value.TrimStart("~@".AsSpan()).ToString(),
+								   idType, summary, _filePath, PreviousRange);
+			}
 
 			/* ───── parameters ───── */
 			List<ParameterNode>? parameters = null;
@@ -181,6 +198,7 @@ namespace GameScript.Language.Ast
 
 		private ConstantDefinitionNode ParseConstantDefinition()
 		{
+			var summary = GetSummary();
 			var start = _current.Start;
 
 			// constant type
@@ -190,7 +208,7 @@ namespace GameScript.Language.Ast
 			// constant name (must start with '^')
 			var nameTok = Expect(TokenType.Identifier, "Expected constant name (must start with '^')", "^constName".AsSpan());
 			var nameNode = new IdentifierDeclarationNode(nameTok.Value.TrimStart('^').ToString(),
-														 IdentifierType.Constant, _filePath, PreviousRange);
+														 IdentifierType.Constant, summary, _filePath, PreviousRange);
 
 			if (nameTok.Value[0] != '^')
 				Error($"Constant '{nameNode.Name}' must start with a '^'", nameNode.FileRange);
@@ -329,6 +347,7 @@ namespace GameScript.Language.Ast
 
 		private VariableDefinitionNode ParseVariableDefinition()
 		{
+			var summary = GetSummary();
 			var start = _current.Start;
 
 			// variable **type**
@@ -343,7 +362,7 @@ namespace GameScript.Language.Ast
 				// name must start with '$'
 				var nameTok = Expect(TokenType.Identifier, "Expected variable name (must start with '$')", "$varName".AsSpan());
 				var nameNode = new IdentifierDeclarationNode(nameTok.Value.TrimStart('$').ToString(),
-															 IdentifierType.Local, _filePath, PreviousRange);
+															 IdentifierType.Local, summary, _filePath, PreviousRange);
 
 				if (nameTok.Value[0] != '$')
 					Error($"Local variable '{nameNode.Name}' must start with a '$'", nameNode.FileRange);
@@ -381,6 +400,7 @@ namespace GameScript.Language.Ast
 			// <type> <name> (',' <type> <name>)*
 			do
 			{
+				var summary = GetSummary();
 				var start = _current.Start;
 
 				var typeTok = Expect(TokenType.Identifier, "Expected parameter type", "paramType".AsSpan());
@@ -388,7 +408,7 @@ namespace GameScript.Language.Ast
 
 				var nameTok = Expect(TokenType.Identifier, "Expected parameter name", "$paramName".AsSpan());
 				var nameNode = new IdentifierDeclarationNode(nameTok.Value.TrimStart('$').ToString(),
-															 IdentifierType.Local, _filePath, PreviousRange);
+															 IdentifierType.Local, summary, _filePath, PreviousRange);
 
 				if (nameTok.Value[0] != '$')
 					Error($"Local variable '{nameNode.Name}' must start with a '$'", nameNode.FileRange);
@@ -432,7 +452,7 @@ namespace GameScript.Language.Ast
 			if (Match(TokenType.Identifier))
 			{
 				nameNode = new IdentifierDeclarationNode(_previous.Value.ToString(),
-														 IdentifierType.Local, _filePath, PreviousRange);
+														 IdentifierType.Local, null, _filePath, PreviousRange);
 
 				if (_previous.Value[0] != '$')
 					Error($"Local identifier '{nameNode.Name}' must start with a '$'", PreviousRange);
@@ -749,11 +769,18 @@ namespace GameScript.Language.Ast
 		{
 			while (true)
 			{
+				if (_current.Type == TokenType.Identifier)
+					_summaryBuilder?.Clear();
+
 				var token = _tokenizer.NextToken();
 				if (token.Type != TokenType.Comment)
 				{
 					return token;
 				}
+				_summaryBuilder ??= new();
+				if (_summaryBuilder.Length > 0) _summaryBuilder.Append('\n');
+				_summaryBuilder.Append(token.Value.TrimStart("/*").Trim());
+				_lastSummaryPosition = token.End;
 				_comments?.Add(new CommentNode(token.Value.ToString(), _filePath, token.Range));
 			}
 		}
@@ -843,6 +870,17 @@ namespace GameScript.Language.Ast
 		{
 			while (_current.Type == TokenType.EndOfLine)
 				Advance();
+		}
+
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
+		private string? GetSummary()
+		{
+			if (_summaryBuilder == null || _summaryBuilder.Length == 0 ||
+				_lastSummaryPosition.Line < _current.Start.Line - 1)
+				return null;
+			var summary = _summaryBuilder.ToString();
+			_summaryBuilder.Clear();
+			return summary;
 		}
 
 		// --------------------------------- Parse Helpers ----------------------------------

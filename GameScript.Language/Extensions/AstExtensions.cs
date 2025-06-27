@@ -4,6 +4,8 @@
 	{
 		public static AstNode? FindNodeAtPosition(this AstNode astNode, int position) => astNode.FindNodeAtPosition<AstNode>(position);
 		public static AstNode? FindNodeAtPosition(this AstNode astNode, int line, int character) => astNode.FindNodeAtPosition<AstNode>(line, character);
+		public static (AstNode? Node, AstNode? Parent) FindNodeAndParentAtPosition(this AstNode astNode, int position) => astNode.FindNodeAndParentAtPosition<AstNode>(position);
+		public static (AstNode? Node, AstNode? Parent) FindNodeAndParentAtPosition(this AstNode astNode, int line, int character) => astNode.FindNodeAndParentAtPosition<AstNode>(line, character);
 
 		public static T? FindNodeAtPosition<T>(this AstNode astNode, int position) where T : class
 		{
@@ -49,6 +51,52 @@
 
 			// If none of the children match, then 'this' node is the smallest match.
 			return astNode as T;
+		}
+
+		public static (T? Node, AstNode? Parent) FindNodeAndParentAtPosition<T>(this AstNode astNode, int position) where T : class
+		{
+			// If offset is not within this node's range, return null immediately
+			if (!astNode.FileRange.Contains(position))
+			{
+				return default;
+			}
+
+			// If offset is within this node's range, check children first
+			// to see if there's a more specific node that encloses the offset.
+			foreach (var child in astNode.Children)
+			{
+				var (found, parent) = child.FindNodeAndParentAtPosition<T>(position);
+				if (found != null)
+				{
+					return (found, parent ?? astNode);
+				}
+			}
+
+			// If none of the children match, then 'this' node is the smallest match.
+			return (astNode as T, null);
+		}
+
+		public static (T? Node, AstNode? Parent) FindNodeAndParentAtPosition<T>(this AstNode astNode, int line, int character) where T : class
+		{
+			// If offset is not within this node's range, return null immediately
+			if (!astNode.FileRange.Contains(line, character))
+			{
+				return default;
+			}
+
+			// If offset is within this node's range, check children first
+			// to see if there's a more specific node that encloses the offset.
+			foreach (var child in astNode.Children)
+			{
+				var (found, parent) = child.FindNodeAndParentAtPosition<T>(line, character);
+				if (found != null)
+				{
+					return (found, parent ?? astNode);
+				}
+			}
+
+			// If none of the children match, then 'this' node is the smallest match.
+			return (astNode as T, null);
 		}
 	}
 }
