@@ -50,7 +50,7 @@ dotnet run --project examples/HelloWorld.gsproj
 ## Contributing
 
 Pull requests are welcome! Please open an issue first to discuss major changes.
-See `CONTRIBUTING.md` for coding standards, branch workflow, and CLA details.
+See [CONTRIBUTING](CONTRIBUTING.md) for coding standards, branch workflow, and CLA details.
 
 ---
 
@@ -58,6 +58,3 @@ See `CONTRIBUTING.md` for coding standards, branch workflow, and CLA details.
 
 GameScript is licensed under the **Apache License 2.0**.
 See the [LICENSE](LICENSE) file for details.
-
-```
-```
