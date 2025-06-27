@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<plist version="1.0">
+  <dict>
+    <key>$schema</key>
+    <string>https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json</string>
+    <key>name</key>
+    <string>Object Definition</string>
+    <key>scopeName</key>
+    <string>source.objectdef</string>
+    
+    <key>fileTypes</key>
+    <array>
+      <string>item</string>
+      <string>menu</string>
+      <string>npc</string>
+      <string>varp</string>
+    </array>
+
+    <key>patterns</key>
+    <array>
+      <dict>
+        <key>include</key>
+        <string>#objectId</string>
+      </dict>
+      <dict>
+        <key>include</key>
+        <string>#assignment</string>
+      </dict>
+      <dict>
+        <key>match</key>
+        <string>#.*$</string>
+        <key>name</key>
+        <string>comment.line.number-sign.objectdef</string>
+      </dict>
+    </array>
+
+    <key>repository</key>
+    <dict>
+      <key>objectId</key>
+      <dict>
+        <key>match</key>
+        <string>^\s*([A-Za-z_][A-Za-z0-9_]*)\s*$</string>
+        <key>captures</key>
+        <dict>
+          <key>1</key>
+          <dict>
+            <key>name</key>
+            <string>entity.name.function.objectdef</string>
+          </dict>
+        </dict>
+      </dict>
+
+      <key>assignment</key>
+      <dict>
+        <key>name</key>
+        <string>meta.assignment.objectdef</string>
+        <key>begin</key>
+        <string>^\s*([A-Za-z_][A-Za-z0-9_]*)\s*(=)</string>
+        <key>beginCaptures</key>
+        <dict>
+          <key>1</key>
+          <dict>
+            <key>name</key>
+            <string>variable.other.key.objectdef</string>
+          </dict>
+          <key>2</key>
+          <dict>
+            <key>name</key>
+            <string>keyword.operator.assignment.objectdef</string>
+          </dict>
+        </dict>
+        <key>end</key>
+        <string>$</string>
+        <key>patterns</key>
+        <array>
+          <dict>
+            <key>name</key>
+            <string>string.unquoted.value.objectdef</string>
+            <key>match</key>
+            <string>[^#\r\n]+</string>
+          </dict>
+        </array>
+      </dict>
+    </dict>
+  </dict>
+</plist>

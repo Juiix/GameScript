@@ -1,0 +1,74 @@
+{
+    "name": "gamescript-vscode",
+    "displayName": "Game Script Support",
+    "description": "Language support for GameScript files powered by the C# LSP.",
+    "version": "0.0.1",
+    "publisher": "YeOldeGames",
+    "engines": {
+        "vscode": "^1.90.0"
+    },
+    "dependencies": {
+        "vscode-languageclient": "^9.0.1"
+    },
+    "devDependencies": {
+        "@types/node": "^22.15.17",
+        "@types/vscode": "^1.90.0",
+        "typescript": "^5.4.5"
+    },
+    "contributes": {
+        "languages": [
+            {
+                "id": "gamescript",
+                "aliases": [
+                    "Game Script",
+                    "gamescript"
+                ],
+                "extensions": [
+                    ".gs",
+                    ".const"
+                ],
+                "configuration": "./resources/gamescript-configuration.json",
+                "icon": {
+                  "light": "./images/gamescript.png",
+                  "dark": "./images/gamescript.png"
+                }
+            },
+            {
+                "id": "objectdef",
+                "aliases": ["Object Definition", "objectdef"],
+                "extensions": [
+                  ".varp",
+                  ".item",
+                  ".npc",
+                  ".menu",
+                  ".obj",
+                  ".tile"
+                ],
+                "configuration": "./resources/objectdef-configuration.json",
+                "icon": {
+                  "light": "./images/objectdef.png",
+                  "dark": "./images/objectdef.png"
+                }
+            }
+        ],
+        "grammars": [
+          {
+            "language": "objectdef",
+            "scopeName": "source.objectdef",
+            "path": "./syntaxes/objectdef.tmLanguage.json"
+          }
+        ],
+        "configurationDefaults": {
+            "[gamescript]": {
+                "editor.tabSize": 4
+            }
+        }
+    },
+    "main": "./out/extension.js",
+    "scripts": {
+        "compile": "tsc -p ./",
+        "watch": "tsc -watch -p ./",
+        "package": "vsce package",
+        "prepublish": "npm run compile"
+    }
+}

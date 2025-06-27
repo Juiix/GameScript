@@ -1,0 +1,42 @@
+﻿;----------------------------------------
+; Where to find your .tmLanguage files
+;----------------------------------------
+[$RootKey$\TextMate\Repositories]
+"objectdef"="$PackageFolder$\Grammars"
+
+;----------------------------------------
+; Map extensions → TextMate scope name
+;----------------------------------------
+[$RootKey$\TextMate]
+"*.menu"="source.objectdef"
+"*.npc" ="source.objectdef"
+"*.item"="source.objectdef"
+"*.varp"="source.objectdef"
+"*.tile"="source.objectdef"
+"*.obj"="source.objectdef"
+
+;----------------------------------------
+; Map scope name → specific grammar file
+;----------------------------------------
+[$RootKey$\TextMate\Scopes]
+"source.objectdef"="$PackageFolder$\Grammars\objectdef.tmLanguage"
+
+;----------------------------------------
+; Associate icons with file extensions
+;----------------------------------------
+[$RootKey$\ShellFileAssociations\.gs]
+"DefaultIconMoniker"="KnownMonikers.ClassFile"
+[$RootKey$\ShellFileAssociations\.const]
+"DefaultIconMoniker"="KnownMonikers.ClassFile"
+[$RootKey$\ShellFileAssociations\.item]
+"DefaultIconMoniker"="KnownMonikers.ComponentFile"
+[$RootKey$\ShellFileAssociations\.npc]
+"DefaultIconMoniker"="KnownMonikers.ComponentFile"
+[$RootKey$\ShellFileAssociations\.menu]
+"DefaultIconMoniker"="KnownMonikers.ComponentFile"
+[$RootKey$\ShellFileAssociations\.varp]
+"DefaultIconMoniker"="KnownMonikers.ComponentFile"
+[$RootKey$\ShellFileAssociations\.tile]
+"DefaultIconMoniker"="KnownMonikers.ComponentFile"
+[$RootKey$\ShellFileAssociations\.obj]
+"DefaultIconMoniker"="KnownMonikers.ComponentFile"
