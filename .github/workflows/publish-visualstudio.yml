@@ -55,6 +55,6 @@ jobs:
     - name: Publish extension to Marketplace
       uses: cezarypiatek/VsixPublisherAction@1.1
       with:
-        extension-file: ${{ steps.vsix.outputs.file }}
+        extension-file: GameScript.VisualStudio/bin/Release/GameScript.VisualStudio.vsix
         publish-manifest-file: GameScript.VisualStudio/publishManifest.json
         personal-access-code: ${{ secrets.VSIX_PUBLISHER_TOKEN }}

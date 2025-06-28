@@ -26,10 +26,12 @@ jobs:
 
     # ── Build language-server (all RIDs) ──────────────────────────────
     - name: Make build script executable
-      run: chmod +x ./Scripts/build-lsp.sh
+      working-directory: Scripts
+      run: chmod +x ./build-lsp.sh
 
     - name: Build language server
-      run: ./Scripts/build-lsp.sh
+      working-directory: Scripts
+      run: ./build-lsp.sh
 
     # ── Package VS Code extension ────────────────────────────────────
     - name: Install vsce
