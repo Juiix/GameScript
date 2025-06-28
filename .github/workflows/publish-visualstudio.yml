@@ -1,0 +1,56 @@
+name: Build & Publish Visual Studio Extension
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']          # same trigger as the VS Code workflow
+
+jobs:
+  vsix:
+    runs-on: windows-latest
+    env:
+      CONFIGURATION: Release
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '8.x'
+
+    # ── Build language-server for win-x64 only ───────────────────────
+    - name: Publish LSP (win-x64)
+      shell: bash
+      run: |
+        OUT="GameScript.VisualStudio/Server/win-x64"
+        mkdir -p "$OUT"
+        dotnet publish \
+          GameScript.LanguageServer/GameScript.LanguageServer.csproj \
+          -c Release -r win-x64 --self-contained true \
+          -p:PublishSingleFile=true -o "$OUT"
+
+    # ── Build Visual Studio extension (.vsix) ────────────────────────
+    - name: Build VSIX
+      run: |
+        msbuild GameScript.VisualStudio/GameScript.VisualStudio.csproj `
+          -p:Configuration=$env:CONFIGURATION
+
+    - name: Locate VSIX
+      id: find_vsix
+      run: |
+        $vsix = Get-ChildItem -Path GameScript.VisualStudio -Filter *.vsix -Recurse `
+                | Select-Object -First 1
+        echo "path=$($vsix.FullName)" >> $env:GITHUB_OUTPUT
+
+    # ── Publish to Visual Studio Marketplace ─────────────────────────
+    - name: Install VsixPublisher tool
+      run: dotnet tool install --global Microsoft.VisualStudio.Extension.VsixPublisher
+
+    - name: Publish VSIX
+      env:
+        VSIX_PAT: ${{ secrets.VSIX_PUBLISHER_TOKEN }}
+      run: |
+        VsixPublisher publish `
+          --payload "${{ steps.find_vsix.outputs.path }}" `
+          --publishManifest GameScript.VisualStudio/publishManifest.json `
+          --personalAccessToken "$env:VSIX_PAT"

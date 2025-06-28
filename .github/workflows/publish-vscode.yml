@@ -1,0 +1,53 @@
+name: Build & Publish VS Code Extension
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']          # publish on version tags, adjust as needed
+
+jobs:
+  vscode:
+    runs-on: macos-latest
+    env:
+      CONFIGURATION: Release
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '8.x'
+
+    - uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+
+    # ── Build language-server (all RIDs) ──────────────────────────────
+    - name: Make build script executable
+      run: chmod +x ./Scripts/build-lsp.sh
+
+    - name: Build language server
+      run: ./Scripts/build-lsp.sh
+
+    # ── Package VS Code extension ────────────────────────────────────
+    - name: Install vsce
+      run: npm install -g @vscode/vsce
+
+    - name: Install extension deps
+      working-directory: GameScript.Vscode
+      run: npm ci
+
+    - name: Package
+      id: pkg
+      working-directory: GameScript.Vscode
+      run: |
+        npx vsce package --no-dependencies --out vscode-extension.vsix
+        echo "vsix_path=$(pwd)/vscode-extension.vsix" >> "$GITHUB_OUTPUT"
+
+    # ── Publish to VS Code Marketplace ───────────────────────────────
+    - name: Publish
+      working-directory: GameScript.Vscode
+      env:
+        VSCE_PAT: ${{ secrets.VSCE_TOKEN }}
+      run: npx vsce publish --packagePath "${{ steps.pkg.outputs.vsix_path }}" --pat "$VSCE_PAT"

@@ -1,0 +1,38 @@
+﻿{
+  // Optional; helps editors give you intellisense
+  "$schema": "https://aka.ms/vs-marketplace-publishManifest-schema.json",
+
+  //
+  // ──────────────────────────────────
+  // Identity
+  // ──────────────────────────────────
+  //
+  "identity": {
+    "publisher": "YeOldeGames", // <- EXACTLY the ID in your VS Marketplace account
+    "extensionName": "GameScript-VisualStudio",
+    "version": "0.0.1"
+  },
+
+  //
+  // ──────────────────────────────────
+  // Categorization & search
+  // ──────────────────────────────────
+  //
+  "categories": [
+    "coding",
+    "languages" // see docs for the accepted list
+  ],
+
+  //
+  // ──────────────────────────────────
+  // Display info seen on the Marketplace
+  // ──────────────────────────────────
+  //
+  "content": {
+    "displayName": "GameScript Language Support",
+    "description": "Adds syntax highlighting, IntelliSense, and diagnostics for the GameScript language in Visual Studio.",
+    "details": "## 0.0.1 – Initial release\n\n* Syntax highlighting\n* IntelliSense powered by the bundled LSP\n* Error squiggles & quick fixes\n",
+    "galleryFlags": [ "Public" ], // "Hidden" or "Preview" are the other common flags
+    "tags": [ "gamescript", "lsp" ]
+  }
+}

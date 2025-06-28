@@ -1,7 +1,7 @@
 {
     "name": "gamescript-vscode",
-    "displayName": "Game Script Support",
-    "description": "Language support for GameScript files powered by the C# LSP.",
+    "displayName": "GameScript Language Support",
+    "description": "Adds syntax highlighting, IntelliSense, and diagnostics for the GameScript language in Vscode.",
     "version": "0.0.1",
     "publisher": "YeOldeGames",
     "engines": {
