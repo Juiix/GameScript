@@ -49,15 +49,12 @@ jobs:
                 | Select-Object -First 1
         echo "path=$($vsix.FullName)" >> $env:GITHUB_OUTPUT
 
-    # ── Publish to Visual Studio Marketplace ─────────────────────────
-    - name: Install VsixPublisher tool
-      run: dotnet tool install --global Microsoft.VisualStudio.Extension.VsixPublisher
-
-    - name: Publish VSIX
-      env:
-        VSIX_PAT: ${{ secrets.VSIX_PUBLISHER_TOKEN }}
-      run: |
-        VsixPublisher publish `
-          --payload "${{ steps.find_vsix.outputs.path }}" `
-          --publishManifest GameScript.VisualStudio/publishManifest.json `
-          --personalAccessToken "$env:VSIX_PAT"
+    # ──────────────────────────────────────────────
+    # Publish to Visual Studio Marketplace
+    # ──────────────────────────────────────────────
+    - name: Publish extension to Marketplace
+      uses: cezarypiatek/VsixPublisherAction@1.1
+      with:
+        extension-file: ${{ steps.vsix.outputs.file }}
+        publish-manifest-file: GameScript.VisualStudio/publishManifest.json
+        personal-access-code: ${{ secrets.VSIX_PUBLISHER_TOKEN }}
