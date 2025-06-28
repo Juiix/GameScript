@@ -13,6 +13,9 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
+    
+    - name: Add nuget to PATH
+      uses: nuget/setup-nuget@v1
 
     - name: Add msbuild to PATH
       uses: microsoft/setup-msbuild@v2
@@ -29,12 +32,15 @@ jobs:
           GameScript.LanguageServer/GameScript.LanguageServer.csproj \
           -c Release -r win-x64 --self-contained true \
           -p:PublishSingleFile=true -o "$OUT"
+          
+    - name: Restore
+        run: nuget restore
 
     # ── Build Visual Studio extension (.vsix) ────────────────────────
     - name: Build VSIX
       run: |
         msbuild GameScript.VisualStudio/GameScript.VisualStudio.csproj `
-          -p:Configuration=$env:CONFIGURATION
+          -p:Configuration=$env:CONFIGURATION -p:DeployExtension=false -p:ZipPackageCompressionLevel=normal
 
     - name: Locate VSIX
       id: find_vsix
