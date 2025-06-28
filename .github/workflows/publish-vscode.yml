@@ -19,6 +19,7 @@ jobs:
         dotnet-version: '8.x'
 
     - uses: actions/setup-node@v4
+      working-directory: GameScript.Vscode
       with:
         node-version: '20'
         cache: 'npm'
