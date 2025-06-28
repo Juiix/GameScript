@@ -2,7 +2,7 @@
     "name": "gamescript-vscode",
     "displayName": "GameScript Workspace Support",
     "description": "Adds syntax highlighting, IntelliSense, and diagnostics for the GameScript language in Vscode.",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "publisher": "YeOldeGames",
     "engines": {
         "vscode": "^1.90.0"
@@ -14,6 +14,11 @@
         "@types/node": "^22.15.17",
         "@types/vscode": "^1.90.0",
         "typescript": "^5.4.5"
+    },
+    "readme": "overview.md",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/Juiix/GameScript"
     },
     "contributes": {
         "languages": [

@@ -451,7 +451,7 @@ namespace GameScript.Language.Ast
 			IdentifierDeclarationNode? nameNode = null;
 			if (Match(TokenType.Identifier))
 			{
-				nameNode = new IdentifierDeclarationNode(_previous.Value.ToString(),
+				nameNode = new IdentifierDeclarationNode(_previous.Value.TrimStart('$').ToString(),
 														 IdentifierType.Local, null, _filePath, PreviousRange);
 
 				if (_previous.Value[0] != '$')

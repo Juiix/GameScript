@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <PackageManifest Version="2.0.0" xmlns="http://schemas.microsoft.com/developer/vsx-schema/2011" xmlns:d="http://schemas.microsoft.com/developer/vsx-schema-design/2011">
     <Metadata>
-        <Identity Id="GameScript.571f2b7b-8ce9-473c-a857-c6fd341e3c67" Version="1.0.0" Language="en-US" Publisher="Ye Olde Games" />
+        <Identity Id="GameScript.571f2b7b-8ce9-473c-a857-c6fd341e3c67" Version="1.0.1" Language="en-US" Publisher="Ye Olde Games" />
         <DisplayName>GameScript Workspace Support</DisplayName>
         <Description xml:space="preserve">Adds syntax highlighting, IntelliSense, and diagnostics for the GameScript language in Vscode.</Description>
         <Tags>gamescript</Tags>
