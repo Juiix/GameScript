@@ -1,6 +1,6 @@
 {
     "name": "gamescript-vscode",
-    "displayName": "GameScript Language Support",
+    "displayName": "GameScript Workspace Support",
     "description": "Adds syntax highlighting, IntelliSense, and diagnostics for the GameScript language in Vscode.",
     "version": "0.0.1",
     "publisher": "YeOldeGames",
