@@ -34,7 +34,7 @@ jobs:
           -p:PublishSingleFile=true -o "$OUT"
           
     - name: Restore
-        run: nuget restore
+      run: nuget restore
 
     # ── Build Visual Studio extension (.vsix) ────────────────────────
     - name: Build VSIX
