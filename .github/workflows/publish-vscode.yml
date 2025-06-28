@@ -45,7 +45,7 @@ jobs:
       id: pkg
       working-directory: GameScript.Vscode
       run: |
-        npx vsce package --no-dependencies --out vscode-extension.vsix
+        npx vsce package --out vscode-extension.vsix
         echo "vsix_path=$(pwd)/vscode-extension.vsix" >> "$GITHUB_OUTPUT"
 
     # ── Publish to VS Code Marketplace ───────────────────────────────
