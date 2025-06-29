@@ -34,6 +34,7 @@ var server = await LanguageServer.From(options =>
 
 		// caches
 		services.AddSingleton<AstCache>();
+		services.AddSingleton<OpenDocumentCache>();
 		services.AddSingleton<TextCache>();
 
 		// services
@@ -130,7 +131,10 @@ static void RegisterCapabilities(ServerCapabilities capabilities, ProgramFlags f
 		capabilities.TextDocumentSync = new TextDocumentSync(new TextDocumentSyncOptions
 		{
 			Change = TextDocumentSyncKind.Incremental,
-			Save = true,
+			Save = new SaveOptions
+			{
+				IncludeText = false
+			},
 			OpenClose = true
 		});
 		capabilities.DocumentSymbolProvider = new BooleanOr<DocumentSymbolRegistrationOptions.StaticOptions>(new DocumentSymbolRegistrationOptions.StaticOptions());

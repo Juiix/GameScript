@@ -28,6 +28,7 @@ namespace GameScript.LanguageServer.Services
 		}
 
 		private readonly AstCache _astCache;
+		private readonly OpenDocumentCache _openDocumentCache;
 		private readonly TextCache _textCache;
 		private readonly ParsingService _parsingService;
 		private readonly IndexingService _indexingService;
@@ -45,6 +46,7 @@ namespace GameScript.LanguageServer.Services
 		/// </summary>
 		public FileProcessingService(
 			AstCache astCache,
+			OpenDocumentCache openDocumentCache,
 			TextCache textCache,
 			ParsingService parsingService,
 			IndexingService indexingService,
@@ -52,6 +54,7 @@ namespace GameScript.LanguageServer.Services
 			DiagnosticsService diagnosticsService)
 		{
 			_astCache = astCache;
+			_openDocumentCache = openDocumentCache;
 			_textCache = textCache;
 			_parsingService = parsingService;
 			_indexingService = indexingService;
@@ -92,7 +95,7 @@ namespace GameScript.LanguageServer.Services
 
 		private async Task DelayAsync(string filePath)
 		{
-			await Task.Delay(150).ConfigureAwait(false);
+			await Task.Delay(250).ConfigureAwait(false);
 			_delays.TryRemove(filePath, out _);
 			await _processChannel.Writer.WriteAsync(filePath).ConfigureAwait(false);
 		}
@@ -153,10 +156,11 @@ namespace GameScript.LanguageServer.Services
 
 		private RootFileData? Full(string filePath)
 		{
-			if (!_textCache.TryGetText(filePath, out var text))
+			if (!_openDocumentCache.TryGet(filePath, out var text, out var fileVersion) &&
+				!_textCache.TryGetText(filePath, out text))
 				return null;
 
-			var parse = _parsingService.Parse(filePath, text);
+			var parse = _parsingService.Parse(filePath, text, fileVersion);
 			if (parse == null) return null;
 
 			var index = _indexingService.Index(parse.Root);

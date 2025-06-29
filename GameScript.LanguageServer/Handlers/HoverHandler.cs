@@ -11,9 +11,11 @@ using System.Text;
 namespace GameScript.LanguageServer.Handlers;
 
 internal sealed class HoverHandler(
+	OpenDocumentCache openDocumentCache,
 	AstCache astCache,
 	ISymbolIndex symbols) : IHoverHandler
 {
+	private readonly OpenDocumentCache _openDocumentCache = openDocumentCache;
 	private readonly AstCache _astCache = astCache;
 	private readonly ISymbolIndex _symbols = symbols;
 
@@ -22,10 +24,14 @@ internal sealed class HoverHandler(
 #pragma warning restore CS1998 // Async method lacks 'await' operators and will run synchronously
 	{
 		var filePath = request.TextDocument.Uri.Path.NormalizePath();
-		if (!_astCache.TryGetRoot(filePath, out var rootData))
+		if (!_openDocumentCache.TryGet(filePath, out var text, out var fileVersion) ||
+			!_astCache.TryGetRoot(filePath, out var rootData) ||
+			rootData.Parse.FileVersion != fileVersion)
 		{
+			ExceptionHelper.ThrowFileVersionNotFound();
 			return null;
 		}
+
 
 		var (astNode, parent) = rootData.Root.FindNodeAndParentAtPosition(request.Position.Line, request.Position.Character);
 		if (astNode == null)

@@ -26,7 +26,11 @@ namespace GameScript.LanguageServer.Caches
 		/// <summary>
 		/// Removes <paramref name="filePath"/> from both the dictionary and the LRU tracker.
 		/// </summary>
-		public void Remove(string filePath) => _docs.TryRemove(filePath, out _);
+		public void Remove(string filePath)
+		{
+			_docs.TryRemove(filePath, out _);
+			_lru.Remove(filePath);
+		}
 
 		/// <summary>
 		/// Tries to fetch the text for the specified file.

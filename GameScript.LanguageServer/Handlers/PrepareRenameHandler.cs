@@ -9,19 +9,25 @@ using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 namespace GameScript.LanguageServer.Handlers
 {
 	internal sealed class PrepareRenameHandler(
+		OpenDocumentCache openDocumentCache,
 		AstCache astCache,
 		ISymbolIndex symbols) : IPrepareRenameHandler
 	{
+		private readonly OpenDocumentCache _openDocumentCache = openDocumentCache;
 		private readonly AstCache _astCache = astCache;
 		private readonly ISymbolIndex _symbols = symbols;
 
 		public async Task<RangeOrPlaceholderRange?> Handle(PrepareRenameParams request, CancellationToken cancellationToken)
 		{
 			var filePath = request.TextDocument.Uri.Path.NormalizePath();
-			if (!_astCache.TryGetRoot(filePath, out var rootData))
+			if (!_openDocumentCache.TryGet(filePath, out var text, out var fileVersion) ||
+				!_astCache.TryGetRoot(filePath, out var rootData) ||
+				rootData.Parse.FileVersion != fileVersion)
 			{
+				ExceptionHelper.ThrowFileVersionNotFound();
 				return null;
 			}
+
 
 			var astNode = rootData.Root.FindNodeAtPosition(request.Position.Line, request.Position.Character);
 			if (astNode == null)

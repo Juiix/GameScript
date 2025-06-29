@@ -11,11 +11,11 @@ using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 namespace GameScript.LanguageServer.Handlers;
 
 internal sealed class CompletionHandler(
-	TextCache textCache,
+	OpenDocumentCache openDocumentCache,
 	AstCache astCache,
 	ISymbolIndex symbols) : ICompletionHandler
 {
-	private readonly TextCache _textCache = textCache;
+	private readonly OpenDocumentCache _openDocumentCache = openDocumentCache;
 	private readonly AstCache _astCache = astCache;
 	private readonly ISymbolIndex _symbols = symbols;
 
@@ -35,9 +35,11 @@ internal sealed class CompletionHandler(
 #pragma warning restore CS1998 // Async method lacks 'await' operators and will run synchronously
 	{
 		var filePath = request.TextDocument.Uri.Path.NormalizePath();
-		if (!_textCache.TryGetText(filePath, out var text) ||
-			!_astCache.TryGetRoot(filePath, out var rootData))
+		if (!_openDocumentCache.TryGet(filePath, out var text, out var fileVersion) ||
+			!_astCache.TryGetRoot(filePath, out var rootData) ||
+			rootData.Parse.FileVersion != fileVersion)
 		{
+			ExceptionHelper.ThrowFileVersionNotFound();
 			return new CompletionList();
 		}
 

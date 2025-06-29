@@ -10,6 +10,7 @@ using System.Collections.Concurrent;
 namespace GameScript.LanguageServer.Handlers
 {
 	internal sealed class SemanticTokensHandler(
+		OpenDocumentCache openDocumentCache,
 		AstCache astCache) : SemanticTokensHandlerBase
 	{
 		private static readonly SemanticTokenType[] _types = [
@@ -31,6 +32,7 @@ namespace GameScript.LanguageServer.Handlers
 			TokenModifiers = new Container<SemanticTokenModifier>(_modifiers)
 		};
 
+		private readonly OpenDocumentCache _openDocumentCache = openDocumentCache;
 		private readonly AstCache _astCache = astCache;
 		private readonly ConcurrentDictionary<Uri, SemanticTokensDocument> _cache = [];
 
@@ -67,10 +69,14 @@ namespace GameScript.LanguageServer.Handlers
 #pragma warning restore CS1998 // Async method lacks 'await' operators and will run synchronously
 		{
 			var filePath = identifier.TextDocument.Uri.Path.NormalizePath();
-			if (!_astCache.TryGetRoot(filePath, out var rootData))
+			if (!_openDocumentCache.TryGet(filePath, out var text, out var fileVersion) ||
+				!_astCache.TryGetRoot(filePath, out var rootData) ||
+				rootData.Parse.FileVersion != fileVersion)
 			{
+				ExceptionHelper.ThrowFileVersionNotFound();
 				return;
 			}
+
 
 			int commentIndex = 0;
 			foreach (var node in rootData.Root.Traverse())

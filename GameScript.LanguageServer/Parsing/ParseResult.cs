@@ -7,11 +7,13 @@ namespace GameScript.LanguageServer.Parsing
 		AstNode root,
 		List<FileError> errors,
 		IReadOnlyList<CommentNode> comments,
-		IReadOnlyList<int> lineOffsets)
+		IReadOnlyList<int> lineOffsets,
+		int? fileVersion)
 	{
 		public AstNode Root { get; } = root;
 		public List<FileError> Errors { get; } = errors;
 		public IReadOnlyList<CommentNode> Comments { get; } = comments;
 		public IReadOnlyList<int> LineOffsets { get; } = lineOffsets;
+		public int? FileVersion { get; } = fileVersion;
 	}
 }

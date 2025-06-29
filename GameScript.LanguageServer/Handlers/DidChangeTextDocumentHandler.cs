@@ -11,17 +11,19 @@ using System.Text;
 namespace GameScript.LanguageServer.Handlers;
 
 internal sealed class DidChangeTextDocumentHandler(
-	TextCache textCache,
+	OpenDocumentCache openDocumentCache,
 	FileProcessingService fileProcessingService) : IDidChangeTextDocumentHandler
 {
-	private readonly TextCache _textCache = textCache;
+	private readonly OpenDocumentCache _openDocumentCache = openDocumentCache;
 	private readonly FileProcessingService _fileProcessingService = fileProcessingService;
 
 	public Task<Unit> Handle(DidChangeTextDocumentParams req, CancellationToken ct)
 	{
 		var filePath = req.TextDocument.Uri.Path.NormalizePath();
-		if (!_textCache.TryGetText(filePath, out var text))
+		if (!_openDocumentCache.TryGet(filePath, out var text, out var currentVersion) ||
+			currentVersion != req.TextDocument.Version - 1)
 		{
+			_openDocumentCache.Remove(filePath);
 			return Unit.Task;
 		}
 
@@ -69,7 +71,7 @@ internal sealed class DidChangeTextDocumentHandler(
 			text = sb.ToString();
 		}
 
-		_textCache.Update(filePath, text);
+		_openDocumentCache.Update(filePath, text, req.TextDocument.Version ?? 0);
 		_fileProcessingService.Queue(filePath);
 		return Unit.Task;
 	}

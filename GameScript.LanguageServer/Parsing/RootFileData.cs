@@ -9,6 +9,7 @@ namespace GameScript.LanguageServer.Parsing
 		AnalysisResult Analysis)
 	{
 		public AstNode Root => Parse.Root;
+		public int? FileVersion => Parse.FileVersion;
 
 		public IReadOnlyList<FileError> Errors => [
 			.. Parse.Errors,

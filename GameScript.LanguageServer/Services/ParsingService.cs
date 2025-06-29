@@ -46,7 +46,7 @@ internal sealed class ParsingService
 	/// A populated <see cref="ParseResult"/>, or <c>null</c> if the file cannot be read
 	/// or a fatal exception occurs (already logged).
 	/// </returns>
-	public ParseResult? Parse(string filePath, ReadOnlySpan<char> source)
+	public ParseResult? Parse(string filePath, ReadOnlySpan<char> source, int? fileVersion)
 	{
 		char[]? chars = null;
 		try
@@ -68,7 +68,7 @@ internal sealed class ParsingService
 
 			(ast, lineOffsets) = ParseAst(filePath, source, errors, comments);
 
-			return new ParseResult(ast, errors, comments, lineOffsets);
+			return new ParseResult(ast, errors, comments, lineOffsets, fileVersion);
 		}
 		catch (Exception e)
 		{

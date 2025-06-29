@@ -331,7 +331,7 @@ internal sealed class WorkspaceService : IAsyncDisposable
 		var results = new ConcurrentBag<(ParseResult Parse, IndexResult Index)>();
 		await Parallel.ForEachAsync(files, ct, (filePath, token) =>
 		{
-			var parse = _parsingService.Parse(filePath, []);
+			var parse = _parsingService.Parse(filePath, [], null);
 			if (parse is null) return ValueTask.CompletedTask;
 
 			var index = _indexingService.Index(parse.Root);

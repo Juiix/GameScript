@@ -8,14 +8,14 @@ using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 namespace GameScript.LanguageServer.Handlers;
 
 internal sealed class DidCloseTextDocumentHandler(
-	TextCache textCache) : IDidCloseTextDocumentHandler
+	OpenDocumentCache openDocumentCache) : IDidCloseTextDocumentHandler
 {
-	private readonly TextCache _textCache = textCache;
+	private readonly OpenDocumentCache _openDocumentCache = openDocumentCache;
 
 	public Task<Unit> Handle(DidCloseTextDocumentParams req, CancellationToken ct)
 	{
 		var filePath = req.TextDocument.Uri.Path.NormalizePath();
-		_textCache.Clear(filePath);
+		_openDocumentCache.Remove(filePath);
 		return Unit.Task;
 	}
 

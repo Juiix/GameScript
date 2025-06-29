@@ -20,6 +20,18 @@ public sealed class LruCache<TKey>(int capacity)
 	private readonly Dictionary<TKey, LinkedListNode<TKey>> _map = [];
 	private readonly object _lock = new();
 
+	public void Remove(TKey key)
+	{
+		lock (_lock)
+		{
+			if (_map.TryGetValue(key, out var node))
+			{
+				_list.Remove(node);
+				_map.Remove(key);
+			}
+		}
+	}
+
 	/// <summary>
 	/// Marks <paramref name="key"/> as the most recently used,
 	/// inserting it if it is not already present.
