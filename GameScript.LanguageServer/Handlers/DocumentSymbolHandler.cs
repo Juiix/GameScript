@@ -27,9 +27,7 @@ internal sealed class DocumentSymbolHandler(
 			return Task.FromResult<SymbolInformationOrDocumentSymbolContainer?>(null);
 		}
 
-
 		var fileSymbols = _globalSymbolTable.GetSymbolsForFile(filePath);
-
         var flat = fileSymbols.Select(x => new SymbolInformationOrDocumentSymbol(new SymbolInformation
         {
             Name = x.Name,

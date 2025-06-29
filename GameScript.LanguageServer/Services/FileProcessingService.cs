@@ -85,17 +85,19 @@ namespace GameScript.LanguageServer.Services
 			// Record (or escalate) the work we need to do for this file.
 			_jobInfo.AddOrUpdate(filePath, processType, (path, current) =>
 				current > processType ? current : processType);
-
+			_processChannel.Writer.TryWrite(filePath);
+			/*
 			// Debounce: if a delay is already scheduled, we’re done.
 			if (!_delays.TryAdd(filePath, null))
 				return;
 
 			_ = DelayAsync(filePath);
+			*/
 		}
 
 		private async Task DelayAsync(string filePath)
 		{
-			await Task.Delay(250).ConfigureAwait(false);
+			//await Task.Delay(250).ConfigureAwait(false);
 			_delays.TryRemove(filePath, out _);
 			await _processChannel.Writer.WriteAsync(filePath).ConfigureAwait(false);
 		}

@@ -1,104 +1,287 @@
-﻿{
-  "name": "GameScript",
-  "scopeName": "source.gamescript",
-  "patterns": [
-    { "include": "#comment" },
-    { "include": "#method-declaration" },
-    { "include": "#method-call" },
-    { "include": "#variable-declaration" },
-    { "include": "#keywords" },
-    { "include": "#types" },
-    { "include": "#boolean-literals" },
-    { "include": "#numbers" },
-    { "include": "#strings" },
-    { "include": "#variables" }
-  ],
-  "repository": {
-    "comment": {
-      "patterns": [
-        {
-          "name": "comment.line.double-slash.gamescript",
-          "begin": "//",
-          "beginCaptures": { "0": { "name": "punctuation.definition.comment.gamescript" } },
-          "end": "$\\n?"
-        }
-      ]
-    },
-    "strings": {
-      "patterns": [
-        {
-          "name": "string.quoted.double.gamescript",
-          "begin": "\"",
-          "beginCaptures": { "0": { "name": "punctuation.definition.string.begin.gamescript" } },
-          "end": "\"",
-          "endCaptures": { "0": { "name": "punctuation.definition.string.end.gamescript" } },
-          "patterns": [ { "name": "constant.character.escape.gamescript", "match": "\\\\." } ]
-        }
-      ]
-    },
-    "numbers": {
-      "patterns": [ { "name": "constant.numeric.gamescript", "match": "\\b\\d+(?:\\.\\d+)?\\b" } ]
-    },
-    "boolean-literals": {
-      "patterns": [ { "name": "constant.language.boolean.gamescript", "match": "\\b(?:true|false)\\b" } ]
-    },
-    "keywords": {
-      "patterns": [
-        { "name": "keyword.control.gamescript", "match": "\\b(?:if|else|return)\\b" },
-        { "name": "keyword.declaration.gamescript", "match": "\\b(?:func|label|command)\\b" }
-      ]
-    },
-    "types": {
-      "patterns": [ { "name": "storage.type.gamescript", "match": "\\b(?:int|bool|string)\\b" } ]
-    },
-    "variables": {
-      "patterns": [
-        { "name": "variable.other.local.gamescript",    "match": "\\$[A-Za-z_][\\w]*" },
-        { "name": "variable.other.context.gamescript",  "match": "%[A-Za-z_][\\w]*" },
-        { "name": "variable.other.constant.gamescript", "match": "\\^[A-Za-z_][\\w]*" }
-      ]
-    },
-    "method-declaration": {
-      "patterns": [
-        {
-          "name": "meta.function.declaration.gamescript",
-          "begin": "^(\\s*)(?:(func|label|command)|([A-Za-z_][\\w]*))\\s+([A-Za-z_][\\w]*(?::[A-Za-z_][\\w]*)?)\\s*\\(",
-          "beginCaptures": {
-            "1": { "name": "punctuation.whitespace.leading.gamescript" },
-            "2": { "name": "keyword.declaration.gamescript" },               
-            "3": { "name": "keyword.declaration.trigger.gamescript" },       
-            "4": { "name": "entity.name.function.gamescript" }
-          },
-          "end": "$",
-          "patterns": [
-            { "name": "keyword.declaration.returns.gamescript", "match": "\\breturns\\b" },
-            { "include": "#variables" },
-            { "include": "#types" },
-            { "include": "#strings" },
-            { "include": "#numbers" }
-          ]
-        }
-      ]
-    },
-    "variable-declaration": {
-      "patterns": [
-        {
-          "name": "meta.variable.declaration.gamescript",
-          "match": "^(\\s*)(int|bool|string)\\s+((?:\\$|%|\\^)[A-Za-z_][\\w]*)",
-          "captures": {
-            "2": { "name": "storage.type.gamescript" },
-            "3": { "name": "variable.other.declared.gamescript" }
-          }
-        }
-      ]
-    },
-    "method-call": {
-      "patterns": [
-        { "name": "support.function.call.label.gamescript",    "match": "@[A-Za-z_][\\w]*(?::[A-Za-z_][\\w]*)?(?=\\()" },
-        { "name": "support.function.call.func.gamescript",     "match": "~[A-Za-z_][\\w]*(?::[A-Za-z_][\\w]*)?\\s*(?=\\()" },
-        { "name": "support.function.call.command.gamescript",  "match": "\\b[A-Za-z_][\\w]*(?::[A-Za-z_][\\w]*)?\\s*(?=\\()" }
-      ]
-    }
-  },
-  "uuid": "d0e7cd4a-7e89-4e22-bbd6-1dc417552f3a"
-}
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<plist version="1.0">
+  <dict>
+    <key>$schema</key>
+    <string>https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json</string>
+
+    <!-- ─────────────── top-level info ─────────────── -->
+    <key>name</key>
+    <string>GameScript</string>
+
+    <key>scopeName</key>
+    <string>source.gamescript</string>
+
+    <key>fileTypes</key>
+    <array>
+      <string>gs</string>
+      <string>const</string>
+      <string>context</string>
+    </array>
+
+    <!-- ──────────────── patterns ───────────────── -->
+    <key>patterns</key>
+    <array>
+      <dict><key>include</key><string>#comment</string></dict>
+      <dict><key>include</key><string>#method-declaration</string></dict>
+      <dict><key>include</key><string>#method-call</string></dict>
+      <dict><key>include</key><string>#variable-declaration</string></dict>
+      <dict><key>include</key><string>#keywords</string></dict>
+      <dict><key>include</key><string>#types</string></dict>
+      <dict><key>include</key><string>#boolean-literals</string></dict>
+      <dict><key>include</key><string>#numbers</string></dict>
+      <dict><key>include</key><string>#strings</string></dict>
+      <dict><key>include</key><string>#variables</string></dict>
+    </array>
+
+    <!-- ────────────── repository ─────────────── -->
+    <key>repository</key>
+    <dict>
+
+      <!-- comments -->
+      <key>comment</key>
+      <dict>
+        <key>patterns</key>
+        <array>
+          <dict>
+            <key>name</key>
+            <string>comment.line.double-slash.gamescript</string>
+            <key>begin</key>
+            <string>//</string>
+            <key>beginCaptures</key>
+            <dict>
+              <key>0</key>
+              <dict>
+                <key>name</key>
+                <string>punctuation.definition.comment.gamescript</string>
+              </dict>
+            </dict>
+            <key>end</key>
+            <string>$\n?</string>
+          </dict>
+        </array>
+      </dict>
+
+      <!-- strings -->
+      <key>strings</key>
+      <dict>
+        <key>patterns</key>
+        <array>
+          <dict>
+            <key>name</key>
+            <string>string.quoted.double.gamescript</string>
+            <key>begin</key>
+            <string>&quot;</string>
+            <key>beginCaptures</key>
+            <dict>
+              <key>0</key>
+              <dict>
+                <key>name</key>
+                <string>punctuation.definition.string.begin.gamescript</string>
+              </dict>
+            </dict>
+            <key>end</key>
+            <string>&quot;</string>
+            <key>endCaptures</key>
+            <dict>
+              <key>0</key>
+              <dict>
+                <key>name</key>
+                <string>punctuation.definition.string.end.gamescript</string>
+              </dict>
+            </dict>
+            <key>patterns</key>
+            <array>
+              <dict>
+                <key>name</key>
+                <string>constant.character.escape.gamescript</string>
+                <key>match</key>
+                <string>\\.</string>
+              </dict>
+            </array>
+          </dict>
+        </array>
+      </dict>
+
+      <!-- numbers -->
+      <key>numbers</key>
+      <dict>
+        <key>patterns</key>
+        <array>
+          <dict>
+            <key>name</key>
+            <string>constant.numeric.gamescript</string>
+            <key>match</key>
+            <string>\b\d+(?:\.\d+)?\b</string>
+          </dict>
+        </array>
+      </dict>
+
+      <!-- boolean literals -->
+      <key>boolean-literals</key>
+      <dict>
+        <key>patterns</key>
+        <array>
+          <dict>
+            <key>name</key>
+            <string>constant.language.boolean.gamescript</string>
+            <key>match</key>
+            <string>\b(?:true|false)\b</string>
+          </dict>
+        </array>
+      </dict>
+
+      <!-- keywords -->
+      <key>keywords</key>
+      <dict>
+        <key>patterns</key>
+        <array>
+          <dict>
+            <key>name</key>
+            <string>keyword.control.gamescript</string>
+            <key>match</key>
+            <string>\b(?:if|else|return)\b</string>
+          </dict>
+          <dict>
+            <key>name</key>
+            <string>keyword.declaration.gamescript</string>
+            <key>match</key>
+            <string>\b(?:func|label|command)\b</string>
+          </dict>
+        </array>
+      </dict>
+
+      <!-- types -->
+      <key>types</key>
+      <dict>
+        <key>patterns</key>
+        <array>
+          <dict>
+            <key>name</key>
+            <string>storage.type.gamescript</string>
+            <key>match</key>
+            <string>\b(?:int|bool|string)\b</string>
+          </dict>
+        </array>
+      </dict>
+
+      <!-- variables -->
+      <key>variables</key>
+      <dict>
+        <key>patterns</key>
+        <array>
+          <dict>
+            <key>name</key>
+            <string>variable.other.local.gamescript</string>
+            <key>match</key>
+            <string>\$[A-Za-z_][\w]*</string>
+          </dict>
+          <dict>
+            <key>name</key>
+            <string>variable.other.context.gamescript</string>
+            <key>match</key>
+            <string>%[A-Za-z_][\w]*</string>
+          </dict>
+          <dict>
+            <key>name</key>
+            <string>variable.other.constant.gamescript</string>
+            <key>match</key>
+            <string>\^[A-Za-z_][\w]*</string>
+          </dict>
+        </array>
+      </dict>
+
+      <!-- method declaration -->
+      <key>method-declaration</key>
+      <dict>
+        <key>patterns</key>
+        <array>
+          <dict>
+            <key>name</key>
+            <string>meta.function.declaration.gamescript</string>
+            <key>begin</key>
+            <string>^(\\s*)(?:(func|label|command)|([A-Za-z_][\\w]*))\\s+([A-Za-z_][\\w]*(?::[A-Za-z_][\\w]*)?)\\s*\\(</string>
+            <key>beginCaptures</key>
+            <dict>
+              <key>1</key>
+              <dict><key>name</key><string>punctuation.whitespace.leading.gamescript</string></dict>
+              <key>2</key>
+              <dict><key>name</key><string>keyword.declaration.gamescript</string></dict>
+              <key>3</key>
+              <dict><key>name</key><string>keyword.declaration.trigger.gamescript</string></dict>
+              <key>4</key>
+              <dict><key>name</key><string>entity.name.function.gamescript</string></dict>
+            </dict>
+            <key>end</key>
+            <string>$</string>
+            <key>patterns</key>
+            <array>
+              <dict>
+                <key>name</key>
+                <string>keyword.declaration.returns.gamescript</string>
+                <key>match</key>
+                <string>\breturns\b</string>
+              </dict>
+              <dict><key>include</key><string>#variables</string></dict>
+              <dict><key>include</key><string>#types</string></dict>
+              <dict><key>include</key><string>#strings</string></dict>
+              <dict><key>include</key><string>#numbers</string></dict>
+            </array>
+          </dict>
+        </array>
+      </dict>
+
+      <!-- variable declaration -->
+      <key>variable-declaration</key>
+      <dict>
+        <key>patterns</key>
+        <array>
+          <dict>
+            <key>name</key>
+            <string>meta.variable.declaration.gamescript</string>
+            <key>match</key>
+            <string>^(\\s*)(int|bool|string)\\s+((?:\\$|%|\\^)[A-Za-z_][\\w]*)</string>
+            <key>captures</key>
+            <dict>
+              <key>2</key>
+              <dict><key>name</key><string>storage.type.gamescript</string></dict>
+              <key>3</key>
+              <dict><key>name</key><string>variable.other.declared.gamescript</string></dict>
+            </dict>
+          </dict>
+        </array>
+      </dict>
+
+      <!-- method call -->
+      <key>method-call</key>
+      <dict>
+        <key>patterns</key>
+        <array>
+          <dict>
+            <key>name</key>
+            <string>support.function.call.label.gamescript</string>
+            <key>match</key>
+            <string>@[A-Za-z_][\\w]*(?::[A-Za-z_][\\w]*)?(?=\\()</string>
+          </dict>
+          <dict>
+            <key>name</key>
+            <string>support.function.call.func.gamescript</string>
+            <key>match</key>
+            <string>~[A-Za-z_][\\w]*(?::[A-Za-z_][\\w]*)?\\s*(?=\\()</string>
+          </dict>
+          <dict>
+            <key>name</key>
+            <string>support.function.call.command.gamescript</string>
+            <key>match</key>
+            <string>\\b[A-Za-z_][\\w]*(?::[A-Za-z_][\\w]*)?\\s*(?=\\()</string>
+          </dict>
+        </array>
+      </dict>
+
+    </dict>
+
+    <!-- uuid -->
+    <key>uuid</key>
+    <string>d0e7cd4a-7e89-4e22-bbd6-1dc417552f3a</string>
+
+  </dict>
+</plist>

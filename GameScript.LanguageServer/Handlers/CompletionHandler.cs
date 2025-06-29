@@ -36,8 +36,7 @@ internal sealed class CompletionHandler(
 	{
 		var filePath = request.TextDocument.Uri.Path.NormalizePath();
 		if (!_openDocumentCache.TryGet(filePath, out var text, out var fileVersion) ||
-			!_astCache.TryGetRoot(filePath, out var rootData) ||
-			rootData.Parse.FileVersion != fileVersion)
+			!_astCache.TryGetRoot(filePath, out var rootData))
 		{
 			ExceptionHelper.ThrowFileVersionNotFound();
 			return new CompletionList();

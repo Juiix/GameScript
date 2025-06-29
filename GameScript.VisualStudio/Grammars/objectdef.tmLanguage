@@ -14,33 +14,47 @@
       <string>menu</string>
       <string>npc</string>
       <string>varp</string>
+      <string>obj</string>
+      <string>tile</string>
     </array>
 
+    <!-- ───────────────────────── patterns ───────────────────────── -->
     <key>patterns</key>
     <array>
+      <dict>
+        <key>include</key>
+        <string>#assignment</string>
+      </dict>
       <dict>
         <key>include</key>
         <string>#objectId</string>
       </dict>
       <dict>
         <key>include</key>
-        <string>#assignment</string>
-      </dict>
-      <dict>
-        <key>match</key>
-        <string>#.*$</string>
-        <key>name</key>
-        <string>comment.line.number-sign.objectdef</string>
+        <string>#comment</string>
       </dict>
     </array>
 
+    <!-- ──────────────────────── repository ──────────────────────── -->
     <key>repository</key>
     <dict>
+
+      <!-- # comments (anywhere in the line) -->
+      <key>comment</key>
+      <dict>
+        <key>name</key>
+        <string>comment.line.number-sign.objectdef</string>
+        <key>match</key>
+        <string>#.*$</string>
+      </dict>
+
+      <!-- top-level object-ID line -->
       <key>objectId</key>
       <dict>
-        <key>match</key>
-        <string>^\s*([A-Za-z_][A-Za-z0-9_]*)\s*$</string>
-        <key>captures</key>
+        <key>begin</key>
+        <string>^\s*([A-Za-z_][A-Za-z0-9_]*)</string>
+
+        <key>beginCaptures</key>
         <dict>
           <key>1</key>
           <dict>
@@ -48,14 +62,28 @@
             <string>entity.name.function.objectdef</string>
           </dict>
         </dict>
+
+        <key>end</key>
+        <string>$</string>
+
+        <key>patterns</key>
+        <array>
+          <dict>
+            <key>include</key>
+            <string>#comment</string>
+          </dict>
+        </array>
       </dict>
 
+      <!-- key = value assignments -->
       <key>assignment</key>
       <dict>
         <key>name</key>
         <string>meta.assignment.objectdef</string>
+
         <key>begin</key>
         <string>^\s*([A-Za-z_][A-Za-z0-9_]*)\s*(=)</string>
+
         <key>beginCaptures</key>
         <dict>
           <key>1</key>
@@ -69,8 +97,10 @@
             <string>keyword.operator.assignment.objectdef</string>
           </dict>
         </dict>
+
         <key>end</key>
         <string>$</string>
+
         <key>patterns</key>
         <array>
           <dict>
@@ -78,6 +108,10 @@
             <string>string.unquoted.value.objectdef</string>
             <key>match</key>
             <string>[^#\r\n]+</string>
+          </dict>
+          <dict>
+            <key>include</key>
+            <string>#comment</string>
           </dict>
         </array>
       </dict>
