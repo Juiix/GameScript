@@ -41,7 +41,8 @@ internal sealed class RenameHandler(
 		}
 
 		var localIndex = rootData.GetLocalIndex(request.Position.Line, request.Position.Character);
-		var symbol = localIndex?.GetSymbol(symbolName) ?? _symbols.GetSymbol(symbolName);
+		var localSymbol = localIndex?.GetSymbol(symbolName);
+		var symbol = localSymbol ?? _symbols.GetSymbol(symbolName);
 		if (symbol == null)
 		{
 			return null;
@@ -61,7 +62,9 @@ internal sealed class RenameHandler(
 			{ symbol.FilePath, [ GetEdit(symbol, newName) ] }
 		};
 
-		var references = _references.GetReferences(symbolName);
+		var references = localSymbol != null ?
+			localIndex?.GetReferences(symbolName) :
+			_references.GetReferences(symbolName);
 		if (references != null)
 		{
 			foreach (var reference in references)
