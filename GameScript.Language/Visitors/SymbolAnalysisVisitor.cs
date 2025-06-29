@@ -16,6 +16,12 @@ namespace GameScript.Language.Visitors
 			base.Visit(node);
 		}
 
+		public override void Visit(ContextDefinitionNode node)
+		{
+			CheckSymbol(_context.Symbols, node.Name.Name, node.Name);
+			base.Visit(node);
+		}
+
 		public override void Visit(MethodDefinitionNode node)
 		{
 			CheckSymbol(_context.Symbols, node.SymbolName, node.Name);
@@ -39,6 +45,9 @@ namespace GameScript.Language.Visitors
 
 		private void CheckSymbol(ISymbolIndex? index, string symbolName, AstNode node)
 		{
+			if (InvalidSymbolName(symbolName))
+				return;
+
 			var symbol = index?.GetSymbol(symbolName);
 			if (symbol == null)
 			{
@@ -51,5 +60,6 @@ namespace GameScript.Language.Visitors
 				Error($"'{symbolName}' is already defined in this context.", node);
 			}
 		}
+		private static bool InvalidSymbolName(string name) => name.StartsWith('?');
 	}
 }

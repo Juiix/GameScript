@@ -2,12 +2,12 @@
 {
 	/// <summary>
 	/// Provides a quick check for whether a file path refers to a
-	/// GameScript-related source file (e.g., <c>.gs</c> or <c>.const</c>).
+	/// GameScript-related source file (e.g., <c>.gs</c>, <c>.const</c> or <c>.context</c>).
 	/// </summary>
 	internal static class ExtensionFilter
 	{
 		private static readonly HashSet<string> _ext =
-			new(StringComparer.OrdinalIgnoreCase) { ".gs", ".const" };
+			new(StringComparer.OrdinalIgnoreCase) { ".gs", ".const", ".context" };
 
 		/// <summary>
 		/// Determines whether the specified file should be processed by the language server.

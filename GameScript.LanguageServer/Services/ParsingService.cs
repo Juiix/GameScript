@@ -88,16 +88,17 @@ internal sealed class ParsingService
 	/// Core parsing routine that builds the AST and collects diagnostics.
 	/// Uses a rented buffer for efficient streaming of large files.
 	/// </summary>
-	private (AstNode Ast, IReadOnlyList<int> LineOffsets) ParseAst(
+	private static (AstNode Ast, IReadOnlyList<int> LineOffsets) ParseAst(
 		string filePath,
 		ReadOnlySpan<char> source,
 		List<FileError> errors,
 		List<CommentNode> comments)
 	{
 		var parser = new AstParser(filePath, source);
-		var extension = Path.GetExtension(filePath);
+		var extension = Path.GetExtension(filePath.AsSpan());
 		AstNode node = extension switch
 		{
+			".context" => parser.ParseContexts(),
 			".const" => parser.ParseConstants(),
 			".gs" => parser.ParseProgram(),
 			_ => throw new InvalidOperationException($"Unsupported extension: {extension}")

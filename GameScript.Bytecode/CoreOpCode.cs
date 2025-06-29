@@ -11,7 +11,9 @@
 		LoadConstInt,
 		LoadConstBool,
 		LoadLocal,
+		LoadCtx,
 		StoreLocal,
+		StoreCtx,
 		Pop,
 
 		// Arithmetic
@@ -23,10 +25,6 @@
 		// Unary
 		Negate,    // arithmetic negation: -x
 		Not,       // logical not: !x
-		IncrementStoreOrigin,
-		IncrementStoreResult,
-		DecrementStoreOrigin,
-		DecrementStoreResult,
 
 		// Comparisons
 		Equal,

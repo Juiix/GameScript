@@ -104,9 +104,20 @@ internal sealed class HoverHandler(
 	{
 		var builder = new StringBuilder();
 		if (!string.IsNullOrEmpty(symbol.Summary))
-			builder.AppendLine($"{symbol.Summary}");
+			builder.AppendLine(symbol.Summary);
 		builder.AppendLine();
-		builder.AppendLine($"`{symbol.Signature}`");
+		builder.AppendLine("```gamescript");
+		if (symbol.LiteralValue != null)
+		{
+			builder.Append(symbol.Signature);
+			builder.Append(" = ");
+			builder.AppendLine(GetLiteralString(symbol.LiteralValue));
+		}
+		else
+		{
+			builder.AppendLine(symbol.Signature);
+		}
+		builder.AppendLine("```");
 
 		var md = new MarkupContent
 		{
@@ -114,5 +125,14 @@ internal sealed class HoverHandler(
 			Value = builder.ToString()
 		};
 		return md;
+	}
+
+	private static string GetLiteralString(object literalValue)
+	{
+		return literalValue switch
+		{
+			string str => $"\"{str}\"",
+			_ => literalValue.ToString() ?? ""
+		};
 	}
 }

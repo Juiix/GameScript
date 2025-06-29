@@ -2,7 +2,7 @@
     "name": "gamescript-vscode",
     "displayName": "GameScript Workspace Support",
     "description": "Adds syntax highlighting, IntelliSense, and diagnostics for the GameScript language in Vscode.",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "publisher": "YeOldeGames",
     "engines": {
         "vscode": "^1.90.0"
@@ -15,7 +15,7 @@
         "@types/vscode": "^1.90.0",
         "typescript": "^5.4.5"
     },
-    "readme": "overview.md",
+    "homepage": "https://github.com/Juiix/GameScript/blob/main/GameScript.VisualStudio/overview.md",
     "repository": {
         "type": "git",
         "url": "https://github.com/Juiix/GameScript"
@@ -30,7 +30,8 @@
                 ],
                 "extensions": [
                     ".gs",
-                    ".const"
+                    ".const",
+                    ".context"
                 ],
                 "configuration": "./resources/gamescript-configuration.json",
                 "icon": {
@@ -58,6 +59,11 @@
         ],
         "grammars": [
           {
+            "language": "gamescript",
+            "scopeName": "source.gamescript",
+            "path": "./syntaxes/gamescript.tmLanguage.json"
+          },
+          {
             "language": "objectdef",
             "scopeName": "source.objectdef",
             "path": "./syntaxes/objectdef.tmLanguage.json"
@@ -65,6 +71,9 @@
         ],
         "configurationDefaults": {
             "[gamescript]": {
+                "editor.tabSize": 4
+            },
+            "[objectdef]": {
                 "editor.tabSize": 4
             }
         }

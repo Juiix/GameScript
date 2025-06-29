@@ -1,0 +1,104 @@
+﻿{
+  "name": "GameScript",
+  "scopeName": "source.gamescript",
+  "patterns": [
+    { "include": "#comment" },
+    { "include": "#method-declaration" },
+    { "include": "#method-call" },
+    { "include": "#variable-declaration" },
+    { "include": "#keywords" },
+    { "include": "#types" },
+    { "include": "#boolean-literals" },
+    { "include": "#numbers" },
+    { "include": "#strings" },
+    { "include": "#variables" }
+  ],
+  "repository": {
+    "comment": {
+      "patterns": [
+        {
+          "name": "comment.line.double-slash.gamescript",
+          "begin": "//",
+          "beginCaptures": { "0": { "name": "punctuation.definition.comment.gamescript" } },
+          "end": "$\\n?"
+        }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        {
+          "name": "string.quoted.double.gamescript",
+          "begin": "\"",
+          "beginCaptures": { "0": { "name": "punctuation.definition.string.begin.gamescript" } },
+          "end": "\"",
+          "endCaptures": { "0": { "name": "punctuation.definition.string.end.gamescript" } },
+          "patterns": [ { "name": "constant.character.escape.gamescript", "match": "\\\\." } ]
+        }
+      ]
+    },
+    "numbers": {
+      "patterns": [ { "name": "constant.numeric.gamescript", "match": "\\b\\d+(?:\\.\\d+)?\\b" } ]
+    },
+    "boolean-literals": {
+      "patterns": [ { "name": "constant.language.boolean.gamescript", "match": "\\b(?:true|false)\\b" } ]
+    },
+    "keywords": {
+      "patterns": [
+        { "name": "keyword.control.gamescript", "match": "\\b(?:if|else|return)\\b" },
+        { "name": "keyword.declaration.gamescript", "match": "\\b(?:func|label|command)\\b" }
+      ]
+    },
+    "types": {
+      "patterns": [ { "name": "storage.type.gamescript", "match": "\\b(?:int|bool|string)\\b" } ]
+    },
+    "variables": {
+      "patterns": [
+        { "name": "variable.other.local.gamescript",    "match": "\\$[A-Za-z_][\\w]*" },
+        { "name": "variable.other.context.gamescript",  "match": "%[A-Za-z_][\\w]*" },
+        { "name": "variable.other.constant.gamescript", "match": "\\^[A-Za-z_][\\w]*" }
+      ]
+    },
+    "method-declaration": {
+      "patterns": [
+        {
+          "name": "meta.function.declaration.gamescript",
+          "begin": "^(\\s*)(?:(func|label|command)|([A-Za-z_][\\w]*))\\s+([A-Za-z_][\\w]*(?::[A-Za-z_][\\w]*)?)\\s*\\(",
+          "beginCaptures": {
+            "1": { "name": "punctuation.whitespace.leading.gamescript" },
+            "2": { "name": "keyword.declaration.gamescript" },               
+            "3": { "name": "keyword.declaration.trigger.gamescript" },       
+            "4": { "name": "entity.name.function.gamescript" }
+          },
+          "end": "$",
+          "patterns": [
+            { "name": "keyword.declaration.returns.gamescript", "match": "\\breturns\\b" },
+            { "include": "#variables" },
+            { "include": "#types" },
+            { "include": "#strings" },
+            { "include": "#numbers" }
+          ]
+        }
+      ]
+    },
+    "variable-declaration": {
+      "patterns": [
+        {
+          "name": "meta.variable.declaration.gamescript",
+          "match": "^(\\s*)(int|bool|string)\\s+((?:\\$|%|\\^)[A-Za-z_][\\w]*)",
+          "captures": {
+            "2": { "name": "storage.type.gamescript" },
+            "3": { "name": "variable.other.declared.gamescript" }
+          }
+        }
+      ]
+    },
+    "method-call": {
+      "patterns": [
+        { "name": "support.function.call.label.gamescript",    "match": "@[A-Za-z_][\\w]*(?::[A-Za-z_][\\w]*)?(?=\\()" },
+        { "name": "support.function.call.func.gamescript",     "match": "~[A-Za-z_][\\w]*(?::[A-Za-z_][\\w]*)?\\s*(?=\\()" },
+        { "name": "support.function.call.command.gamescript",  "match": "\\b[A-Za-z_][\\w]*(?::[A-Za-z_][\\w]*)?\\s*(?=\\()" }
+      ]
+    }
+  },
+  "uuid": "d0e7cd4a-7e89-4e22-bbd6-1dc417552f3a"
+}

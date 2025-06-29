@@ -20,5 +20,10 @@ namespace GameScript.VisualStudio
 		[ContentType("gamescript")]
 		[FileExtension(".const")]
 		public static FileExtensionToContentTypeDefinition ConstantFileExtension { get; set; }
+
+		[Export(typeof(FileExtensionToContentTypeDefinition))]
+		[ContentType("gamescript")]
+		[FileExtension(".context")]
+		public static FileExtensionToContentTypeDefinition ContextFileExtension { get; set; }
 	}
 }

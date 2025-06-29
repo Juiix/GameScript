@@ -21,11 +21,8 @@ namespace GameScript.Language.Visitors
 			var varType = _context.Types.GetType(node.VarType.Name);
 			foreach (var (varName, initializer) in node.Vars)
 			{
-				varName.Accept(this);
 				if (initializer != null)
 				{
-					initializer.Accept(this);
-
 					var initializerType = GetInferredType(initializer);
 					if (initializerType != null &&
 						varType != null &&
@@ -34,6 +31,20 @@ namespace GameScript.Language.Visitors
 						Error($"Type mismatch, cannot assign '{initializerType}' to '{varType}'", FileRange.Combine(varName.FileRange, initializer.FileRange));
 					}
 				}
+			}
+		}
+
+		public override void Visit(ConstantDefinitionNode node)
+		{
+			base.Visit(node);
+
+			var constantType = _context.Types.GetType(node.Type.Name);
+			var initializerType = GetInferredType(node.Initializer);
+			if (initializerType != null &&
+				constantType != null &&
+				!initializerType.Equals(constantType))
+			{
+				Error($"Type mismatch, cannot assign '{initializerType}' to '{constantType}'", node.Initializer);
 			}
 		}
 
@@ -209,7 +220,7 @@ namespace GameScript.Language.Visitors
 		{
 			var type = _context.Types.GetType(node.Name);
 			if (type == null &&
-				!node.Name.StartsWith("?"))
+				!node.Name.StartsWith('?'))
 			{
 				Error($"Undefined type '{node}'", node);
 			}

@@ -4,20 +4,20 @@ using System.Linq;
 
 namespace GameScript.Bytecode
 {
-	public sealed class ScriptRunnerBuilder
+	public sealed class ScriptRunnerBuilder<TContext>() where TContext : IScriptContext
 	{
-		private readonly Dictionary<ushort, Action<ScriptState>> _handlers = new(CoreOps.Handlers);
+		private readonly Dictionary<ushort, Action<ScriptState<TContext>>> _handlers = new(CoreOps<TContext>.Handlers);
 
-		public ScriptRunner Build()
+		public ScriptRunner<TContext> Build()
 		{
 			var max = _handlers.DefaultIfEmpty().Max(x => x.Key);
-			var array = new Action<ScriptState>[max];
+			var array = new Action<ScriptState<TContext>>[max];
 			foreach (var pair in _handlers)
 				array[pair.Key] = pair.Value;
-			return new ScriptRunner(array);
+			return new ScriptRunner<TContext>(array);
 		}
 
-		public void Register(ushort opCode, Action<ScriptState> handler)
+		public void Register(ushort opCode, Action<ScriptState<TContext>> handler)
 		{
 			if (opCode < 100)
 				throw new InvalidOperationException("OpCodes < 100 are reserved for CoreOps");

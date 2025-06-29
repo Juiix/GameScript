@@ -3,16 +3,16 @@ using System.Collections.Generic;
 
 namespace GameScript.Bytecode;
 
-internal static class CoreOps
+internal static class CoreOps<TContext> where TContext : IScriptContext
 {
-    public static readonly Dictionary<ushort, Action<ScriptState>> Handlers = new()
+    public static readonly Dictionary<ushort, Action<ScriptState<TContext>>> Handlers = new()
 	{
 		// -----------------------
 		// ----- stack/frame -----
 		// -----------------------
 		[(ushort)CoreOpCode.LoadConst] = static state =>
 		{
-			ref var c = ref state.Context.Constants[state.Operand];
+			ref var c = ref state.Globals.Constants[state.Operand];
 			state.Push(in c);
 		},
 		[(ushort)CoreOpCode.LoadConstInt] = static state =>
@@ -28,10 +28,17 @@ internal static class CoreOps
 			ref var local = ref state.GetLocal(state.Operand);
 			state.Push(in local);
 		},
+		[(ushort)CoreOpCode.LoadCtx] = static state =>
+		{
+			state.Push(state.Context.GetValue(state.Operand));
+		},
 		[(ushort)CoreOpCode.StoreLocal] = static state =>
 		{
-			var value = state.Pop();
-			state.SetLocal(state.Operand, in value);
+			state.SetLocal(state.Operand, state.Pop());
+		},
+		[(ushort)CoreOpCode.StoreCtx] = static state =>
+		{
+			state.Context.SetValue(state.Operand, state.Pop());
 		},
 		[(ushort)CoreOpCode.Pop] = static state =>
 		{
@@ -78,30 +85,6 @@ internal static class CoreOps
 		{
 			var a = state.Pop();
 			state.Push(Value.FromBool(!a.Bool));
-		},
-		[(ushort)CoreOpCode.IncrementStoreOrigin] = static state =>
-		{
-			var a = state.Pop();
-			state.SetLocal(state.Operand, Value.FromInt(a.Int + 1));
-			state.Push(in a);
-		},
-		[(ushort)CoreOpCode.IncrementStoreResult] = static state =>
-		{
-			var a = state.Pop();
-			state.SetLocal(state.Operand, Value.FromInt(a.Int + 1));
-			state.Push(Value.FromInt(a.Int + 1));
-		},
-		[(ushort)CoreOpCode.DecrementStoreOrigin] = static state =>
-		{
-			var a = state.Pop();
-			state.SetLocal(state.Operand, Value.FromInt(a.Int - 1));
-			state.Push(in a);
-		},
-		[(ushort)CoreOpCode.DecrementStoreResult] = static state =>
-		{
-			var a = state.Pop();
-			state.SetLocal(state.Operand, Value.FromInt(a.Int - 1));
-			state.Push(Value.FromInt(a.Int - 1));
 		},
 
 		// -----------------------
@@ -164,12 +147,12 @@ internal static class CoreOps
 		// -----------------
 		[(ushort)CoreOpCode.Call] = static state =>
 		{
-			var method = state.Context.Methods[state.Operand];
+			var method = state.Globals.Methods[state.Operand];
 			state.Call(method);
 		},
 		[(ushort)CoreOpCode.Goto] = static state =>
 		{
-			var method = state.Context.Methods[state.Operand];
+			var method = state.Globals.Methods[state.Operand];
 			state.Goto(method);
 		},
 		[(ushort)CoreOpCode.Return] = static state =>

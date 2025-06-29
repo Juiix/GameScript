@@ -13,6 +13,7 @@ namespace GameScript.Language.Symbols
 		TypeInfo? paramTypes,
 		List<string>? paramNames,
 		string? summary,
+		object? literalValue,
 		string filePath,
 		FileRange fileRange)
 	{
@@ -23,6 +24,7 @@ namespace GameScript.Language.Symbols
 		public TypeInfo? ParamTypes { get; } = paramTypes;
 		public List<string>? ParamNames { get; } = paramNames;
 		public string? Summary { get; } = summary;
+		public object? LiteralValue { get; } = literalValue;
 		public string FilePath { get; } = filePath;
 		public FileRange FileRange { get; } = fileRange;
 		public string Signature { get; } = CreateSignature(identifierType, name, type, typeNames, paramTypes, paramNames);

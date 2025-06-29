@@ -1,4 +1,5 @@
 using FuzzySharp;
+using GameScript.Bytecode;
 using GameScript.Language.Index;
 using GameScript.Language.Symbols;
 using GameScript.LanguageServer.Extensions;
@@ -21,7 +22,7 @@ internal sealed class WorkspaceSymbolsHandler(
 			return null;
 		}
 
-		var querySymbol = new SymbolInfo(default, query, null, null, null, null, null, string.Empty, default);
+		var querySymbol = new SymbolInfo(default, query, null, null, null, null, null, null, string.Empty, default);
 		var results = Process.ExtractSorted(querySymbol, _globalSymbolTable.Symbols, x => x.Name);
 
 		var flat = results.Take(100).Select(x => new WorkspaceSymbol

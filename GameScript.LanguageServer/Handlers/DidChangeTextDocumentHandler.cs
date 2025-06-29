@@ -5,6 +5,7 @@ using MediatR;
 using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Protocol.Document;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
+using OmniSharp.Extensions.LanguageServer.Protocol.Server.Capabilities;
 using System.Text;
 
 namespace GameScript.LanguageServer.Handlers;
@@ -77,7 +78,8 @@ internal sealed class DidChangeTextDocumentHandler(
 	{
 		return new()
 		{
-			DocumentSelector = TextDocumentSelector.ForLanguage("gamescript")
+			DocumentSelector = TextDocumentSelector.ForLanguage("gamescript"),
+			SyncKind = TextDocumentSyncKind.Incremental
 		};
 	}
 }

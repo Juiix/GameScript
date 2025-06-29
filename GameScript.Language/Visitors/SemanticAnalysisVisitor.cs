@@ -10,7 +10,6 @@ namespace GameScript.Language.Visitors
 		VisitorContext context) : AnalysisVisitorBase(localIndexes)
 	{
 		private readonly VisitorContext _context = context;
-		private bool _inConstant = false;
 		private int _loopDepth = 0;
 
 		public override void Visit(MethodDefinitionNode node)
@@ -47,9 +46,26 @@ namespace GameScript.Language.Visitors
 
 		public override void Visit(ConstantDefinitionNode node)
 		{
-			_inConstant = true;
 			base.Visit(node);
-			_inConstant = false;
+
+			if (node.Initializer is not LiteralNode)
+			{
+				Error("Only literal assignments are allowed in constant declaration.", node.Initializer);
+			}
+		}
+
+		public override void Visit(ContextDefinitionNode node)
+		{
+			base.Visit(node);
+
+			if (node.Initializer is not LiteralNode literalNode)
+			{
+				Error("Only literal numbers assignments are allowed in context declaration.", node.Initializer);
+			}
+			else if (literalNode.Type != LiteralType.Number)
+			{
+				Error("Context variable declaration expects an ID number assignment.", node.Initializer);
+			}
 		}
 
 		public override void Visit(WhileStatementNode node)
@@ -109,12 +125,6 @@ namespace GameScript.Language.Visitors
 
 		public override void Visit(IdentifierNode node)
 		{
-			if (_inConstant &&
-				(node.Type & IdentifierType.Method) != IdentifierType.Unknown)
-			{
-				Error("Identifiers cannot be used in constant assignment.", node);
-			}
-
 			// check if called identifier type matches symbol type '~', '@', etc.
 			var symbol = LocalIndex?.GetSymbol(node.Name) ??
 				_context.Symbols.GetSymbol(node.Name);

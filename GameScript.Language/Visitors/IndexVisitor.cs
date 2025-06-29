@@ -1,5 +1,6 @@
 ﻿using System.Collections.Generic;
 using System.Linq;
+using GameScript.Bytecode;
 using GameScript.Language.Ast;
 using GameScript.Language.Index;
 using GameScript.Language.Symbols;
@@ -19,6 +20,9 @@ namespace GameScript.Language.Visitors
 
 		public override void Visit(ConstantDefinitionNode node)
 		{
+			if (InvalidSymbolName(node.Name.Name))
+				return;
+
 			var symbol = new SymbolInfo(
 				IdentifierType.Constant,
 				node.Name.Name,
@@ -27,6 +31,28 @@ namespace GameScript.Language.Visitors
 				null,
 				null,
 				node.Name.Summary,
+				ParseLiteral(node.Initializer),
+				_context.FilePath,
+				node.Name.FileRange
+			);
+
+			_fileIndex.AddSymbol(symbol);
+		}
+
+		public override void Visit(ContextDefinitionNode node)
+		{
+			if (InvalidSymbolName(node.Name.Name))
+				return;
+
+			var symbol = new SymbolInfo(
+				IdentifierType.Context,
+				node.Name.Name,
+				_context.Types.GetType(node.Type.Name),
+				null,
+				null,
+				null,
+				node.Name.Summary,
+				null,
 				_context.FilePath,
 				node.Name.FileRange
 			);
@@ -36,6 +62,9 @@ namespace GameScript.Language.Visitors
 
 		public override void Visit(MethodDefinitionNode node)
 		{
+			if (InvalidSymbolName(node.Name.Name))
+				return;
+
 			// For triggers, we compose the symbol name to include trigger type for uniqueness.
 			var symbol = new SymbolInfo(
 				node.Name.Type,
@@ -45,6 +74,7 @@ namespace GameScript.Language.Visitors
 				_context.Types.GetTuple(node.Parameters?.Select(x => x.Type.Name)),
 				node.Parameters?.Select(x => x.Name.Name).ToList(),
 				node.Name.Summary,
+				null,
 				_context.FilePath,
 				node.Name.FileRange
 			);
@@ -65,6 +95,9 @@ namespace GameScript.Language.Visitors
 			var varType = _context.Types.GetType(node.VarType.Name);
 			foreach (var (varName, initializer) in node.Vars)
 			{
+				if (InvalidSymbolName(varName.Name))
+					return;
+
 				var varSymbol = new SymbolInfo(
 					IdentifierType.Local,
 					varName.Name,
@@ -73,6 +106,7 @@ namespace GameScript.Language.Visitors
 					null,
 					null,
 					varName.Summary,
+					null,
 					_context.FilePath,
 					varName.FileRange
 				);
@@ -84,6 +118,9 @@ namespace GameScript.Language.Visitors
 
 		public override void Visit(ParameterNode node)
 		{
+			if (InvalidSymbolName(node.Name.Name))
+				return;
+
 			var paramSymbol = new SymbolInfo(
 				node.Name.Type,
 				node.Name.Name,
@@ -92,6 +129,7 @@ namespace GameScript.Language.Visitors
 				null,
 				null,
 				node.Name.Summary,
+				null,
 				_context.FilePath,
 				node.Name.FileRange
 			);
@@ -118,5 +156,19 @@ namespace GameScript.Language.Visitors
 				_fileIndex.AddReference(reference);
 			}
 		}
+
+
+		private static object? ParseLiteral(ExpressionNode node)
+		{
+			if (node is not LiteralNode literal) return Value.Null;
+			return literal.Type switch
+			{
+				LiteralType.Number => int.TryParse(literal.Value, out var i) ? i : null,
+				LiteralType.Boolean => bool.TryParse(literal.Value, out var b) ? b : null,
+				LiteralType.String => literal.Value.Substring(1, literal.Value.Length - 2),
+				_ => null
+			};
+		}
+		private static bool InvalidSymbolName(string name) => name.StartsWith('?');
 	}
 }

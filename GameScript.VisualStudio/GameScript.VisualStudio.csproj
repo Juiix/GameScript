@@ -51,6 +51,9 @@
     <Compile Include="GameScriptPackage.cs" />
   </ItemGroup>
   <ItemGroup>
+    <Content Include="Grammars\gamescript.tmLanguage">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
     <None Include="overview.md" />
     <None Include="publishManifest.json" />
     <None Include="source.extension.vsixmanifest">

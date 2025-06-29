@@ -1,6 +1,7 @@
 ﻿// See https://aka.ms/new-console-template for more information
 
 using GameScript.Language.Index;
+using GameScript.LanguageServer;
 using GameScript.LanguageServer.Caches;
 using GameScript.LanguageServer.Handlers;
 using GameScript.LanguageServer.Services;
@@ -11,6 +12,10 @@ using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using OmniSharp.Extensions.LanguageServer.Protocol.Server.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Server;
 using System.Diagnostics;
+
+var flags = args.Where(x => x.StartsWith("--"))
+				.Select(x => Enum.TryParse<ProgramFlags>(x.TrimStart('-'), true, out var flag) ? flag : ProgramFlags.None)
+				.Aggregate(ProgramFlags.None, (a, v) => a | v);
 
 var server = await LanguageServer.From(options =>
 {
@@ -76,8 +81,8 @@ var server = await LanguageServer.From(options =>
 	});
 	options.OnInitialized(async (server, p, r, token) =>
 	{
-		RegisterCapabilities(server.ServerSettings.Capabilities);
-		RegisterCapabilities(r.Capabilities);
+		RegisterCapabilities(server.ServerSettings.Capabilities, flags);
+		RegisterCapabilities(r.Capabilities, flags);
 
 		var workspaceService = server.Services.GetRequiredService<WorkspaceService>();
 		await workspaceService.InitialScanAsync(token);
@@ -109,37 +114,41 @@ await Task.WhenAny(
 	server.WaitForExit
 );
 
-// dynamic capability registration wasn't working :(
-static void RegisterCapabilities(ServerCapabilities capabilities)
+// dynamic capability registration wasn't working with VisualStudio :(
+static void RegisterCapabilities(ServerCapabilities capabilities, ProgramFlags flags)
 {
-	capabilities.CompletionProvider = new CompletionRegistrationOptions.StaticOptions()
-	{ 
-		ResolveProvider = false,
-		TriggerCharacters = new Container<string>("$", "^", "%", "~", "@")
-	};
-	capabilities.DefinitionProvider = new BooleanOr<DefinitionRegistrationOptions.StaticOptions>(new DefinitionRegistrationOptions.StaticOptions());
-	capabilities.DocumentHighlightProvider = new BooleanOr<DocumentHighlightRegistrationOptions.StaticOptions>(new DocumentHighlightRegistrationOptions.StaticOptions());
-	capabilities.TextDocumentSync = new TextDocumentSync(new TextDocumentSyncOptions
+	bool visualstudio = (flags & ProgramFlags.VisualStudio) == ProgramFlags.VisualStudio;
+	if (visualstudio)
 	{
-		Change = TextDocumentSyncKind.Incremental,
-		Save = true,
-		OpenClose = true
-	});
-	capabilities.DocumentSymbolProvider = new BooleanOr<DocumentSymbolRegistrationOptions.StaticOptions>(new DocumentSymbolRegistrationOptions.StaticOptions());
-	capabilities.HoverProvider = new BooleanOr<HoverRegistrationOptions.StaticOptions>(new HoverRegistrationOptions.StaticOptions());
-	capabilities.ReferencesProvider = new BooleanOr<ReferenceRegistrationOptions.StaticOptions>(new ReferenceRegistrationOptions.StaticOptions());
-	capabilities.RenameProvider = new BooleanOr<RenameRegistrationOptions.StaticOptions>(new RenameRegistrationOptions.StaticOptions()
-	{
-		PrepareProvider = true
-	});
-	capabilities.SemanticTokensProvider = new SemanticTokensRegistrationOptions.StaticOptions
-	{
-		Legend = SemanticTokensHandler.Legend,
-		Full = true,
-		Range = true
-	};
-	capabilities.WorkspaceSymbolProvider = new BooleanOr<WorkspaceSymbolRegistrationOptions.StaticOptions>(new WorkspaceSymbolRegistrationOptions.StaticOptions
-	{
-		ResolveProvider = true
-	});
+		capabilities.CompletionProvider = new CompletionRegistrationOptions.StaticOptions()
+		{
+			ResolveProvider = false,
+			TriggerCharacters = new Container<string>("$", "^", "%", "~", "@")
+		};
+		capabilities.DefinitionProvider = new BooleanOr<DefinitionRegistrationOptions.StaticOptions>(new DefinitionRegistrationOptions.StaticOptions());
+		capabilities.DocumentHighlightProvider = new BooleanOr<DocumentHighlightRegistrationOptions.StaticOptions>(new DocumentHighlightRegistrationOptions.StaticOptions());
+		capabilities.TextDocumentSync = new TextDocumentSync(new TextDocumentSyncOptions
+		{
+			Change = TextDocumentSyncKind.Incremental,
+			Save = true,
+			OpenClose = true
+		});
+		capabilities.DocumentSymbolProvider = new BooleanOr<DocumentSymbolRegistrationOptions.StaticOptions>(new DocumentSymbolRegistrationOptions.StaticOptions());
+		capabilities.HoverProvider = new BooleanOr<HoverRegistrationOptions.StaticOptions>(new HoverRegistrationOptions.StaticOptions());
+		capabilities.ReferencesProvider = new BooleanOr<ReferenceRegistrationOptions.StaticOptions>(new ReferenceRegistrationOptions.StaticOptions());
+		capabilities.RenameProvider = new BooleanOr<RenameRegistrationOptions.StaticOptions>(new RenameRegistrationOptions.StaticOptions()
+		{
+			PrepareProvider = true
+		});
+		capabilities.SemanticTokensProvider = new SemanticTokensRegistrationOptions.StaticOptions
+		{
+			Legend = SemanticTokensHandler.Legend,
+			Full = true,
+			Range = true
+		};
+		capabilities.WorkspaceSymbolProvider = new BooleanOr<WorkspaceSymbolRegistrationOptions.StaticOptions>(new WorkspaceSymbolRegistrationOptions.StaticOptions
+		{
+			ResolveProvider = true
+		});
+	}
 }

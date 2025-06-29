@@ -47,6 +47,11 @@ namespace GameScript.Language.Visitors
 			Visit((AstNode)node);
 		}
 
+		public virtual void Visit(ContextsNode node)
+		{
+			Visit((AstNode)node);
+		}
+
 		// Statements
 
 		public virtual void Visit(IfStatementNode node)
@@ -70,6 +75,11 @@ namespace GameScript.Language.Visitors
 		}
 
 		public virtual void Visit(ConstantDefinitionNode node)
+		{
+			Visit((AstNode)node);
+		}
+
+		public virtual void Visit(ContextDefinitionNode node)
 		{
 			Visit((AstNode)node);
 		}

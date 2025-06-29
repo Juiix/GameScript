@@ -2,7 +2,6 @@
 using GameScript.Language.File;
 using GameScript.LanguageServer.Caches;
 using GameScript.LanguageServer.Extensions;
-using GameScript.LanguageServer.Services;
 using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Protocol.Document;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
@@ -159,9 +158,7 @@ namespace GameScript.LanguageServer.Handlers
 			return type switch
 			{
 				IdentifierType.Func or IdentifierType.Label or IdentifierType.Command or IdentifierType.Trigger => 1,
-				IdentifierType.Local => 2,
-				IdentifierType.Constant => 2,
-				IdentifierType.Context => 2,
+				IdentifierType.Local or IdentifierType.Constant or IdentifierType.Context => 2,
 				_ => 0,
 			};
 		}

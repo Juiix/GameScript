@@ -40,7 +40,8 @@ internal sealed class RenameHandler(
 			return null;
 		}
 
-		var symbol = _symbols.GetSymbol(symbolName);
+		var localIndex = rootData.GetLocalIndex(request.Position.Line, request.Position.Character);
+		var symbol = localIndex?.GetSymbol(symbolName) ?? _symbols.GetSymbol(symbolName);
 		if (symbol == null)
 		{
 			return null;

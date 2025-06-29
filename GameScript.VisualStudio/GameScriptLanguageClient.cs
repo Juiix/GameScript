@@ -6,7 +6,6 @@ using System.Collections.Generic;
 using System.ComponentModel.Composition;
 using System.Diagnostics;
 using System.IO;
-using System.IO.Pipes;
 using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
@@ -34,17 +33,6 @@ namespace GameScript.VisualStudio
 			{
 				try
 				{
-					/*
-					var namedPipe = new NamedPipeClientStream(
-						pipeName: "gamescript",
-						direction: PipeDirection.InOut,
-						serverName: ".",
-						options: PipeOptions.Asynchronous);
-
-					await namedPipe.ConnectAsync(token);
-					return new Connection(namedPipe, namedPipe);
-					*/
-
 					await Task.Yield();
 
 					// Adjust path to match your server location
@@ -54,7 +42,7 @@ namespace GameScript.VisualStudio
 						StartInfo = new ProcessStartInfo
 						{
 							FileName = exePath,
-							Arguments = "",
+							Arguments = "--stdio --visualstudio",
 							RedirectStandardInput = true,
 							RedirectStandardOutput = true,
 							UseShellExecute = false,

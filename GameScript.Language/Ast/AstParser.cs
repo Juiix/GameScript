@@ -18,6 +18,7 @@ namespace GameScript.Language.Ast
 		private readonly List<CommentNode> _comments = [];
 		private StringBuilder? _summaryBuilder;
 		private FilePosition _lastSummaryPosition;
+		private int _newLineCommentCount;
 
 		public AstParser(string filePath, ReadOnlySpan<char> source) : this()
 		{
@@ -91,6 +92,35 @@ namespace GameScript.Language.Ast
 									 new FileRange(start, _previous.End));
 		}
 
+		public ContextsNode ParseContexts()
+		{
+			var defs = new List<ContextDefinitionNode>();
+
+			Advance(); // prime the tokenizer
+			var start = _current.Start;
+
+			while (true)
+			{
+				SkipEndOfLineTokens();
+
+				if (_current.Type == TokenType.EndOfFile)
+					break;
+
+				var lineStart = _current.Start;
+				defs.Add(ParseContextDefinition());
+
+				// Only one statement per physical line
+				if (_current.Type is not (TokenType.EndOfLine or TokenType.Dedent or TokenType.EndOfFile) &&
+					_current.Start.Line == lineStart.Line)
+				{
+					Error("Only one statement per line is allowed.", _current.Range);
+				}
+			}
+
+			return new ContextsNode(defs, _filePath,
+									 new FileRange(start, _previous.End));
+		}
+
 		// Parses definition
 		private MethodDefinitionNode ParseDefinition()
 		{
@@ -141,13 +171,13 @@ namespace GameScript.Language.Ast
 			Advance();
 
 			// method name
-			var nameTok = Expect(TokenType.Identifier, "Expected method name", "funcName".AsSpan());
+			var nameTok = Expect(TokenType.Identifier, "Expected method name", "?".AsSpan());
 			var nameStart = _previous.Start;
 			IdentifierDeclarationNode nameNode;
 			if (idType == IdentifierType.Trigger && Match(TokenType.Colon))
 			{
-				var comTok = Expect(TokenType.Identifier, "Expected component identifier", "component".AsSpan());
-				var combined = $"{nameTok.Value.TrimStart("~@".AsSpan()).ToString()}:{comTok.Value.TrimStart("~@".AsSpan()).ToString()}";
+				var comTok = Expect(TokenType.Identifier, "Expected component identifier", "?".AsSpan());
+				var combined = $"{nameTok.Value}:{comTok.Value}";
 				nameNode = new IdentifierDeclarationNode(
 								   combined, idType, summary,
 								   _filePath, new FileRange(nameStart, _previous.End));
@@ -155,7 +185,7 @@ namespace GameScript.Language.Ast
 			else
 			{
 				nameNode = new IdentifierDeclarationNode(
-								   nameTok.Value.TrimStart("~@".AsSpan()).ToString(),
+								   nameTok.Value.ToString(),
 								   idType, summary, _filePath, PreviousRange);
 			}
 
@@ -206,12 +236,9 @@ namespace GameScript.Language.Ast
 			var typeNode = new TypeNode(typeTok.Value.ToString(), _filePath, PreviousRange);
 
 			// constant name (must start with '^')
-			var nameTok = Expect(TokenType.Identifier, "Expected constant name (must start with '^')", "^constName".AsSpan());
+			var nameTok = ExpectStartsWith(TokenType.Identifier, "^", "Expected constant name (must start with '^')", "^?".AsSpan());
 			var nameNode = new IdentifierDeclarationNode(nameTok.Value.TrimStart('^').ToString(),
 														 IdentifierType.Constant, summary, _filePath, PreviousRange);
-
-			if (nameTok.Value[0] != '^')
-				Error($"Constant '{nameNode.Name}' must start with a '^'", nameNode.FileRange);
 
 			// '=' operator
 			var opTok = Expect(TokenType.Operator, "Expected '=' in constant declaration", "=".AsSpan());
@@ -222,12 +249,37 @@ namespace GameScript.Language.Ast
 
 			// initializer
 			var initializer = ParseExpression();
-			if (initializer is not LiteralNode)
-			{
-				Error("Expected literal expression.", initializer.FileRange);
-			}
 
 			return new ConstantDefinitionNode(
+				typeNode, nameNode, opNode, initializer, _filePath,
+				new FileRange(start, _previous.End));
+		}
+
+		private ContextDefinitionNode ParseContextDefinition()
+		{
+			var summary = GetSummary();
+			var start = _current.Start;
+
+			// constant type
+			var typeTok = Expect(TokenType.Identifier, "Expected a type for context variable declaration", "varType".AsSpan());
+			var typeNode = new TypeNode(typeTok.Value.ToString(), _filePath, PreviousRange);
+
+			// constant name (must start with '%')
+			var nameTok = ExpectStartsWith(TokenType.Identifier, "%", "Expected context variable name (must start with '%')", "%?".AsSpan());
+			var nameNode = new IdentifierDeclarationNode(nameTok.Value.TrimStart('%').ToString(),
+														 IdentifierType.Context, summary, _filePath, PreviousRange);
+
+			// '=' operator
+			var opTok = Expect(TokenType.Operator, "Expected '=' in context declaration", "=".AsSpan());
+			if (!opTok.Value.SequenceEqual("=".AsSpan()))
+				Error("Expected '=' operator for context declaration", opTok.Range);
+
+			var opNode = new OperatorNode(opTok.Value.ToString(), _filePath, opTok.Range);
+
+			// initializer
+			var initializer = ParseExpression();
+
+			return new ContextDefinitionNode(
 				typeNode, nameNode, opNode, initializer, _filePath,
 				new FileRange(start, _previous.End));
 		}
@@ -360,12 +412,9 @@ namespace GameScript.Language.Ast
 			do
 			{
 				// name must start with '$'
-				var nameTok = Expect(TokenType.Identifier, "Expected variable name (must start with '$')", "$varName".AsSpan());
+				var nameTok = ExpectStartsWith(TokenType.Identifier, "$", "Expected variable name (must start with '$')", "$?".AsSpan());
 				var nameNode = new IdentifierDeclarationNode(nameTok.Value.TrimStart('$').ToString(),
 															 IdentifierType.Local, summary, _filePath, PreviousRange);
-
-				if (nameTok.Value[0] != '$')
-					Error($"Local variable '{nameNode.Name}' must start with a '$'", nameNode.FileRange);
 
 				// optional initializer
 				ExpressionNode? init = null;
@@ -406,12 +455,9 @@ namespace GameScript.Language.Ast
 				var typeTok = Expect(TokenType.Identifier, "Expected parameter type", "paramType".AsSpan());
 				var typeNode = new TypeNode(typeTok.Value.ToString(), _filePath, PreviousRange);
 
-				var nameTok = Expect(TokenType.Identifier, "Expected parameter name", "$paramName".AsSpan());
+				var nameTok = ExpectStartsWith(TokenType.Identifier, "$", "Expected parameter name", "$?".AsSpan());
 				var nameNode = new IdentifierDeclarationNode(nameTok.Value.TrimStart('$').ToString(),
 															 IdentifierType.Local, summary, _filePath, PreviousRange);
-
-				if (nameTok.Value[0] != '$')
-					Error($"Local variable '{nameNode.Name}' must start with a '$'", nameNode.FileRange);
 
 				parameters.Add(new ParameterNode(typeNode, nameNode, _filePath,
 												 new FileRange(start, _previous.End)));
@@ -455,7 +501,7 @@ namespace GameScript.Language.Ast
 														 IdentifierType.Local, null, _filePath, PreviousRange);
 
 				if (_previous.Value[0] != '$')
-					Error($"Local identifier '{nameNode.Name}' must start with a '$'", PreviousRange);
+					Error($"Return name must start with '$'", PreviousRange);
 			}
 
 			return new ReturnTypeNode(typeNode, nameNode, _filePath,
@@ -769,19 +815,23 @@ namespace GameScript.Language.Ast
 		{
 			while (true)
 			{
-				if (_current.Type == TokenType.Identifier)
+				if (_current.Type is TokenType.Identifier)
 					_summaryBuilder?.Clear();
 
 				var token = _tokenizer.NextToken();
 				if (token.Type != TokenType.Comment)
 				{
+					if (token.Type == TokenType.EndOfLine
+						&& ++_newLineCommentCount > 1)
+						_summaryBuilder?.Clear();
 					return token;
 				}
 				_summaryBuilder ??= new();
 				if (_summaryBuilder.Length > 0) _summaryBuilder.Append('\n');
-				_summaryBuilder.Append(token.Value.TrimStart("/*").Trim());
+				_summaryBuilder.Append(token.Value.TrimStart("/*").TrimEnd("*/").Trim());
 				_lastSummaryPosition = token.End;
 				_comments?.Add(new CommentNode(token.Value.ToString(), _filePath, token.Range));
+				_newLineCommentCount = 0;
 			}
 		}
 
@@ -827,6 +877,29 @@ namespace GameScript.Language.Ast
 
 				return new Token(type, patchToken, _current.Range.AddLength(1));
 			}
+			Token token = _current;
+			Advance();
+			return token;
+		}
+
+		// Expects that the current token is of a given type and advances.
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
+		private Token ExpectStartsWith(TokenType type, string startsWith, string errorMessage, ReadOnlySpan<char> patchToken)
+		{
+			if (_current.Type != type)
+			{
+				Error(errorMessage, _current.Range);
+				return new Token(type, patchToken, _current.Range.AddLength(1));
+			}
+
+			if (_current.Value.Length <= startsWith.Length ||
+				!_current.Value.StartsWith(startsWith))
+			{
+				Error(errorMessage, _current.Range);
+				Advance();
+				return new Token(type, patchToken, _current.Range.AddLength(1));
+			}
+
 			Token token = _current;
 			Advance();
 			return token;

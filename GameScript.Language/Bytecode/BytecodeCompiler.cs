@@ -19,9 +19,13 @@ namespace GameScript.Language.Bytecode
 		private readonly List<ushort> _ops = [];
 		private readonly List<int> _operands = [];
 		private readonly Dictionary<string, int> _localSlots = [];
+		private readonly Dictionary<string, int> _ctxSlots = [];
 		private readonly Stack<LoopContext> _loopStack = [];
 
-		public BytecodeProgram Compile(IEnumerable<ConstantDefinitionNode> constants, IEnumerable<MethodDefinitionNode> methods)
+		public BytecodeProgram Compile(
+			IEnumerable<ConstantDefinitionNode> constants,
+			IEnumerable<ContextDefinitionNode> contexts,
+			IEnumerable<MethodDefinitionNode> methods)
 		{
 			// Initialize data
 			_methods.Clear();
@@ -44,7 +48,10 @@ namespace GameScript.Language.Bytecode
 			// 2) Compile constant init method
 			CompileConstants(constants);
 
-			// 3) Compile each method
+			// 3) Compile constant init method
+			CompileContexts(contexts);
+
+			// 4) Compile each method
 			index = 0;
 			foreach (var method in methods.Where(IsCompilable))
 			{
@@ -79,6 +86,22 @@ namespace GameScript.Language.Bytecode
 
 				Value v = ParseLiteral(literal);
 				_globals[c.Name.Name] = v;
+			}
+		}
+
+		private void CompileContexts(IEnumerable<ContextDefinitionNode> contexts)
+		{
+			// each context variable sets its own slot from the initializer
+			foreach (var c in contexts)
+			{
+				if (c.Initializer is not LiteralNode literal ||
+					literal.Type is not LiteralType.Number)
+				{
+					throw new InvalidOperationException("Context initializer must be a literal number expression");
+				}
+
+				Value v = ParseLiteral(literal);
+				_ctxSlots[c.Name.Name] = v.Int;
 			}
 		}
 
@@ -367,9 +390,9 @@ namespace GameScript.Language.Bytecode
 				// Variable or constant: load from a local slot
 				// ----------------------------------------
 				case IdentifierNode id:
-					if (id.Type == IdentifierType.Local && _localSlots.TryGetValue(id.Name, out slot))
+					if (TryGetVarSlot(id.Type, id.Name, out slot))
 					{
-						Emit(CoreOpCode.LoadLocal, slot);
+						EmitLoadVar(id.Type, slot);
 					}
 					else if (id.Type == IdentifierType.Constant && _globals.TryGetValue(id.Name, out var constValue))
 					{
@@ -399,8 +422,8 @@ namespace GameScript.Language.Bytecode
 						return leftTuple.Elements.Count;
 					}
 
-					if (!(assign.Left is IdentifierNode vid) ||
-						!_localSlots.TryGetValue(vid.Name, out slot))
+					if (assign.Left is not IdentifierNode vid ||
+						!TryGetVarSlot(vid.Type, vid.Name, out slot))
 					{
 						throw new Exception("Invalid left‑hand side in assignment");
 					}
@@ -415,7 +438,7 @@ namespace GameScript.Language.Bytecode
 					{
 						// operator-assignment x op= y => x = x op y
 						// 1) load old x
-						Emit(CoreOpCode.LoadLocal, slot);
+						EmitLoadVar(vid.Type, slot);
 						// 2) evaluate y
 						EmitExpression(assign.Right);
 						// 3) apply the binary op
@@ -424,9 +447,9 @@ namespace GameScript.Language.Bytecode
 					}
 
 					// store the result back into x
-					Emit(CoreOpCode.StoreLocal, slot);
+					EmitStoreVar(vid.Type, slot);
 					// leave the assigned value on the stack as the expression result
-					Emit(CoreOpCode.LoadLocal, slot);
+					EmitLoadVar(vid.Type, slot);
 					return 1;
 
 				// ----------------------------------------
@@ -479,14 +502,16 @@ namespace GameScript.Language.Bytecode
 					// Only identifiers can be incremented/decremented
 					if ((unary.Operator == UnaryOperator.Increment || unary.Operator == UnaryOperator.Decrement) &&
 						unary.Operand is IdentifierNode incrTarget &&
-						_localSlots.TryGetValue(incrTarget.Name, out slot))
+						TryGetVarSlot(incrTarget.Type, incrTarget.Name, out slot))
 					{
 						// prefix: evaluate to (x = x ± 1), leave new value on stack
-						Emit(CoreOpCode.LoadLocal, slot);
+						EmitLoadVar(incrTarget.Type, slot);
 
-						Emit(unary.Operator == UnaryOperator.Increment ?
-							CoreOpCode.IncrementStoreResult :
-							CoreOpCode.DecrementStoreResult, slot);
+						var toAdd = unary.Operator is UnaryOperator.Increment ? 1 : -1;
+						Emit(CoreOpCode.Add, toAdd);
+
+						EmitStoreVar(incrTarget.Type, slot);
+						EmitLoadVar(incrTarget.Type, slot);
 					}
 					else
 					{
@@ -515,15 +540,17 @@ namespace GameScript.Language.Bytecode
 				case PostfixExpressionNode postfix:
 					if ((postfix.Operator == UnaryOperator.Increment || postfix.Operator == UnaryOperator.Decrement) &&
 						postfix.Operand is IdentifierNode target &&
-						_localSlots.TryGetValue(target.Name, out slot))
+						TryGetVarSlot(target.Type, target.Name, out slot))
 					{
 						// postfix: evaluate to original x, but side‐effect x = x ± 1
 						// 1) push original x
-						Emit(CoreOpCode.LoadLocal, slot);
+						EmitLoadVar(target.Type, slot);
 
-						Emit(postfix.Operator == UnaryOperator.Increment ?
-							CoreOpCode.IncrementStoreOrigin :
-							CoreOpCode.DecrementStoreOrigin, slot);
+						var toAdd = postfix.Operator is UnaryOperator.Increment ? 1 : -1;
+						Emit(CoreOpCode.Add, toAdd);
+
+						EmitLoadVar(target.Type, slot);
+						EmitStoreVar(target.Type, slot);
 					}
 					else
 					{
@@ -563,6 +590,32 @@ namespace GameScript.Language.Bytecode
 			}
 		}
 
+		private void EmitLoadVar(IdentifierType type, int slot)
+		{
+			switch (type)
+			{
+				case IdentifierType.Context:
+					Emit(CoreOpCode.LoadCtx, slot);
+					break;
+				default:
+					Emit(CoreOpCode.LoadLocal, slot);
+					break;
+			}
+		}
+
+		private void EmitStoreVar(IdentifierType type, int slot)
+		{
+			switch (type)
+			{
+				case IdentifierType.Context:
+					Emit(CoreOpCode.StoreCtx, slot);
+					break;
+				default:
+					Emit(CoreOpCode.StoreLocal, slot);
+					break;
+			}
+		}
+
 		/// <summary>
 		/// Helper for tuple‑to‑tuple assignment: (a, b) = (X, Y)
 		/// </summary>
@@ -589,13 +642,13 @@ namespace GameScript.Language.Bytecode
 					throw new InvalidOperationException("LHS of tuple must be identifiers");
 				}
 
-				if (!_localSlots.TryGetValue(ident.Name, out int slot))
+				if (!TryGetVarSlot(ident.Type, ident.Name, out int slot))
 				{
 					throw new KeyNotFoundException($"Unknown local variable '{ident.Name}'");
 				}
 
 				// store the top of the stack into that slot
-				Emit(CoreOpCode.StoreLocal, slot);
+				EmitStoreVar(ident.Type, slot);
 			}
 
 			// 3) Load values back onto the stack for chain tuple assignment (EmitPopLast will clean up trailing loads)
@@ -606,13 +659,13 @@ namespace GameScript.Language.Bytecode
 					throw new InvalidOperationException("LHS of tuple must be identifiers");
 				}
 
-				if (!_localSlots.TryGetValue(ident.Name, out int slot))
+				if (!TryGetVarSlot(ident.Type, ident.Name, out int slot))
 				{
 					throw new KeyNotFoundException($"Unknown local variable '{ident.Name}'");
 				}
 
 				// load them back on the stack
-				Emit(CoreOpCode.LoadLocal, slot);
+				EmitLoadVar(ident.Type, slot);
 			}
 		}
 
@@ -657,6 +710,15 @@ namespace GameScript.Language.Bytecode
 			};
 		}
 
+		private bool TryGetVarSlot(IdentifierType type, string name, out int slot)
+		{
+			return type switch
+			{
+				IdentifierType.Context => _ctxSlots.TryGetValue(name, out slot),
+				_ => _localSlots.TryGetValue(name, out slot),
+			};
+		}
+
 		private int AddConstant(Value value)
 		{
 			// Try dictionary lookup first
@@ -696,7 +758,8 @@ namespace GameScript.Language.Bytecode
 			if (lastOp == CoreOpCode.LoadConst ||
 				lastOp == CoreOpCode.LoadConstInt ||
 				lastOp == CoreOpCode.LoadConstBool ||
-				lastOp == CoreOpCode.LoadLocal)
+				lastOp == CoreOpCode.LoadLocal ||
+				lastOp == CoreOpCode.LoadCtx)
 			{
 				_ops.RemoveAt(_ops.Count - 1);
 				_operands.RemoveAt(_operands.Count - 1);

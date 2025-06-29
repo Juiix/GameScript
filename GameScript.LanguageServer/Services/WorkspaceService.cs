@@ -3,8 +3,6 @@ using GameScript.LanguageServer.Extensions;
 using GameScript.LanguageServer.Parsing;
 using GameScript.LanguageServer.Tools;
 using Microsoft.Extensions.Logging;
-using OmniSharp.Extensions.LanguageServer.Protocol.Server;
-using OmniSharp.Extensions.LanguageServer.Protocol.Window;
 using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
 

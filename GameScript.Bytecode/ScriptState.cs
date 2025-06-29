@@ -3,7 +3,7 @@ using System.Buffers;
 
 namespace GameScript.Bytecode;
 
-public sealed class ScriptState : IDisposable
+public sealed class ScriptState<TContext> : IDisposable where TContext : IScriptContext
 {
 	// debug fields
 	private BytecodeMethod _entryMethod;
@@ -15,8 +15,9 @@ public sealed class ScriptState : IDisposable
     private readonly Value[] _stack = ArrayPool<Value>.Shared.Rent(1024);
     private readonly CallFrame[] _frames = ArrayPool<CallFrame>.Shared.Rent(64);
 
-    public ScriptState(ScriptContext context, BytecodeMethod method, params Value[] args)
+    public ScriptState(ScriptGlobals globals, IScriptContext context, BytecodeMethod method, params Value[] args)
     {
+		Globals = globals;
 		Context = context;
         _entryMethod = method;
 		foreach (ref var arg in args.AsSpan())
@@ -30,7 +31,8 @@ public sealed class ScriptState : IDisposable
 		_sp = method.LocalsCount;
 	}
 
-	public ScriptContext Context { get; }
+	public ScriptGlobals Globals { get; }
+	public IScriptContext Context { get; }
 	public ScriptExecution Execution { get; set; } = ScriptExecution.Running;
 	public ushort OpCode { get; private set; }
 	public int Operand { get; private set; }

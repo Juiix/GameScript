@@ -12,20 +12,23 @@ namespace GameScript.Language.Visitors
 
 		void Clear();
 
-		// Definition nodes
+		// File nodes
 		void Visit(ProgramNode node);
-		void Visit(MethodDefinitionNode node);
 		void Visit(ConstantsNode node);
+		void Visit(ContextsNode node);
+
+		// Definition nodes
+		void Visit(MethodDefinitionNode node);
+		void Visit(ConstantDefinitionNode node);
+		void Visit(ContextDefinitionNode node);
 
 		// Statement nodes
 		void Visit(IfStatementNode node);
 		void Visit(ElseIfStatementNode node);
 		void Visit(WhileStatementNode node);
-		void Visit(VariableDefinitionNode node);
-		void Visit(ConstantDefinitionNode node);
 		void Visit(ParameterNode node);
-		void Visit(ReturnTypeNode node);
 		void Visit(BlockNode node);
+		void Visit(VariableDefinitionNode node);
 		void Visit(ReturnStatementNode node);
 		void Visit(ContinueStatementNode continueStatementNode);
 		void Visit(BreakStatementNode breakStatementNode);
@@ -45,6 +48,7 @@ namespace GameScript.Language.Visitors
 		// Other nodes
 		void Visit(KeywordNode node);
 		void Visit(TypeNode node);
+		void Visit(ReturnTypeNode node);
 		void Visit(IdentifierDeclarationNode node);
 		void Visit(CommentNode node);
 	}

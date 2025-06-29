@@ -2,11 +2,11 @@
 
 namespace GameScript.Bytecode
 {
-	public sealed class ScriptRunner(Action<ScriptState>[] handlers)
+	public sealed class ScriptRunner<TContext>(Action<ScriptState<TContext>>[] handlers) where TContext : IScriptContext
 	{
-		private readonly Action<ScriptState>[] _handlers = handlers;
+		private readonly Action<ScriptState<TContext>>[] _handlers = handlers;
 
-		public ScriptExecution Run(ScriptState state)
+		public ScriptExecution Run(ScriptState<TContext> state)
 		{
 			state.Execution = ScriptExecution.Running;
 			try

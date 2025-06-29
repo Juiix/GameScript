@@ -14,8 +14,6 @@ import {
 // Client bootstrap
 // ──────────────────────────────────────────────────────────────
 
-//const serverOptions = namedPipeServer('gamescript');
-
 let client: LanguageClient;
 
 /**
@@ -47,7 +45,7 @@ export function activate(context: vscode.ExtensionContext): void {
     );
 
     // Log where we’re looking
-    console.log(`GameScript LSP exe path = ${serverPath}`);
+    //console.log(`GameScript LSP exe path = ${serverPath}`);
 
     // Fail fast if it’s missing
     if (!fs.existsSync(serverPath)) {
@@ -68,23 +66,22 @@ export function activate(context: vscode.ExtensionContext): void {
     // 5) Define run/debug server options
     const run: Executable = {
       command: serverPath,
-      args: ['--stdio'],
+      args: ['--stdio', '--vscode'],
       options: { env: process.env }
     };
     const debug: Executable = {
       command: serverPath,
-      args: ['--stdio'],   // your --debug flag to wait for debugger
+      args: ['--stdio', '--vscode', '--debug' ],   // your --debug flag to wait for debugger
       options: { env: process.env }
     };
 
     // 6) Client options
     const serverOptions: ServerOptions = { run, debug };
-
     const clientOptions: LanguageClientOptions = {
         documentSelector: [
-            { scheme: 'file',     language: 'gamescript' },
-            { scheme: 'untitled', language: 'gamescript' }
+            { scheme: 'file',     language: 'gamescript' }
         ],
+        workspaceFolder: vscode.workspace.workspaceFolders?.[0],
         synchronize: {
             configurationSection: 'gamescript'
         },
@@ -98,8 +95,6 @@ export function activate(context: vscode.ExtensionContext): void {
         serverOptions,
         clientOptions
     );
-
-    client.setTrace(Trace.Verbose);  // or Trace.Messages / Trace.Off
 
     // Kick it off (ignore the returned Promise)
     client.start();
