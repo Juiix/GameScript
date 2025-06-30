@@ -10,31 +10,35 @@ namespace GameScript.Language.Bytecode
 	public sealed class BytecodeCompiler<TCommandOp> where TCommandOp : struct, Enum
 	{
 		private readonly List<BytecodeMethod> _methods = [];
+		private readonly List<BytecodeMethodMetadata> _methodMetadata = [];
 		private readonly Dictionary<string, int> _methodIndex = [];
 		private readonly Dictionary<string, int> _returnCounts = [];
 		private readonly Dictionary<string, Value> _globals = [];
 		private readonly Dictionary<Value, int> _constMap = [];
 		private readonly List<Value> _constPool = [];
 
+		private readonly List<int> _lineNumbers = [];
 		private readonly List<ushort> _ops = [];
 		private readonly List<int> _operands = [];
 		private readonly Dictionary<string, int> _localSlots = [];
 		private readonly Dictionary<string, int> _ctxSlots = [];
 		private readonly Stack<LoopContext> _loopStack = [];
 
-		public BytecodeProgram Compile(
+		public BytecodeCompilerResult Compile(
 			IEnumerable<ConstantDefinitionNode> constants,
 			IEnumerable<ContextDefinitionNode> contexts,
 			IEnumerable<MethodDefinitionNode> methods)
 		{
 			// Initialize data
 			_methods.Clear();
+			_methodMetadata.Clear();
 			_methodIndex.Clear();
 			_returnCounts.Clear();
 			_globals.Clear();
 			_constMap.Clear();
 			_constPool.Clear();
 			_loopStack.Clear();
+			_lineNumbers.Clear();
 
 			// 1) Index all methods
 			int index = 0;
@@ -55,14 +59,17 @@ namespace GameScript.Language.Bytecode
 			index = 0;
 			foreach (var method in methods.Where(IsCompilable))
 			{
-				_methods.Add(CompileMethod(method));
+				var methodResult = CompileMethod(method);
+				_methods.Add(methodResult.Method);
+				_methodMetadata.Add(methodResult.MethodMetadata);
 			}
 
-			return new BytecodeProgram(
-				[.._methods],
-				_methodIndex,
-				[.._constPool]
+			var program = new BytecodeProgram(
+				[.. _methods],
+				[.. _constPool]
 			);
+			var metadata = new BytecodeProgramMetadata([.. _methodMetadata]);
+			return new BytecodeCompilerResult(program, metadata);
 		}
 
 		private static bool IsCompilable(MethodDefinitionNode method)
@@ -105,27 +112,28 @@ namespace GameScript.Language.Bytecode
 			}
 		}
 
-		private BytecodeMethod CompileMethod(MethodDefinitionNode method)
+		private BytecodeMethodResult CompileMethod(MethodDefinitionNode methodNode)
 		{
 			// Initialize buffers
 			_ops.Clear();
 			_operands.Clear();
+			_lineNumbers.Clear();
 			_localSlots.Clear();
 
 			// 1) Parameter slots
-			if (method.Parameters != null)
+			if (methodNode.Parameters != null)
 			{
-				for (int i = 0; i < method.Parameters.Count; i++)
+				for (int i = 0; i < methodNode.Parameters.Count; i++)
 				{
-					_localSlots[method.Parameters[i].Name.Name] = i;
+					_localSlots[methodNode.Parameters[i].Name.Name] = i;
 				}
 			}
-			int nextSlot = method.Parameters?.Count ?? 0;
+			int nextSlot = methodNode.Parameters?.Count ?? 0;
 
 			// 2) Emit body statements
-			if (method.Body?.Statements != null)
+			if (methodNode.Body?.Statements != null)
 			{
-				foreach (var statement in method.Body.Statements)
+				foreach (var statement in methodNode.Body.Statements)
 				{
 					EmitStatement(statement, ref nextSlot);
 				}
@@ -135,23 +143,28 @@ namespace GameScript.Language.Bytecode
 			var lastOpIsReturn = _ops.Count > 0 && ((CoreOpCode)_ops[_ops.Count - 1] == CoreOpCode.Return);
 			if (!lastOpIsReturn)
 			{
-				for (int i = 0; i < (method.ReturnTypes?.Count ?? 0); i++)
+				for (int i = 0; i < (methodNode.ReturnTypes?.Count ?? 0); i++)
 				{
-					Emit(CoreOpCode.LoadConst, AddConstant(Value.Null));
+					Emit(CoreOpCode.LoadConst, AddConstant(Value.Null), methodNode.FileRange.End.Line);
 				}
-				Emit(CoreOpCode.Return, 0);
+				Emit(CoreOpCode.Return, 0, methodNode.FileRange.End.Line);
 			}
 
 			// 4) Bake into method
-			return new BytecodeMethod(
-				method.Name.Name,
+			var method = new BytecodeMethod(
+				methodNode.Name.Name,
 				[.. _ops],
 				[.. _operands],
-				method.Parameters?.Count ?? 0,
-				nextSlot,
-				method.ReturnTypes?.Count ?? 0,
-				method.FilePath
-			);
+				methodNode.Parameters?.Count ?? 0,
+				nextSlot - methodNode.Parameters?.Count ?? 0,
+				methodNode.ReturnTypes?.Count ?? 0);
+
+			var metadata = new BytecodeMethodMetadata(
+				methodNode.Name.Name,
+				[.. _lineNumbers],
+				methodNode.FilePath);
+
+			return new BytecodeMethodResult(method, metadata);
 		}
 
 		private void EmitStatement(AstNode statement, ref int nextSlot)
@@ -175,7 +188,7 @@ namespace GameScript.Language.Bytecode
 						_localSlots[name.Name] = slot;
 						if (initializer != null)
 						{
-							Emit(CoreOpCode.StoreLocal, slot);
+							Emit(CoreOpCode.StoreLocal, slot, statement.FileRange.Start.Line);
 						}
 					}
 					break;
@@ -196,7 +209,7 @@ namespace GameScript.Language.Bytecode
 						// regular expr: push result then pop it off
 						var popCount = EmitExpression(expression);
 						for (int i = 0; i < popCount; i++)
-							EmitPopLast();
+							EmitPopLast(statement.FileRange.End.Line);
 					}
 					break;
 
@@ -208,7 +221,7 @@ namespace GameScript.Language.Bytecode
 					{
 						EmitExpression(ret.Expression);
 					}
-					Emit(CoreOpCode.Return, 0);
+					Emit(CoreOpCode.Return, 0, statement.FileRange.Start.Line);
 					break;
 
 				// ----------------------------------------
@@ -219,7 +232,7 @@ namespace GameScript.Language.Bytecode
 					EmitExpression(ifStatement.Condition);
 
 					// 2) Jump over the 'if' block if false
-					int jumpToNext = EmitPlaceholder(CoreOpCode.JumpIfFalse);
+					int jumpToNext = EmitPlaceholder(CoreOpCode.JumpIfFalse, statement.FileRange.Start.Line);
 
 					// 3) Emit the 'if' block
 					if (ifStatement.IfBlock?.Statements != null)
@@ -231,7 +244,7 @@ namespace GameScript.Language.Bytecode
 					}
 
 					// 4) After 'if' block, jump to end of the whole if/elseif/else chain
-					int jumpPastAll = EmitPlaceholder(CoreOpCode.Jump);
+					int jumpPastAll = EmitPlaceholder(CoreOpCode.Jump, ifStatement.FileRange.End.Line);
 
 					// 5) Patch jumpToNext to the start of the first else-if (or else/end)
 					Patch(jumpToNext, _ops.Count - jumpToNext);
@@ -245,7 +258,7 @@ namespace GameScript.Language.Bytecode
 							EmitExpression(elseIf.Condition);
 
 							// 6b) jump over this else-if block if false
-							int jumpOverElseIf = EmitPlaceholder(CoreOpCode.JumpIfFalse);
+							int jumpOverElseIf = EmitPlaceholder(CoreOpCode.JumpIfFalse, elseIf.FileRange.Start.Line);
 
 							// 6c) emit the else-if block
 							if (elseIf.Block?.Statements != null)
@@ -257,7 +270,7 @@ namespace GameScript.Language.Bytecode
 							}
 
 							// 6d) after this else-if block, jump past all remaining clauses
-							int jumpPastThis = EmitPlaceholder(CoreOpCode.Jump);
+							int jumpPastThis = EmitPlaceholder(CoreOpCode.Jump, elseIf.FileRange.End.Line);
 
 							// 6e) patch the jumpOverElseIf to here (start of next clause)
 							Patch(jumpOverElseIf, _ops.Count - jumpOverElseIf);
@@ -294,7 +307,7 @@ namespace GameScript.Language.Bytecode
 						}
 
 						// emit an unconditional jump placeholder
-						int brPos = EmitPlaceholder(CoreOpCode.Jump);
+						int brPos = EmitPlaceholder(CoreOpCode.Jump, statement.FileRange.Start.Line);
 						_loopStack.Peek().BreakPlaceholders.Add(brPos);
 					}
 					break;
@@ -309,7 +322,7 @@ namespace GameScript.Language.Bytecode
 							throw new Exception("`continue` used outside of a loop");
 						}
 
-						int contPos = EmitPlaceholder(CoreOpCode.Jump);
+						int contPos = EmitPlaceholder(CoreOpCode.Jump, statement.FileRange.Start.Line);
 						_loopStack.Peek().ContinuePlaceholders.Add(contPos);
 					}
 					break;
@@ -326,7 +339,7 @@ namespace GameScript.Language.Bytecode
 						EmitExpression(whileStmt.Condition);
 
 						// 3) Jump out if false (placeholder)
-						int exitPlaceholder = EmitPlaceholder(CoreOpCode.JumpIfFalse);
+						int exitPlaceholder = EmitPlaceholder(CoreOpCode.JumpIfFalse, statement.FileRange.Start.Line);
 
 						// 4) Push a new loop context
 						var ctx = new LoopContext
@@ -346,7 +359,7 @@ namespace GameScript.Language.Bytecode
 						}
 
 						// 6) At end of body, jump back to condition
-						Emit(CoreOpCode.Jump, conditionIp - _ops.Count);
+						Emit(CoreOpCode.Jump, conditionIp - _ops.Count, statement.FileRange.Start.Line);
 
 						// 7) Pop the loop context so no deeper breaks/continues get mixed up
 						_loopStack.Pop();
@@ -383,7 +396,7 @@ namespace GameScript.Language.Bytecode
 				// ----------------------------------------
 				case LiteralNode lit:
 					Value v = ParseLiteral(lit);
-					EmitLoadConstant(v);
+					EmitLoadConstant(v, expression.FileRange.Start.Line);
 					return 1;
 
 				// ----------------------------------------
@@ -392,11 +405,11 @@ namespace GameScript.Language.Bytecode
 				case IdentifierNode id:
 					if (TryGetVarSlot(id.Type, id.Name, out slot))
 					{
-						EmitLoadVar(id.Type, slot);
+						EmitLoadVar(id.Type, slot, expression.FileRange.Start.Line);
 					}
 					else if (id.Type == IdentifierType.Constant && _globals.TryGetValue(id.Name, out var constValue))
 					{
-						EmitLoadConstant(constValue);
+						EmitLoadConstant(constValue, expression.FileRange.Start.Line);
 					}
 					else
 					{
@@ -409,7 +422,7 @@ namespace GameScript.Language.Bytecode
 					EmitExpression(bin.Right);
 
 					var opCode = GetOpCode(bin.Operator);
-					Emit(opCode, 0);
+					Emit(opCode, 0, expression.FileRange.Start.Line);
 					return 1;
 
 				// ----------------------------------------
@@ -438,18 +451,18 @@ namespace GameScript.Language.Bytecode
 					{
 						// operator-assignment x op= y => x = x op y
 						// 1) load old x
-						EmitLoadVar(vid.Type, slot);
+						EmitLoadVar(vid.Type, slot, expression.FileRange.Start.Line);
 						// 2) evaluate y
 						EmitExpression(assign.Right);
 						// 3) apply the binary op
 						var binOp = GetOpCode(assign.Operator);
-						Emit(binOp, 0);
+						Emit(binOp, 0, expression.FileRange.Start.Line);
 					}
 
 					// store the result back into x
-					EmitStoreVar(vid.Type, slot);
+					EmitStoreVar(vid.Type, slot, expression.FileRange.Start.Line);
 					// leave the assigned value on the stack as the expression result
-					EmitLoadVar(vid.Type, slot);
+					EmitLoadVar(vid.Type, slot, expression.FileRange.Start.Line);
 					return 1;
 
 				// ----------------------------------------
@@ -475,15 +488,15 @@ namespace GameScript.Language.Bytecode
 					switch (call.FunctionName.Type)
 					{
 						case IdentifierType.Func:
-							Emit(CoreOpCode.Call, fid);
+							Emit(CoreOpCode.Call, fid, expression.FileRange.Start.Line);
 							break;
 						case IdentifierType.Label:
-							Emit(CoreOpCode.Goto, fid);
+							Emit(CoreOpCode.Goto, fid, expression.FileRange.Start.Line);
 							break;
 						case IdentifierType.Command:
 							if (CommandHandler<TCommandOp>.TryGetOp(call.FunctionName.Name, out var commandOp))
 							{
-								Emit(commandOp, 0);
+								Emit(commandOp, 0, expression.FileRange.Start.Line);
 								break;
 							}
 							else
@@ -505,13 +518,13 @@ namespace GameScript.Language.Bytecode
 						TryGetVarSlot(incrTarget.Type, incrTarget.Name, out slot))
 					{
 						// prefix: evaluate to (x = x ± 1), leave new value on stack
-						EmitLoadVar(incrTarget.Type, slot);
+						EmitLoadVar(incrTarget.Type, slot, expression.FileRange.Start.Line);
 
 						var toAdd = unary.Operator is UnaryOperator.Increment ? 1 : -1;
-						Emit(CoreOpCode.Add, toAdd);
+						Emit(CoreOpCode.Add, toAdd, expression.FileRange.Start.Line);
 
-						EmitStoreVar(incrTarget.Type, slot);
-						EmitLoadVar(incrTarget.Type, slot);
+						EmitStoreVar(incrTarget.Type, slot, expression.FileRange.Start.Line);
+						EmitLoadVar(incrTarget.Type, slot, expression.FileRange.Start.Line);
 					}
 					else
 					{
@@ -520,12 +533,12 @@ namespace GameScript.Language.Bytecode
 						{
 							case UnaryOperator.Negate:
 								EmitExpression(unary.Operand);
-								Emit(CoreOpCode.Negate, 0);
+								Emit(CoreOpCode.Negate, 0, expression.FileRange.Start.Line);
 								break;
 
 							case UnaryOperator.Not:
 								EmitExpression(unary.Operand);
-								Emit(CoreOpCode.Not, 0);
+								Emit(CoreOpCode.Not, 0, expression.FileRange.Start.Line);
 								break;
 
 							default:
@@ -544,13 +557,13 @@ namespace GameScript.Language.Bytecode
 					{
 						// postfix: evaluate to original x, but side‐effect x = x ± 1
 						// 1) push original x
-						EmitLoadVar(target.Type, slot);
+						EmitLoadVar(target.Type, slot, expression.FileRange.Start.Line);
 
 						var toAdd = postfix.Operator is UnaryOperator.Increment ? 1 : -1;
-						Emit(CoreOpCode.Add, toAdd);
+						Emit(CoreOpCode.Add, toAdd, expression.FileRange.Start.Line);
 
-						EmitLoadVar(target.Type, slot);
-						EmitStoreVar(target.Type, slot);
+						EmitLoadVar(target.Type, slot, expression.FileRange.Start.Line);
+						EmitStoreVar(target.Type, slot, expression.FileRange.Start.Line);
 					}
 					else
 					{
@@ -574,44 +587,44 @@ namespace GameScript.Language.Bytecode
 			}
 		}
 
-		private void EmitLoadConstant(Value value)
+		private void EmitLoadConstant(Value value, int lineNumber)
 		{
 			switch (value.Type)
 			{
 				case ValueType.Int:
-					Emit(CoreOpCode.LoadConstInt, value.Int);
+					Emit(CoreOpCode.LoadConstInt, value.Int, lineNumber);
 					break;
 				case ValueType.Bool:
-					Emit(CoreOpCode.LoadConstBool, value.Bool ? 1 : 0);
+					Emit(CoreOpCode.LoadConstBool, value.Bool ? 1 : 0, lineNumber);
 					break;
 				default:
-					Emit(CoreOpCode.LoadConst, AddConstant(value));
+					Emit(CoreOpCode.LoadConst, AddConstant(value), lineNumber);
 					break;
 			}
 		}
 
-		private void EmitLoadVar(IdentifierType type, int slot)
+		private void EmitLoadVar(IdentifierType type, int slot, int lineNumber)
 		{
 			switch (type)
 			{
 				case IdentifierType.Context:
-					Emit(CoreOpCode.LoadCtx, slot);
+					Emit(CoreOpCode.LoadCtx, slot, lineNumber);
 					break;
 				default:
-					Emit(CoreOpCode.LoadLocal, slot);
+					Emit(CoreOpCode.LoadLocal, slot, lineNumber);
 					break;
 			}
 		}
 
-		private void EmitStoreVar(IdentifierType type, int slot)
+		private void EmitStoreVar(IdentifierType type, int slot, int lineNumber)
 		{
 			switch (type)
 			{
 				case IdentifierType.Context:
-					Emit(CoreOpCode.StoreCtx, slot);
+					Emit(CoreOpCode.StoreCtx, slot, lineNumber);
 					break;
 				default:
-					Emit(CoreOpCode.StoreLocal, slot);
+					Emit(CoreOpCode.StoreLocal, slot, lineNumber);
 					break;
 			}
 		}
@@ -648,7 +661,7 @@ namespace GameScript.Language.Bytecode
 				}
 
 				// store the top of the stack into that slot
-				EmitStoreVar(ident.Type, slot);
+				EmitStoreVar(ident.Type, slot, left.FileRange.Start.Line);
 			}
 
 			// 3) Load values back onto the stack for chain tuple assignment (EmitPopLast will clean up trailing loads)
@@ -665,7 +678,7 @@ namespace GameScript.Language.Bytecode
 				}
 
 				// load them back on the stack
-				EmitLoadVar(ident.Type, slot);
+				EmitLoadVar(ident.Type, slot, left.FileRange.Start.Line);
 			}
 		}
 
@@ -733,26 +746,26 @@ namespace GameScript.Language.Bytecode
 			return idx;
 		}
 
-		private void Emit(CoreOpCode op, int operand)
+		private void Emit(CoreOpCode op, int operand, int lineNumber)
 		{
 			_ops.Add((ushort)op);
 			_operands.Add(operand);
 		}
 
-		private void Emit(ushort op, int operand)
+		private void Emit(ushort op, int operand, int lineNumber)
 		{
 			_ops.Add(op);
 			_operands.Add(operand);
 		}
 
-		private int EmitPlaceholder(CoreOpCode op)
+		private int EmitPlaceholder(CoreOpCode op, int lineNumber)
 		{
 			_ops.Add((ushort)op);
 			_operands.Add(0);
 			return _operands.Count - 1;
 		}
 
-		private void EmitPopLast()
+		private void EmitPopLast(int lineNumber)
 		{
 			var lastOp = (CoreOpCode)_ops[^1];
 			if (lastOp == CoreOpCode.LoadConst ||
@@ -766,11 +779,15 @@ namespace GameScript.Language.Bytecode
 			}
 			else
 			{
-				Emit(CoreOpCode.Pop, 0);
+				Emit(CoreOpCode.Pop, 0, lineNumber);
 			}
 		}
 
 		private void Patch(int position, int value)
 			=> _operands[position] = value;
+
+		private readonly record struct BytecodeMethodResult(
+			BytecodeMethod Method,
+			BytecodeMethodMetadata MethodMetadata);
 	}
 }

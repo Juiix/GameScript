@@ -28,7 +28,7 @@ public sealed class ScriptState<TContext> : IDisposable where TContext : IScript
         _frames[0] = new CallFrame(method, 0);
 		OpCode = method.Ops[0];
 		Operand = method.Operands[0];
-		_sp = method.LocalsCount;
+		_sp = method.ParamCount + method.LocalsCount;
 	}
 
 	public ScriptGlobals Globals { get; }
@@ -99,7 +99,7 @@ public sealed class ScriptState<TContext> : IDisposable where TContext : IScript
 		{
 			var frame = new CallFrame(method, _sp - method.ParamCount);
 			_frames[++_fp] = frame;
-			_sp += method.LocalsCount - method.ParamCount;
+			_sp += method.LocalsCount;
 		}
 		catch (IndexOutOfRangeException)
 		{
@@ -131,7 +131,7 @@ public sealed class ScriptState<TContext> : IDisposable where TContext : IScript
 		span.Slice(paramCount, _sp - paramCount).Clear();
 
 		// set stack pointer
-		_sp = method.LocalsCount;
+		_sp = method.ParamCount + method.LocalsCount;
 	}
 
 	public void Return()
