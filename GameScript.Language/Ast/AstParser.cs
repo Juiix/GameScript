@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Text;
 using GameScript.Language.File;
@@ -220,10 +221,15 @@ namespace GameScript.Language.Ast
 
 			/* ───── body ───── */
 			var body = ParseBlock();     // may be null if no nested indent
+			AstNode? lastNode = (AstNode?)body
+				?? (AstNode?)returns?.FirstOrDefault()
+				?? (AstNode?)returnsKw
+				?? (AstNode?)parameters?.FirstOrDefault()
+				?? (AstNode?)nameNode;
 
 			return new MethodDefinitionNode(
 				kwNode, returnsKw, returns, nameNode, parameters, body, _filePath,
-				new FileRange(start, _previous.End));
+				new FileRange(start, lastNode?.FileRange.End ?? start));
 		}
 
 		private ConstantDefinitionNode ParseConstantDefinition()
@@ -525,10 +531,12 @@ namespace GameScript.Language.Ast
 			List<AstNode>? statements = null;
 
 			// Parse statements until we hit a dedent or EOF
+			var end = start;
 			while (_current.Type is not (TokenType.Dedent or TokenType.EndOfFile))
 			{
 				var lineStart = _current.Start;
 				(statements ??= []).Add(ParseStatement());
+				end = lineStart;
 
 				// Only one statement per physical line
 				if (_current.Type is not (TokenType.EndOfLine or TokenType.Dedent or TokenType.EndOfFile) &&
@@ -545,7 +553,7 @@ namespace GameScript.Language.Ast
 			return new BlockNode(
 				statements,
 				_filePath,
-				new FileRange(start, _previous.End));
+				new FileRange(start, end));
 		}
 
 		// Entry point: parses an expression.
@@ -828,7 +836,7 @@ namespace GameScript.Language.Ast
 				}
 				_summaryBuilder ??= new();
 				if (_summaryBuilder.Length > 0) _summaryBuilder.Append('\n');
-				_summaryBuilder.Append(token.Value.TrimStart("/*").TrimEnd("*/").Trim());
+				_summaryBuilder.Append(token.Value.TrimStart('/').TrimStart('*').TrimEnd('/').TrimEnd('*').Trim());
 				_lastSummaryPosition = token.End;
 				_comments?.Add(new CommentNode(token.Value.ToString(), _filePath, token.Range));
 				_newLineCommentCount = 0;

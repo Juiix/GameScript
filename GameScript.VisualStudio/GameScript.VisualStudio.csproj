@@ -54,7 +54,7 @@
     <Content Include="Grammars\gamescript.tmLanguage">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
-    <None Include="overview.md" />
+    <None Include="README.md" />
     <None Include="publishManifest.json" />
     <None Include="source.extension.vsixmanifest">
       <SubType>Designer</SubType>

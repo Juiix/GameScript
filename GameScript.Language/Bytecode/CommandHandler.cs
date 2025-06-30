@@ -13,14 +13,13 @@ namespace GameScript.Language.Bytecode
 #else
 			Enum.GetValues(typeof(T)).Cast<T>()
 #endif
-			.Select(x => Convert.ToUInt16(x))
-			.Where(x => x >= 1000)
-			.ToDictionary(GenerateCommandName);
+			.Where(x => Convert.ToUInt16(x) >= 1000)
+			.ToDictionary(GenerateCommandName, x => Convert.ToUInt16(x));
 
 		public static bool TryGetOp(string command, out ushort op) =>
 			s_commandOps.TryGetValue(command, out op);
 
-		private static string GenerateCommandName(ushort opCode)
+		private static string GenerateCommandName(T opCode)
 		{
 			var input = opCode.ToString();
 

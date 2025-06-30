@@ -151,8 +151,9 @@ namespace GameScript.Language.Bytecode
 			}
 
 			// 4) Bake into method
+			var name = methodNode.SymbolName;
 			var method = new BytecodeMethod(
-				methodNode.Name.Name,
+				name,
 				[.. _ops],
 				[.. _operands],
 				methodNode.Parameters?.Count ?? 0,
@@ -160,7 +161,7 @@ namespace GameScript.Language.Bytecode
 				methodNode.ReturnTypes?.Count ?? 0);
 
 			var metadata = new BytecodeMethodMetadata(
-				methodNode.Name.Name,
+				name,
 				[.. _lineNumbers],
 				methodNode.FilePath);
 
@@ -750,18 +751,21 @@ namespace GameScript.Language.Bytecode
 		{
 			_ops.Add((ushort)op);
 			_operands.Add(operand);
+			_lineNumbers.Add(lineNumber);
 		}
 
 		private void Emit(ushort op, int operand, int lineNumber)
 		{
 			_ops.Add(op);
 			_operands.Add(operand);
+			_lineNumbers.Add(lineNumber);
 		}
 
 		private int EmitPlaceholder(CoreOpCode op, int lineNumber)
 		{
 			_ops.Add((ushort)op);
 			_operands.Add(0);
+			_lineNumbers.Add(lineNumber);
 			return _operands.Count - 1;
 		}
 
@@ -776,6 +780,7 @@ namespace GameScript.Language.Bytecode
 			{
 				_ops.RemoveAt(_ops.Count - 1);
 				_operands.RemoveAt(_operands.Count - 1);
+				_lineNumbers.RemoveAt(_lineNumbers.Count - 1);
 			}
 			else
 			{
