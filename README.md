@@ -28,6 +28,21 @@ From NPC behaviors to UI logic, GameScript delivers fast parsing, compact byteco
 
 ---
 
+### 📦 NuGet Packages
+
+| Package                   | Purpose                                                                                                  |
+| ------------------------- | -------------------------------------------------------------------------------------------------------- |
+| **`GameScript.Bytecode`** | Lightweight runtime/VM – create `ScriptState`, register opcode handlers, and run compiled bytecode.      |
+| **`GameScript.Language`** | Full tool‑chain: lexer, parser, AST visitors, indexers, semantic & type analysis, and bytecode compiler. |
+
+---
+
+## 📚 Documentation
+
+* **[Comprehensive Guide](GUIDE.md)** – Full language, tooling, compilation, and runtime walkthrough.
+
+---
+
 ## Quick Start
 
 ```bash
@@ -38,15 +53,6 @@ cd GameScript
 # Build the project
 dotnet build -c Release
 ```
-
-> **Note**
-> Detailed embedding guides are TBD.
-
----
-
-## 📚 Documentation
-
-* **[Comprehensive Guide](GUIDE.md)** – Full language, tooling, compilation, and runtime walkthrough.
 
 ---
 
