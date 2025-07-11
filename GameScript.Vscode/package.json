@@ -2,7 +2,7 @@
     "name": "gamescript-vscode",
     "displayName": "GameScript Workspace Support",
     "description": "Adds syntax highlighting, IntelliSense, and diagnostics for the GameScript language in Vscode.",
-    "version": "1.0.8",
+    "version": "1.0.10",
     "publisher": "YeOldeGames",
     "engines": {
         "vscode": "^1.90.0"
