@@ -10,7 +10,7 @@ namespace GameScript.Bytecode
 
 		public ScriptRunner<TContext> Build()
 		{
-			var max = _handlers.DefaultIfEmpty().Max(x => x.Key);
+			var max = _handlers.DefaultIfEmpty().Max(x => x.Key + 1);
 			var array = new Action<ScriptState<TContext>>[max];
 			foreach (var pair in _handlers)
 				array[pair.Key] = pair.Value;

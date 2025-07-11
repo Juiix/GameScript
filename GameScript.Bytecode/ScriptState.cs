@@ -15,9 +15,9 @@ public sealed class ScriptState<TContext> : IDisposable where TContext : IScript
     private readonly Value[] _stack = ArrayPool<Value>.Shared.Rent(1024);
     private readonly CallFrame[] _frames = ArrayPool<CallFrame>.Shared.Rent(64);
 
-    public ScriptState(ScriptGlobals globals, IScriptContext context, BytecodeMethod method, params Value[] args)
+    public ScriptState(BytecodeProgram program, TContext context, BytecodeMethod method, params Value[] args)
     {
-		Globals = globals;
+		Program = program;
 		Context = context;
         _entryMethod = method;
 		foreach (ref var arg in args.AsSpan())
@@ -31,8 +31,8 @@ public sealed class ScriptState<TContext> : IDisposable where TContext : IScript
 		_sp = method.ParamCount + method.LocalsCount;
 	}
 
-	public ScriptGlobals Globals { get; }
-	public IScriptContext Context { get; }
+	public BytecodeProgram Program { get; }
+	public TContext Context { get; }
 	public ScriptExecution Execution { get; set; } = ScriptExecution.Running;
 	public ushort OpCode { get; private set; }
 	public int Operand { get; private set; }

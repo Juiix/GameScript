@@ -121,14 +121,15 @@ namespace GameScript.Language.Bytecode
 			_localSlots.Clear();
 
 			// 1) Parameter slots
+			var paramCount = methodNode.Parameters?.Count ?? 0;
 			if (methodNode.Parameters != null)
 			{
-				for (int i = 0; i < methodNode.Parameters.Count; i++)
+				for (int i = 0; i < paramCount; i++)
 				{
 					_localSlots[methodNode.Parameters[i].Name.Name] = i;
 				}
 			}
-			int nextSlot = methodNode.Parameters?.Count ?? 0;
+			int nextSlot = paramCount;
 
 			// 2) Emit body statements
 			if (methodNode.Body?.Statements != null)
@@ -156,8 +157,8 @@ namespace GameScript.Language.Bytecode
 				name,
 				[.. _ops],
 				[.. _operands],
-				methodNode.Parameters?.Count ?? 0,
-				nextSlot - methodNode.Parameters?.Count ?? 0,
+				paramCount,
+				nextSlot - paramCount,
 				methodNode.ReturnTypes?.Count ?? 0);
 
 			var metadata = new BytecodeMethodMetadata(
