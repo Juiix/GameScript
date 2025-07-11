@@ -26,10 +26,14 @@ jobs:
             dotnet-version: '8.x'
 
       - name: 📦 Restore dependencies
-        run: dotnet restore
+        run: |
+          dotnet restore GameScript.Language/GameScript.Language.csproj
+          dotnet restore GameScript.Bytecode/GameScript.Bytecode.csproj
 
       - name: 🏗️ Build (Release)
-        run: dotnet build --configuration Release --no-restore
+        run: |
+          dotnet build GameScript.Language/GameScript.Language.csproj --configuration Release --no-restore
+          dotnet build GameScript.Bytecode/GameScript.Bytecode.csproj --configuration Release --no-restore
 
       - name: 📦 Pack NuGet packages
         run: |
