@@ -3,6 +3,8 @@ name: Build & Publish Visual Studio Extension
 on:
   push:
     branches: [main]
+    paths:
+      - "GameScript.VisualStudio/**"
     tags: ['v*']          # same trigger as the VS Code workflow
 
 jobs:

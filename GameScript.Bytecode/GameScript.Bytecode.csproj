@@ -4,6 +4,23 @@
     <TargetFrameworks>netstandard2.0;net8.0</TargetFrameworks>
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
+
+    <!-- NuGet package metadata -->
+    <PackageId>GameScript.Bytecode</PackageId>
+    <Version>1.0.0</Version>
+    <Authors>Tucker Ulrich</Authors>
+    <Company>Ye Olde Games</Company>
+    <Description>Runtime bytecode layer for GameScript: instruction set definitions, lightweight VM, and script execution engine.</Description>
+    <PackageProjectUrl>https://github.com/Juiix/GameScript</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/Juiix/GameScript</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+    <PackageTags>GameScript;Bytecode;VM;Runtime;InstructionSet;Serialization;ExecutionEngine</PackageTags>
+
+    <!-- Symbols & SourceLink -->
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
   </PropertyGroup>
 
   <ItemGroup Condition=" '$(TargetFramework)' == 'netstandard2.0' ">

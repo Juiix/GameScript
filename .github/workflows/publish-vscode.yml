@@ -3,6 +3,8 @@ name: Build & Publish VS Code Extension
 on:
   push:
     branches: [main]
+    paths:
+      - "GameScript.Vscode/**"
     tags: ['v*']          # publish on version tags, adjust as needed
 
 jobs:
