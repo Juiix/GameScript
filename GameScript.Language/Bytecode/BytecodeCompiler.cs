@@ -413,6 +413,10 @@ public sealed class BytecodeCompiler<TCommandOp> where TCommandOp : struct, Enum
 				{
 					EmitLoadConstant(constValue, expression.FileRange.Start.Line);
 				}
+				else if (id.Type == IdentifierType.Label && _methodIndex.TryGetValue(id.Name, out var methodIdx))
+				{
+					Emit(CoreOpCode.LoadMethodRef, methodIdx, expression.FileRange.Start.Line);
+				}
 				else
 				{
 					throw new Exception($"Unknown variable {id.Type}: '{id.Name}'");

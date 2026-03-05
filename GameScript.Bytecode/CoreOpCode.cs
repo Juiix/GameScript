@@ -41,6 +41,9 @@
 		// Calls
 		Call,
 		Goto,
-		Return
+		Return,
+
+		// Method references
+		LoadMethodRef   // push method index (operand) as int onto the stack
 	}
 }

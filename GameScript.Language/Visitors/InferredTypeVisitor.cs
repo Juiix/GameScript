@@ -30,6 +30,17 @@ namespace GameScript.Language.Visitors
 		// For Identifier nodes, look up the symbol for the identifier.
 		public override void Visit(IdentifierNode node)
 		{
+			// A bare @label identifier is a method reference, not a call.
+			// Only no-arg labels can be used as label references.
+			if (node.Type == IdentifierType.Label)
+			{
+				var methodSymbol = _context.Symbols.GetSymbol(node.Name);
+				InferredType = methodSymbol?.ParamTypes == null
+					? _context.Types.GetType("label")
+					: null;
+				return;
+			}
+
 			var symbol = LocalIndex?.GetSymbol(node.Name) ??
 				_context.Symbols.GetSymbol(node.Name);
 			InferredType = symbol?.Type;

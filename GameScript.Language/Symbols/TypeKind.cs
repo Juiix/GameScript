@@ -5,6 +5,7 @@
 		Int,
 		String,
 		Bool,
+		Label,
 		Tuple = 100
 	}
 }

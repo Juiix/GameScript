@@ -730,9 +730,17 @@ public ref struct AstParser
 			var idType = ParseIdentifierType(ident.Value);
 			Advance();
 
-			// Func / command / label followed by '(' → call expression
 			if (idType is IdentifierType.Func or IdentifierType.Command or IdentifierType.Label)
-				return ParseCallExpression(ident, idType, start);
+			{
+				// Func and Command always require call syntax.
+				// Label: if followed by '(' it's a call; otherwise a bare label reference.
+				if (idType != IdentifierType.Label || _current.Type == TokenType.OpenParen)
+					return ParseCallExpression(ident, idType, start);
+
+				var bareName = ident.Value.TrimStart("@".AsSpan()).ToString();
+				return new IdentifierNode(bareName, idType,
+										  _filePath, new FileRange(start, _previous.End));
+			}
 
 			var name = ident.Value.TrimStart("^$%".AsSpan()).ToString();
 			return new IdentifierNode(name, idType,

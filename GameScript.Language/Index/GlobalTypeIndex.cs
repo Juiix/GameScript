@@ -15,6 +15,7 @@ namespace GameScript.Language.Index
 			RegisterType("int", TypeKind.Int);
 			RegisterType("string", TypeKind.String);
 			RegisterType("bool", TypeKind.Bool);
+			RegisterType("label", TypeKind.Label);
 		}
 
 		public TypeInfo? GetType(string name)

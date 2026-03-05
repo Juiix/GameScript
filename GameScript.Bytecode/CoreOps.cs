@@ -159,5 +159,13 @@ internal static class CoreOps<TContext> where TContext : IScriptContext
 		{
 			state.Return();
 		},
+
+		// --------------------------
+		// ----- method refs --------
+		// --------------------------
+		[(ushort)CoreOpCode.LoadMethodRef] = static state =>
+		{
+			state.Push(Value.FromInt(state.Operand));
+		},
 	};
 }
