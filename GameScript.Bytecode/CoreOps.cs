@@ -12,7 +12,7 @@ internal static class CoreOps<TContext> where TContext : IScriptContext
 		// -----------------------
 		[(ushort)CoreOpCode.LoadConst] = static state =>
 		{
-			ref var c = ref state.Program.Constants[state.Operand];
+			ref var c = ref state.Program!.Constants[state.Operand];
 			state.Push(in c);
 		},
 		[(ushort)CoreOpCode.LoadConstInt] = static state =>
@@ -30,7 +30,7 @@ internal static class CoreOps<TContext> where TContext : IScriptContext
 		},
 		[(ushort)CoreOpCode.LoadCtx] = static state =>
 		{
-			state.Push(state.Context.GetValue(state.Operand));
+			state.Push(state.Context!.GetValue(state.Operand));
 		},
 		[(ushort)CoreOpCode.StoreLocal] = static state =>
 		{
@@ -38,7 +38,7 @@ internal static class CoreOps<TContext> where TContext : IScriptContext
 		},
 		[(ushort)CoreOpCode.StoreCtx] = static state =>
 		{
-			state.Context.SetValue(state.Operand, state.Pop());
+			state.Context!.SetValue(state.Operand, state.Pop());
 		},
 		[(ushort)CoreOpCode.Pop] = static state =>
 		{
@@ -147,12 +147,12 @@ internal static class CoreOps<TContext> where TContext : IScriptContext
 		// -----------------
 		[(ushort)CoreOpCode.Call] = static state =>
 		{
-			var method = state.Program.Methods[state.Operand];
+			var method = state.Program!.Methods[state.Operand];
 			state.Call(method);
 		},
 		[(ushort)CoreOpCode.Goto] = static state =>
 		{
-			var method = state.Program.Methods[state.Operand];
+			var method = state.Program!.Methods[state.Operand];
 			state.Goto(method);
 		},
 		[(ushort)CoreOpCode.Return] = static state =>

@@ -1,4 +1,4 @@
-﻿using GameScript.Language.Ast;
+using GameScript.Language.Ast;
 using GameScript.Language.File;
 using GameScript.LanguageServer.Caches;
 using GameScript.LanguageServer.Extensions;
@@ -139,7 +139,7 @@ namespace GameScript.LanguageServer.Handlers
 					builder.Push(line, column, length, 6, 0);
 					break;
 				case CommentNode commentNode:
-					builder.Push(line, column, length, 7, 0);
+					builder.Push(line, column, length, 5, 0);
 					break;
 			}
 		}

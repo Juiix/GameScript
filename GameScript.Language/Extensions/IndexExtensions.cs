@@ -1,4 +1,4 @@
-﻿using GameScript.Language.Symbols;
+using GameScript.Language.Symbols;
 using System.Collections.Generic;
 
 namespace GameScript.Language.Index
@@ -14,6 +14,7 @@ namespace GameScript.Language.Index
 
 			TypeInfo? first = null;
 			List<TypeInfo>? tuple = null;
+			List<string>? collectedNames = null;
 			foreach (var typeName in typeNames)
 			{
 				var type = typeIndex.GetType(typeName);
@@ -28,7 +29,9 @@ namespace GameScript.Language.Index
 				}
 				else
 				{
-					tuple ??= [ first ];
+					collectedNames ??= [first.Name];
+					collectedNames.Add(typeName);
+					tuple ??= [first];
 					tuple.Add(type);
 				}
 			}
@@ -38,7 +41,7 @@ namespace GameScript.Language.Index
 				return first;
 			}
 
-			var tupleTypeName = $"({string.Join(",", typeNames)})";
+			var tupleTypeName = $"({string.Join(",", collectedNames!)})";
 			var tupleType = new TypeInfo(tupleTypeName, TypeKind.Tuple, tuple);
 			return tupleType;
 		}

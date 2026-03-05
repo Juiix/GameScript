@@ -154,6 +154,7 @@ public ref struct AstParser
 				"return" => ParseReturnStatement(),
 				"break" => ParseBreakStatement(),
 				"continue" => ParseContinueStatement(),
+				"label" when PeekIsIdentifier() => ParseVariableDefinition(),
 				_ => ParseExpression()
 			},
 			TokenType.Identifier when PeekIsIdentifier() => ParseVariableDefinition(),
@@ -238,7 +239,7 @@ public ref struct AstParser
 		var start = _current.Start;
 
 		// constant type
-		var typeTok = Expect(TokenType.Identifier, "Expected a type for constant declaration", "varType".AsSpan());
+		var typeTok = ExpectTypeIdentifier("Expected a type for constant declaration");
 		var typeNode = new TypeNode(typeTok.Value.ToString(), _filePath, PreviousRange);
 
 		// constant name (must start with '^')
@@ -267,7 +268,7 @@ public ref struct AstParser
 		var start = _current.Start;
 
 		// constant type
-		var typeTok = Expect(TokenType.Identifier, "Expected a type for context variable declaration", "varType".AsSpan());
+		var typeTok = ExpectTypeIdentifier("Expected a type for context variable declaration");
 		var typeNode = new TypeNode(typeTok.Value.ToString(), _filePath, PreviousRange);
 
 		// constant name (must start with '%')
@@ -409,7 +410,7 @@ public ref struct AstParser
 		var start = _current.Start;
 
 		// variable **type**
-		var typeTok = Expect(TokenType.Identifier, "Expected a type for variable declaration", "varType".AsSpan());
+		var typeTok = ExpectTypeIdentifier("Expected a type for variable declaration");
 		var typeNode = new TypeNode(typeTok.Value.ToString(), _filePath, PreviousRange);
 
 		var vars = new List<(IdentifierDeclarationNode, ExpressionNode?)>();
@@ -458,7 +459,7 @@ public ref struct AstParser
 			var summary = GetSummary();
 			var start = _current.Start;
 
-			var typeTok = Expect(TokenType.Identifier, "Expected parameter type", "paramType".AsSpan());
+			var typeTok = ExpectTypeIdentifier("Expected parameter type");
 			var typeNode = new TypeNode(typeTok.Value.ToString(), _filePath, PreviousRange);
 
 			var nameTok = ExpectStartsWith(TokenType.Identifier, "$", "Expected parameter name", "$?".AsSpan());
@@ -497,7 +498,7 @@ public ref struct AstParser
 		var start = _current.Start;
 
 		// required type
-		var typeTok = Expect(TokenType.Identifier, "Expected return type", "returnType".AsSpan());
+		var typeTok = ExpectTypeIdentifier("Expected return type");
 		var typeNode = new TypeNode(typeTok.Value.ToString(), _filePath, PreviousRange);
 
 		IdentifierDeclarationNode? nameNode = null;
@@ -919,6 +920,20 @@ public ref struct AstParser
 		Token token = _current;
 		Advance();
 		return token;
+	}
+
+	// Expects a type identifier. Accepts a plain Identifier token, or the 'label' keyword
+	// (which is a keyword in the lexer but a valid type name in type positions).
+	[MethodImpl(MethodImplOptions.AggressiveInlining)]
+	private Token ExpectTypeIdentifier(string errorMessage)
+	{
+		if (_current.Type == TokenType.Keyword && _current.Value.SequenceEqual("label".AsSpan()))
+		{
+			Token tok = _current;
+			Advance();
+			return tok;
+		}
+		return Expect(TokenType.Identifier, errorMessage, "varType".AsSpan());
 	}
 
 	// Checks if the current token matches the given type.

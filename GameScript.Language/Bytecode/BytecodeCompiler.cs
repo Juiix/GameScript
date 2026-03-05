@@ -52,11 +52,10 @@ public sealed class BytecodeCompiler<TCommandOp> where TCommandOp : struct, Enum
 		// 2) Compile constant init method
 		CompileConstants(constants);
 
-		// 3) Compile constant init method
+		// 3) Compile context definitions
 		CompileContexts(contexts);
 
 		// 4) Compile each method
-		index = 0;
 		foreach (var method in methods.Where(IsCompilable))
 		{
 			var methodResult = CompileMethod(method);
@@ -527,7 +526,8 @@ public sealed class BytecodeCompiler<TCommandOp> where TCommandOp : struct, Enum
 					EmitLoadVar(incrTarget.Type, slot, expression.FileRange.Start.Line);
 
 					var toAdd = unary.Operator is UnaryOperator.Increment ? 1 : -1;
-					Emit(CoreOpCode.Add, toAdd, expression.FileRange.Start.Line);
+					Emit(CoreOpCode.LoadConstInt, toAdd, expression.FileRange.Start.Line);
+					Emit(CoreOpCode.Add, 0, expression.FileRange.Start.Line);
 
 					EmitStoreVar(incrTarget.Type, slot, expression.FileRange.Start.Line);
 					EmitLoadVar(incrTarget.Type, slot, expression.FileRange.Start.Line);
@@ -561,14 +561,15 @@ public sealed class BytecodeCompiler<TCommandOp> where TCommandOp : struct, Enum
 					postfix.Operand is IdentifierNode target &&
 					TryGetVarSlot(target.Type, target.Name, out slot))
 				{
-					// postfix: evaluate to original x, but side‐effect x = x ± 1
-					// 1) push original x
+					// postfix: evaluate to original x, but side-effect x = x ± 1
+					// push original x first (this is the expression result)
 					EmitLoadVar(target.Type, slot, expression.FileRange.Start.Line);
 
+					// compute x ± 1 and store back
+					EmitLoadVar(target.Type, slot, expression.FileRange.Start.Line);
 					var toAdd = postfix.Operator is UnaryOperator.Increment ? 1 : -1;
-					Emit(CoreOpCode.Add, toAdd, expression.FileRange.Start.Line);
-
-					EmitLoadVar(target.Type, slot, expression.FileRange.Start.Line);
+					Emit(CoreOpCode.LoadConstInt, toAdd, expression.FileRange.Start.Line);
+					Emit(CoreOpCode.Add, 0, expression.FileRange.Start.Line);
 					EmitStoreVar(target.Type, slot, expression.FileRange.Start.Line);
 				}
 				else
@@ -781,7 +782,8 @@ public sealed class BytecodeCompiler<TCommandOp> where TCommandOp : struct, Enum
 			lastOp == CoreOpCode.LoadConstInt ||
 			lastOp == CoreOpCode.LoadConstBool ||
 			lastOp == CoreOpCode.LoadLocal ||
-			lastOp == CoreOpCode.LoadCtx)
+			lastOp == CoreOpCode.LoadCtx ||
+			lastOp == CoreOpCode.LoadMethodRef)
 		{
 			_ops.RemoveAt(_ops.Count - 1);
 			_operands.RemoveAt(_operands.Count - 1);

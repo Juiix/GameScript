@@ -8,7 +8,7 @@ namespace GameScript.Language.Index
 	{
 		// The dictionary is keyed by the type name.
 		private readonly Dictionary<string, TypeInfo> _typeCache = new(StringComparer.Ordinal);
-		private readonly TypeInfo[] _primitiveTypes = new TypeInfo[3];
+		private readonly TypeInfo[] _primitiveTypes = new TypeInfo[4];
 
 		public GlobalTypeIndex()
 		{

@@ -87,13 +87,6 @@ namespace GameScript.Language.Visitors
 		// For tuple expressions, we need to generate a tuple type composed of the types of its elements.
 		public override void Visit(TupleExpressionNode node)
 		{
-			// Visit each element in the tuple to set their inferred types.
-			foreach (var element in node.Elements)
-			{
-				element.Accept(this);
-			}
-
-			// Generate a canonical tuple type from the inferred types of the elements.
 			var elementTypes = node.Elements.Select(e =>
 			{
 				e.Accept(this);
