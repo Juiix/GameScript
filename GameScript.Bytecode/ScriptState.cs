@@ -43,6 +43,21 @@ public sealed class ScriptState<TContext>(int stackSize = 1024, int frameSize = 
         _sp = method.ParamCount + method.LocalsCount;
     }
 
+    public void Clear()
+    {
+        _stack.AsSpan(0, _sp).Clear();
+        _frames.AsSpan(0, _fp + 1).Clear();
+        Program = null;
+        Context = default;
+        EntryMethod = null;
+        Execution = default;
+        OpCode = 0;
+        Operand = 0;
+        OpCount = 0;
+        _sp = 0;
+        _fp = 0;
+    }
+
     public void Next()
     {
         ref var frame = ref CurrentFrame;
