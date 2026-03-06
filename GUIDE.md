@@ -1,139 +1,257 @@
-# GameScript — End-to-End How-To
+# GameScript — Language Reference & How-To
 
-> **Scope** This single guide walks you through *every* step needed to load, analyse, compile, and run GameScript code inside your own C# project.
+> **Scope** This guide covers the GameScript language, its type system, and how to embed the compiler/VM in your C# project.
 
 ---
 
 ## Contents
 
-1. [Language Surface](#1-language-surface)
-2. [File-Type Rules](#2-file-type-rules)
-3. [Parsing Source Files](#3-parsing-source-files)
-4. [Mapping Commands → Enum](#4-mapping-commands--enum)
-5. [Bytecode Compilation](#5-bytecode-compilation)
-6. [Building & Running Scripts](#6-building--running-scripts)
-7. [Extending the Runtime](#7-extending-the-runtime)
-8. [Indexing & Static Analysis](#8-indexing--static-analysis)
-9. [License / Contribution](#license--contribution)
+1. [Types & Symbols](#1-types--symbols)
+2. [Method Kinds](#2-method-kinds)
+3. [File-Type Rules](#3-file-type-rules)
+4. [Language Examples](#4-language-examples)
+5. [Parsing Source Files](#5-parsing-source-files)
+6. [Mapping Commands → Enum](#6-mapping-commands--enum)
+7. [Bytecode Compilation](#7-bytecode-compilation)
+8. [Building & Running Scripts](#8-building--running-scripts)
+9. [Extending the Runtime](#9-extending-the-runtime)
+10. [Indexing & Static Analysis](#10-indexing--static-analysis)
 
 ---
 
-## 1 Language Surface
+## 1 Types & Symbols
 
-| Concept          | Syntax / Prefix         | Returns? | Notes                                                                          |
-| ---------------- | ----------------------- | -------- | ------------------------------------------------------------------------------ |
-| **Data types**   | `bool`, `int`, `string` | –        | Only these three scalar types exist.                                           |
-| **Constants**    | `int ^npc_knight = 2`   | –        | Literals only; defined in **.const** files.                                    |
-| **Context vars** | `bool %logged_in = 0`   | –        | `%`-prefixed; slot-id given by the initializer; defined in **.context** files. |
-| **func**         | `~do_math()`            | ✅        | Regular function; returns to caller.                                           |
-| **label**        | `@do_login()`           | ❌        | One-way jump (GOTO); never returns.                                            |
-| **command**      | *(internal)*            | ✅        | Declares a host-implemented opcode; no body allowed.                           |
-| **trigger**      | *(host-only)*           | ❌        | Entry points only; cannot be called in script & **cannot return values**.      |
+GameScript has three scalar value types and a special `label` type for method references.
 
-### Trigger Name Format
+| Type     | Description                                               |
+| -------- | --------------------------------------------------------- |
+| `bool`   | Boolean — `true` / `false`                                |
+| `int`    | 32-bit signed integer                                     |
+| `string` | Immutable text string                                     |
+| `label`  | Reference to a `label` method (for passing/scheduling)    |
 
-```
-<trigger-type> <trigger-name>()
-```
+Every symbol carries a prefix that makes its role visible at a glance:
 
-Example: `mn_text login:password()` ⇒ stored as **`"mn_text login:password"`**.
+| Prefix | Kind        | Declared in   | Example                      |
+| ------ | ----------- | ------------- | ---------------------------- |
+| `$`    | Local var   | `.gs` body    | `int $counter = 0`           |
+| `^`    | Constant    | `.const`      | `int ^max_level = 99`        |
+| `%`    | Context var | `.context`    | `int %tutorial_progress = 1` |
+| `~`    | Func call   | call site     | `~get_input_str("…")`        |
+| `@`    | Label call  | call site     | `@entry()`                   |
 
-### Automatic Summaries
+### Doc-Comments
 
-The parser captures a comment **immediately above** a declaration and stores it in `Summary`:
+A comment immediately above a declaration is captured as the symbol's summary and shown in hover tooltips:
 
 ```gamescript
-// An honorable knight
-int ^npc_knight = 2  // Summary = "An honorable knight"
+// Kills the player and resets their position
+command kill_player()
 ```
+
 ---
 
-### Example Method Declarations
+## 2 Method Kinds
+
+| Kind      | Keyword   | Call Syntax | Returns? | Notes                                              |
+| --------- | --------- | ----------- | -------- | -------------------------------------------------- |
+| `func`    | `func`    | `~name()`   | ✅        | Regular function; returns to caller               |
+| `label`   | `label`   | `@name()`   | ❌        | One-way jump (GOTO); execution never returns      |
+| `command` | `command` | `name()`    | ✅        | Host-implemented opcode; no body in script        |
+| `trigger` | *(type)*  | —           | ❌        | Game-event entry point; cannot be called from script |
+
+### Funcs vs Labels
+
+Use `func` when the caller needs execution to resume (returning a value, querying the host).
+Use `label` for one-way control flow — jumping to the next state, starting a new interaction chain, or as a continuation after a suspend.
 
 ```gamescript
-// Func: traditional function, returns a value
-func add(int $a, int $b) returns int
-    return $a + $b
+func multiply_and_add(int $x, int $y) returns int
+    return ($x * $y) + ^const_value
 
-// Label: one-way jump (GOTO)
-label do_login()
-    // ...login flow...
+label entry()
+    int $result = ~multiply_and_add(10, 15)
+    println_int($result)
+    @next_step()         // one-way jump — never returns here
 
-// Command: host‑implemented opcode (no body allowed)
+label next_step()
+    println("Done.")
+```
+
+### Triggers
+
+Triggers are entry points fired by the host (UI events, NPC interactions, etc.). They cannot be called from script.
+
+The name format is `<trigger-type> <trigger-name>()`, stored internally as `"<trigger-type> <trigger-name>"`.
+
+```gamescript
+// NPC right-click action 1 — no component
+npc_op_1 test_runner()
+    @entry()
+
+// Button 1 on the "hud" menu, "logout" component
+mn_button_1 hud:logout()
+    logout()
+```
+
+---
+
+## 3 File-Type Rules
+
+| Extension  | Allowed content                | Parser entry-point  |
+| ---------- | ------------------------------ | ------------------- |
+| `.const`   | **Only** constant declarations | `ParseConstants()`  |
+| `.context` | **Only** context declarations  | `ParseContexts()`   |
+| `.gs`      | **Only** method declarations   | `ParseProgram()`    |
+
+Mixing categories in the same file is a parser error.
+
+---
+
+## 4 Language Examples
+
+### Constants (`.const`)
+
+Constants are compile-time literals — `int`, `bool`, or `string`.
+
+```gamescript
+int ^tutorial_killed_rat = 10
+int ^const_value = 42
+string ^example_message = "Hello, world"
+```
+
+### Context variables (`.context`)
+
+Context variables map to player-specific slots provided by the host. The initializer is the **slot ID**, not a default value.
+
+```gamescript
+int %tutorial_progress = 1
+// A skill value determining the player's damage output
+int %skill_strength = 4
+```
+
+### Commands (`.gs`)
+
+Commands declare host-implemented opcodes. No body is allowed in script — they are registered as C# handlers at runtime.
+
+The `label` type accepts a method reference and is used for scheduling.
+
+```gamescript
+// Print a string value
 command print(string $value)
-
-// Trigger: UI event "login:submit" of button 1
-mn_button_1 login:submit()
-    @do_login()
+// Convert an integer to its string representation
+command int_2_str(int $value) returns string
+// Suspend until the player submits a number; resume with the result
+command suspend_for_int() returns int
+// Enqueue a label to run after a delay (in game ticks)
+command queue(label $method, int $delay)
 ```
 
-### Tuple Return Values & Assignment
-
-GameScript supports **tuples** for returning (and receiving) multiple values.
+### Functions (`.gs`)
 
 ```gamescript
-// Swap two integers
-func swap(int $a, int $b) returns (int $b, int $a)
-    return ($b, $a)
-
-int $x = 3
-int $y = 7
-
-// Variables must already be declared before tuple-assignment
-($x, $y) = ~swap($x, $y)
+func get_input_int(string $label) returns int
+    open_dialogue(^menu_input_int)
+    set_text(^menu_input_int, ^menu_input_int_title, $label)
+    int $input = suspend_for_int()
+    close_dialogue(^menu_input_int)
+    return $input
 ```
 
-* You may attach **helper names** to each returned element (`$b`, `$a`) for clarity.
-* At the call-site the left-hand side **must** be pre-declared variables; tuple literals cannot declare variables.
+### Tuple Return Values
 
-### Example Scripts
+Declare multiple return values with helper names for documentation:
 
-#### Constants (.const)
 ```gamescript
-int ^version = 1
-int ^one_hundred = 100
-int ^magic_number = 123123
+func get_numbers() returns (int $num1, int $num2)
+    return (10, 15)
 ```
 
-#### Context vars (.context)
+Receive them with a tuple assignment — variables must be declared before the assignment:
+
 ```gamescript
-bool %logged_in = 0
-string %username = 1
+int $a, $b
+($a, $b) = ~get_numbers()
 ```
 
-#### Methods (.gs)
+### Labels & One-Way Jumps (`.gs`)
+
+Labels chain control flow without pushing a return frame. Useful for multi-step sequences, state machines, and tail-recursive loops.
+
 ```gamescript
-// --- commands ---
-command print(string $value)
+label entry()
+    int $a, $b
+    ($a, $b) = ~get_numbers()
+    print("Got: ")
+    println_int($a)
+    @conditional_branch(true)
 
-// --- functions ---
-func greet(string $name)
-    string $msg = "Hello, " + $name
-    print($msg)
-
-// --- trigger event (entry‑point) ---
-mn_show login:background()
-    if %logged_in
-        print("Welcome back!")
+label conditional_branch(bool $do_jump)
+    if $do_jump
+        @loop_test(0)
     else
-        ~greet("guest")
+        println("Skipping loop")
+
+label loop_test(int $i)
+    if $i >= 3
+        println("Loop finished")
+        @final()
+    println_int($i)
+    @loop_test($i + 1)     // tail-recursive — no stack growth
+
+label final()
+    println("Script complete.")
+```
+
+### Triggers (`.gs`)
+
+Triggers call funcs and labels but cannot return values.
+
+```gamescript
+mn_button_1 hud:input_str()
+    string $value = ~get_input_str("Enter some text!")
+    print($value)
+
+mn_button_1 hud:input_choice()
+    int $choice = ~get_input_choice_2("Pick one", "Option A", "Option B")
+    println_int($choice)
+```
+
+### Variable Declarations
+
+Declare multiple variables of the same type on one line:
+
+```gamescript
+int $a, $b
+string $first, $last
+```
+
+With initialisers:
+
+```gamescript
+int $x = 0
+bool $active = true
+string $msg = "Hello, " + $name
+```
+
+### Control Flow
+
+```gamescript
+if %logged_in
+    println("Welcome back!")
+else if %guest_mode
+    println("Browsing as guest.")
+else
+    @login_flow()
+
+while $i < 10
+    println_int($i)
+    $i++
 ```
 
 ---
 
-## 2 File-Type Rules
-
-| Extension  | Allowed content                | Parser entry-point |
-| ---------- | ------------------------------ | ------------------ |
-| `.const`   | **Only** constant declarations | `ParseConstants()` |
-| `.context` | **Only** context declarations  | `ParseContexts()`  |
-| `.gs`      | **Only** method declarations   | `ParseProgram()`   |
-
-> Mixing categories in the same file is invalid and yields parser errors.
-
----
-
-## 3 Parsing Source Files
+## 5 Parsing Source Files
 
 ```csharp
 string path = "scripts/player.gs";
@@ -147,9 +265,11 @@ if (parser.Errors.Count > 0)
 
 Every AST node stores its `FilePath` and `FileRange` for diagnostics.
 
+Use `ParseConstants()` for `.const` files and `ParseContexts()` for `.context` files.
+
 ---
 
-## 4 Mapping Commands → Enum
+## 6 Mapping Commands → Enum
 
 Convert a command identifier to an enum case by **removing underscores** and **capitalising** the next letter:
 
@@ -158,79 +278,104 @@ int_2_str   →   Int2Str
 str_length  →   StrLength
 ```
 
-Numbers stay in place (`2`). Core opcodes `< 100` are reserved by the engine.
+Numbers stay in place. Core opcodes `< 100` are reserved by the engine.
 
 ```csharp
 public enum ServerOpCode
 {
-    Print       = 1000,
-    PrintInt,
-    Int2Str     = 1100,
+    Print           = 100,
+    PrintInt        = 101,
+    Int2Str         = 200,
+    SuspendForInt   = 300,
+    Queue           = 400,
     // …
 }
 ```
 
 ---
 
-## 5 Bytecode Compilation
+## 7 Bytecode Compilation
 
 ```csharp
 var compiler = new BytecodeCompiler<ServerOpCode>();
 var result   = compiler.Compile(constants, contexts, methods);
-BytecodeProgram prog  = result.Program;      // op stream + const pool
-BytecodeProgramMetadata meta = result.Metadata; // line ↔ source map
+BytecodeProgram prog         = result.Program;    // op stream + const pool
+BytecodeProgramMetadata meta = result.Metadata;   // line ↔ source map
 ```
 
-Only `func`, `label`, and **trigger** methods become bytecode; `command` declarations are for the host at runtime.
+`func`, `label`, and `trigger` methods are compiled to bytecode. `command` declarations are resolved at runtime via the opcode enum.
 
 ---
 
-## 6 Building & Running Scripts
+## 8 Building & Running Scripts
 
-### 6.1 Register opcode handlers
+### 8.1 Register opcode handlers
 
 ```csharp
 var builder = new ScriptRunnerBuilder<MyCtx>();
+
 builder.Register((ushort)ServerOpCode.Int2Str, state =>
 {
-    var b = state.Pop();           // last arg
-    var a = state.Pop();           // first arg
-    state.Push(Value.FromString(a.Int.ToString()));
+    var value = state.Pop();
+    state.Push(Value.FromString(value.Int.ToString()));
 });
+
+builder.Register((ushort)ServerOpCode.SuspendForInt, state =>
+{
+    state.Execution = ScriptExecution.Suspended;
+});
+
 ScriptRunner<MyCtx> runner = builder.Build();
 ```
 
-> **Pop-push discipline:** A handler *must* pop its parameters (top-of-stack order) and push its return value(s) back.
+> **Pop-push discipline:** A handler must pop its parameters in top-of-stack order and push its return value(s) back.
 
-### 6.2 Create a `ScriptState` & run
+### 8.2 Create a `ScriptState` & run
 
 ```csharp
-var entry  = prog.Methods.First(m => m.Name == "mn_text login:password"); // trigger
-var ctx    = new MyCtx();
-var state  = new ScriptState<MyCtx>(prog, ctx, entry /* args… */);
+var entry = prog.Methods.First(m => m.Name == "mn_button_1 hud:logout");
+var ctx   = new MyCtx();
+var state = new ScriptState<MyCtx>(prog, ctx, entry /* args… */);
 
 ScriptExecution exec = runner.Run(state);
+// exec is Finished, Aborted, or Suspended
 ```
 
-`runner.Run` loops until `state.Execution` becomes `Finished`, `Aborted`, or custom-yield.
+### 8.3 Resuming after a suspend
+
+Push the host's response value before resuming:
+
+```csharp
+// Player submitted a number — push the result and resume
+state.Push(Value.FromInt(playerInput));
+runner.Run(state);
+```
+
+### 8.4 Reusing a ScriptState
+
+To run a new script without allocating, call `Clear()` and reinitialise:
+
+```csharp
+state.Clear();
+// re-initialise with new entry point and args, then Run again
+```
 
 ---
 
-## 7 Extending the Runtime
+## 9 Extending the Runtime
 
-* Implement **`IScriptContext`** to back `%context` variables.
-* Register more opcodes through `ScriptRunnerBuilder.Register`.
-* Tweak stack / frame sizes in `ScriptState` if your scripts are huge.
+- Implement **`IScriptContext`** to back `%context` variables with player-specific storage.
+- Register opcodes via `ScriptRunnerBuilder.Register`.
+- Implement **`IScriptHandler`** for custom execution-state handling (suspend, yield, abort).
+- Reuse `ScriptState` across executions with `state.Clear()` to avoid per-script allocations.
 
 ---
 
-## 8 Indexing & Static Analysis
+## 10 Indexing & Static Analysis
 
-GameScript provides visitor classes that build symbol / reference tables and enforce semantic and type rules.
+> **Multi-file builds:** Run `IndexVisitor` over every file first to populate global tables, then run the analysis passes. This two-phase approach ensures cross-file symbol lookups succeed.
 
-> **Multi-File builds:** When processing multiple files at once, run the IndexVisitor over every file first to populate the global symbol/reference tables, then execute the analysis passes. This two-phase approach guarantees that cross-file symbol look-ups succeed.
-
-### 8.1 Global indexes (singletons)
+### 10.1 Global indexes
 
 ```csharp
 var types      = new GlobalTypeIndex();
@@ -238,30 +383,28 @@ var symbols    = new GlobalSymbolTable();
 var references = new GlobalReferenceTable();
 ```
 
-### 8.2 Per-file indexing
+### 10.2 Per-file indexing
 
 ```csharp
-var errors = new List<FileError>();
+var errors    = new List<FileError>();
 var fileIndex = new FileIndex();
-var context   = new VisitorContext(_types, _symbols, filePath);
-var indexVisitor   = new IndexVisitor(fileIndex, context);
-VisitAst(rootNode, indexVisitor, errors);
+var context   = new VisitorContext(types, symbols, filePath);
+var indexer   = new IndexVisitor(fileIndex, context);
+VisitAst(rootNode, indexer, errors);
 
-// Merge into globals
 references.AddFile(filePath, fileIndex.FileReferences);
-symbols.AddFile(filePath,     fileIndex.FileSymbols);
+symbols.AddFile(filePath,    fileIndex.FileSymbols);
 ```
 
-`visitor.LocalIndexes` maps each method node to its local symbol table.
+`indexer.LocalIndexes` maps each `MethodDefinitionNode` to its local symbol table.
 
-### 8.3 Further analysis passes
+### 10.3 Analysis passes
 
 ```csharp
-VisitAst(rootNode, new SymbolAnalysisVisitor(indexVisitor.LocalIndexes, context),   errors);
-VisitAst(rootNode, new SemanticAnalysisVisitor(indexVisitor.LocalIndexes, context), errors);
-VisitAst(rootNode, new TypeAnalysisVisitor(indexVisitor.LocalIndexes, context),     errors);
+VisitAst(rootNode, new SymbolAnalysisVisitor(indexer.LocalIndexes, context),   errors);
+VisitAst(rootNode, new SemanticAnalysisVisitor(indexer.LocalIndexes, context), errors);
+VisitAst(rootNode, new TypeAnalysisVisitor(indexer.LocalIndexes, context),     errors);
 
-// Helper
 static void VisitAst<T>(AstNode n, T v, List<FileError> errs) where T : IAstVisitor
 {
     n.Accept(v);
@@ -269,14 +412,16 @@ static void VisitAst<T>(AstNode n, T v, List<FileError> errs) where T : IAstVisi
 }
 ```
 
-* **`SymbolAnalysisVisitor`** – duplicate / undefined symbol checks.
-* **`SemanticAnalysisVisitor`** – control-flow, prefix rules, break/continue contexts.
-* **`TypeAnalysisVisitor`** – type inference & compatibility checks.
+| Visitor                    | Checks                                               |
+| -------------------------- | ---------------------------------------------------- |
+| `SymbolAnalysisVisitor`    | Duplicate and undefined symbol declarations          |
+| `SemanticAnalysisVisitor`  | Control flow, prefix rules, break/continue scope     |
+| `TypeAnalysisVisitor`      | Type inference and assignment compatibility          |
 
-All visitors collect `FileError` instances for easy aggregation.
+All visitors collect `FileError` instances for easy aggregation and reporting.
 
 ---
 
-## 9 License / Contribution
+## License / Contribution
 
 Feel free to open PRs to improve this guide or the engine itself.

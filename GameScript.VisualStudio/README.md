@@ -1,45 +1,61 @@
-﻿# GameScript Language Support for Visual Studio
+# GameScript Language Support for Visual Studio
 
-Bring the full power of the **GameScript** language into Visual Studio 2022. The extension bundles the cross‑platform Language Server that powers syntax highlighting, IntelliSense, diagnostics, code navigation, and more—so you can build your MMO scripts without leaving your favourite IDE.
-
----
-
-## ✨ Key Features
-
-| Feature                                    | Description                                                                                        |
-| ------------------------------------------ | -------------------------------------------------------------------------------------------------- |
-| **Rich Syntax Highlighting**               | Precise colour‑coding for GameScript keywords, types, literals, and comments.                      |
-| **IntelliSense®**                          | Context‑aware completions, signature help, and inline documentation powered by the server.         |
-| **Error Squiggles & Quick Fixes**          | Real‑time diagnostics with fast "light‑bulb" fixes for common mistakes.                            |
-| **Go to Definition / Find All References** | Jump through your codebase instantly and see every usage.                                          |
-| **Rename Symbol**                          | Safely rename variables, functions, and types across files.                                        |
-| **Hover Tooltips**                         | Hover any symbol to see its declaration and documentation comments.                                |
-
-*(Looking for VS Code support? → check out the **GameScript VS Code** extension in a separate package.)*
+Bring the full power of the **GameScript** language into Visual Studio 2022. The extension bundles the Language Server that powers syntax highlighting, completions, diagnostics, code navigation, and more—so you can write your game scripts without leaving your favourite IDE.
 
 ---
 
-## 🛠️ Getting Started
+## ✨ Key Features
+
+| Feature                         | Description                                                                                  |
+| ------------------------------- | -------------------------------------------------------------------------------------------- |
+| **Syntax Highlighting**         | Semantic colour-coding for keywords, types, literals, operators, and comments across `.gs`, `.const`, and `.context` files. |
+| **Completions**                 | Context-aware completions for functions, labels, commands, variables, constants, and context vars. |
+| **Diagnostics**                 | Real-time error squiggles for parse errors, undefined symbols, type mismatches, and semantic rule violations. |
+| **Hover Tooltips**              | Hover any symbol to see its full signature and any doc-comment attached to its declaration.  |
+| **Go to Definition**            | Jump to where any symbol is declared—works across files in the workspace.                    |
+| **Find All References**         | See every usage of a symbol across the entire workspace.                                     |
+| **Document Highlights**         | All occurrences of the symbol under the cursor are highlighted in the current file.          |
+| **Rename Symbol**               | Safely rename any symbol across all files in the workspace.                                  |
+| **Document Symbols**            | Full outline of the current file.                                                            |
+| **Workspace Symbols**           | Search for any symbol across the whole workspace.                                            |
+| **ObjectDef Highlighting**      | Syntax highlighting for Object Definition files (`.varp`, `.item`, `.npc`, `.menu`, `.obj`, `.tile`). |
+
+*(Looking for **VS Code** support? → check out the **GameScript VS Code** extension.)*
+
+---
+
+## 📁 Supported File Types
+
+| Extension           | Content                    |
+| ------------------- | -------------------------- |
+| `.gs`               | Method definitions (funcs, labels, commands, triggers) |
+| `.const`            | Constant declarations      |
+| `.context`          | Context variable declarations |
+| `.varp` `.item` `.npc` `.menu` `.obj` `.tile` | Object Definition files (syntax highlighting only) |
+
+---
+
+## 🛠️ Getting Started
 
 1. **Install**
 
-   * Download from the Visual Studio Marketplace **or** use the in‑IDE *Extensions › Manage Extensions* dialog and search for *GameScript*.
-2. **Reload Visual Studio** when prompted.
-3. Open any `.gs` (or other GameScript‑related) file—language features activate automatically.
+   * Download from the Visual Studio Marketplace **or** use the in-IDE *Extensions › Manage Extensions* dialog and search for **GameScript**.
+
+2. **Reload Visual Studio** when prompted.
+
+3. Open a folder containing your GameScript files — the language server will index the workspace automatically and language features will activate on any supported file.
 
 > **System Requirements**
-> • Visual Studio 2022 17.9 or later
-> • Windows 10 v1903 (18362) or later
-> *(The extension targets .NET Framework 4.8 which ships with Visual Studio—no extra installs required.)*
+> Visual Studio 2022 17.9 or later · Windows 10 v1903 or later
 
 ---
 
-## 🐛 Known Issues / FAQ
+## 🐛 Known Issues / FAQ
 
-*No major issues have been reported for the current release.* If you hit a bug please [open an issue](https://github.com/Juiix/GameScript/issues) with reproduction steps.
+If you hit a bug please [open an issue](https://github.com/Juiix/GameScript/issues) with reproduction steps.
 
 ---
 
-## 📜 License
+## 📜 License
 
-The extension and bundled Language Server are licensed under the **Apache License 2.0**.
+The extension and bundled Language Server are licensed under the **Apache License 2.0**.
