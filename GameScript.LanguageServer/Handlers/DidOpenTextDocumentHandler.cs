@@ -17,7 +17,7 @@ internal class DidOpenTextDocumentHandler(
 
 	public Task<Unit> Handle(DidOpenTextDocumentParams request, CancellationToken cancellationToken)
 	{
-		var filePath = request.TextDocument.Uri.Path.NormalizePath();
+		var filePath = request.TextDocument.Uri.GetNormalizedFilePath();
 		var text = request.TextDocument.Text;
 
 		_openDocumentCache.Update(filePath, text, request.TextDocument.Version ?? 0);

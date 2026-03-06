@@ -34,7 +34,7 @@ internal sealed class CompletionHandler(
 	public async Task<CompletionList> Handle(CompletionParams request, CancellationToken cancellationToken)
 #pragma warning restore CS1998 // Async method lacks 'await' operators and will run synchronously
 	{
-		var filePath = request.TextDocument.Uri.Path.NormalizePath();
+		var filePath = request.TextDocument.Uri.GetNormalizedFilePath();
 		if (!_openDocumentCache.TryGet(filePath, out var text, out var fileVersion) ||
 			!_astCache.TryGetRoot(filePath, out var rootData))
 		{

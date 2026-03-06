@@ -14,7 +14,7 @@ internal sealed class DidCloseTextDocumentHandler(
 
 	public Task<Unit> Handle(DidCloseTextDocumentParams req, CancellationToken ct)
 	{
-		var filePath = req.TextDocument.Uri.Path.NormalizePath();
+		var filePath = req.TextDocument.Uri.GetNormalizedFilePath();
 		_openDocumentCache.Remove(filePath);
 		return Unit.Task;
 	}

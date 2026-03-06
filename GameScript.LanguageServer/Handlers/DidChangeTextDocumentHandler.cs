@@ -19,11 +19,34 @@ internal sealed class DidChangeTextDocumentHandler(
 
 	public Task<Unit> Handle(DidChangeTextDocumentParams req, CancellationToken ct)
 	{
-		var filePath = req.TextDocument.Uri.Path.NormalizePath();
-		if (!_openDocumentCache.TryGet(filePath, out var text, out var currentVersion) ||
-			currentVersion != req.TextDocument.Version - 1)
+		var filePath = req.TextDocument.Uri.GetNormalizedFilePath();
+		var requestVersion = req.TextDocument.Version;
+		bool hasFullTextChange = false;
+		foreach (var contentChange in req.ContentChanges)
 		{
-			_openDocumentCache.Remove(filePath);
+			if (contentChange.Range == null)
+			{
+				hasFullTextChange = true;
+				break;
+			}
+		}
+
+		var hasCachedDocument = _openDocumentCache.TryGet(filePath, out var text, out var currentVersion);
+		if (!hasCachedDocument)
+		{
+			// We can only recover if the client sent a full-document replacement.
+			if (!hasFullTextChange)
+				return Unit.Task;
+
+			text = string.Empty;
+		}
+		else if (requestVersion.HasValue &&
+			currentVersion.HasValue &&
+			currentVersion != requestVersion.Value - 1 &&
+			!hasFullTextChange)
+		{
+			// Ignore out-of-sequence incremental edits instead of dropping the
+			// cached buffer entirely; we recover on the next full update.
 			return Unit.Task;
 		}
 
@@ -71,7 +94,8 @@ internal sealed class DidChangeTextDocumentHandler(
 			text = sb.ToString();
 		}
 
-		_openDocumentCache.Update(filePath, text, req.TextDocument.Version ?? 0);
+		var newVersion = requestVersion ?? ((currentVersion ?? 0) + 1);
+		_openDocumentCache.Update(filePath, text, newVersion);
 		_fileProcessingService.Queue(filePath);
 		return Unit.Task;
 	}

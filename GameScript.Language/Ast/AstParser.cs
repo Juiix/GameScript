@@ -536,8 +536,9 @@ public ref struct AstParser
 		while (_current.Type is not (TokenType.Dedent or TokenType.EndOfFile))
 		{
 			var lineStart = _current.Start;
-			(statements ??= []).Add(ParseStatement());
-			end = lineStart;
+			var stmt = ParseStatement();
+			(statements ??= []).Add(stmt);
+			end = stmt.FileRange.End;
 
 			// Only one statement per physical line
 			if (_current.Type is not (TokenType.EndOfLine or TokenType.Dedent or TokenType.EndOfFile) &&

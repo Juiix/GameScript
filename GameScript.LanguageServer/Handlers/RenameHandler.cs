@@ -24,7 +24,7 @@ internal sealed class RenameHandler(
 
 	public async Task<WorkspaceEdit?> Handle(RenameParams request, CancellationToken cancellationToken)
 	{
-		var filePath = request.TextDocument.Uri.Path.NormalizePath();
+		var filePath = request.TextDocument.Uri.GetNormalizedFilePath();
 		if (!_openDocumentCache.TryGet(filePath, out var text, out var fileVersion) ||
 			!_astCache.TryGetRoot(filePath, out var rootData) ||
 			rootData.Parse.FileVersion != fileVersion)

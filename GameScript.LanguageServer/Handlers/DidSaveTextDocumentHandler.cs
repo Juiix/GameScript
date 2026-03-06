@@ -16,7 +16,7 @@ internal sealed class DidSaveTextDocumentHandler(
 		DidSaveTextDocumentParams request,
 		CancellationToken cancellationToken)
 	{
-		var filePath = request.TextDocument.Uri.GetFileSystemPath().NormalizePath();
+		var filePath = request.TextDocument.Uri.GetNormalizedFilePath();
 		_fileProcessingService.Queue(filePath);
 
 		return Unit.Value;

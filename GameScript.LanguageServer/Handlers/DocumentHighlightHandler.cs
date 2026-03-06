@@ -1,4 +1,4 @@
-﻿using GameScript.Language.Ast;
+using GameScript.Language.Ast;
 using GameScript.Language.Index;
 using GameScript.Language.Symbols;
 using GameScript.LanguageServer.Caches;
@@ -30,7 +30,7 @@ namespace GameScript.LanguageServer.Handlers
 		public async Task<DocumentHighlightContainer?> Handle(DocumentHighlightParams request, CancellationToken cancellationToken)
 #pragma warning restore CS1998 // Async method lacks 'await' operators and will run synchronously
 		{
-			var filePath = request.TextDocument.Uri.Path.NormalizePath();
+			var filePath = request.TextDocument.Uri.GetNormalizedFilePath();
 			if (!_openDocumentCache.TryGet(filePath, out var text, out var fileVersion) ||
 				!_astCache.TryGetRoot(filePath, out var rootData) ||
 				rootData.Parse.FileVersion != fileVersion)

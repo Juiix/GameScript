@@ -21,7 +21,7 @@ internal sealed class DefinitionHandler(
 	public async Task<LocationOrLocationLinks?> Handle(DefinitionParams request, CancellationToken cancellationToken)
 	{
 		// 1. Load parsed ast
-		var filePath = request.TextDocument.Uri.Path.NormalizePath();
+		var filePath = request.TextDocument.Uri.GetNormalizedFilePath();
 		if (!_openDocumentCache.TryGet(filePath, out var text, out var fileVersion) ||
 			!_astCache.TryGetRoot(filePath, out var rootData) ||
 			rootData.Parse.FileVersion != fileVersion)

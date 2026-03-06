@@ -1,4 +1,4 @@
-﻿using GameScript.Language.Ast;
+using GameScript.Language.Ast;
 using GameScript.Language.Index;
 using GameScript.LanguageServer.Caches;
 using GameScript.LanguageServer.Extensions;
@@ -19,7 +19,7 @@ namespace GameScript.LanguageServer.Handlers
 
 		public async Task<RangeOrPlaceholderRange?> Handle(PrepareRenameParams request, CancellationToken cancellationToken)
 		{
-			var filePath = request.TextDocument.Uri.Path.NormalizePath();
+			var filePath = request.TextDocument.Uri.GetNormalizedFilePath();
 			if (!_openDocumentCache.TryGet(filePath, out var text, out var fileVersion) ||
 				!_astCache.TryGetRoot(filePath, out var rootData) ||
 				rootData.Parse.FileVersion != fileVersion)

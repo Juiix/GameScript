@@ -17,6 +17,12 @@ var flags = args.Where(x => x.StartsWith("--"))
 				.Select(x => Enum.TryParse<ProgramFlags>(x.TrimStart('-'), true, out var flag) ? flag : ProgramFlags.None)
 				.Aggregate(ProgramFlags.None, (a, v) => a | v);
 
+if ((flags & ProgramFlags.Debug) == ProgramFlags.Debug &&
+	!Debugger.IsAttached)
+{
+	Debugger.Launch();
+}
+
 var server = await LanguageServer.From(options =>
 {
 	options.WithInput(Console.OpenStandardInput());

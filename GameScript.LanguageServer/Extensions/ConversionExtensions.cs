@@ -79,6 +79,13 @@ namespace GameScript.LanguageServer.Extensions
 		}
 
 		/// <summary>
+		/// Converts an LSP <see cref="DocumentUri"/> into a canonical file-system path
+		/// used for all cache/index keys.
+		/// </summary>
+		public static string GetNormalizedFilePath(this DocumentUri uri) =>
+			uri.GetFileSystemPath().NormalizePath();
+
+		/// <summary>
 		/// Maps an <see cref="IdentifierType"/> to the closest LSP <see cref="SymbolKind"/>.
 		/// </summary>
 		public static SymbolKind GetSymbolKind(this IdentifierType identifierType) =>

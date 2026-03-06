@@ -18,7 +18,7 @@ internal sealed class DocumentSymbolHandler(
 
 	public Task<SymbolInformationOrDocumentSymbolContainer?> Handle(DocumentSymbolParams request, CancellationToken cancellationToken)
     {
-        var filePath = request.TextDocument.Uri.Path.NormalizePath();
+        var filePath = request.TextDocument.Uri.GetNormalizedFilePath();
 		if (!_openDocumentCache.TryGet(filePath, out var text, out var fileVersion) ||
 			!_astCache.TryGetRoot(filePath, out var rootData) ||
 			rootData.Parse.FileVersion != fileVersion)
