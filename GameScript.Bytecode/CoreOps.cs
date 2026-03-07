@@ -52,7 +52,10 @@ internal static class CoreOps<TContext> where TContext : IScriptContext
 		{
 			var b = state.Pop();
 			var a = state.Pop();
-			state.Push(Value.FromInt(a.Int + b.Int));
+			if (a.Type == ValueType.String || b.Type == ValueType.String)
+				state.Push(Value.FromString(ValueToString(a) + ValueToString(b)));
+			else
+				state.Push(Value.FromInt(a.Int + b.Int));
 		},
 		[(ushort)CoreOpCode.Subtract] = static state =>
 		{
@@ -167,5 +170,13 @@ internal static class CoreOps<TContext> where TContext : IScriptContext
 		{
 			state.Push(Value.FromInt(state.Operand));
 		},
+	};
+	private static string ValueToString(Value v) => v.Type switch
+	{
+		ValueType.String => v.String ?? string.Empty,
+		ValueType.Int => v.Int.ToString(),
+		ValueType.Bool => v.Bool.ToString(),
+		_ => string.Empty,
 	};
+
 }

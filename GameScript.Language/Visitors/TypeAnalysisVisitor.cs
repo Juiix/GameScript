@@ -116,12 +116,16 @@ namespace GameScript.Language.Visitors
 				return; // type check error
 			}
 
-			if (leftType != rightType)
+			var isStringAdd = node.Operator == BinaryOperator.Add &&
+				(leftType.Kind == TypeKind.String || rightType.Kind == TypeKind.String);
+
+			if (!isStringAdd && leftType != rightType)
 			{
 				Error($"Type mismatch, cannot operate '{leftType}' and '{rightType}'", node);
 			}
 
-			if ((node.Operator & BinaryOperator.Relational) == BinaryOperator.Unknown &&
+			if (!isStringAdd &&
+				(node.Operator & BinaryOperator.Relational) == BinaryOperator.Unknown &&
 				leftType?.Kind != TypeKind.Int)
 			{
 				Error($"'{node.OperatorNode.Operator}' can only be used with 'int' type.", node);
@@ -159,12 +163,16 @@ namespace GameScript.Language.Visitors
 				return; // type check error
 			}
 
-			if (leftType != rightType)
+			var isStringAdd = node.Operator == AssignmentOperator.Add &&
+				leftType?.Kind == TypeKind.String;
+
+			if (!isStringAdd && leftType != rightType)
 			{
 				Error($"Type mismatch, cannot operate '{leftType}' and '{rightType}'", node);
 			}
 
-			if (node.Operator != AssignmentOperator.Assign &&
+			if (!isStringAdd &&
+				node.Operator != AssignmentOperator.Assign &&
 				leftType?.Kind != TypeKind.Int)
 			{
 				Error($"'{node.OperatorNode.Operator}' can only be used with 'int' type.", node);

@@ -61,6 +61,19 @@ namespace GameScript.Language.Visitors
 				return;
 			}
 
+			if (node.Operator == BinaryOperator.Add)
+			{
+				node.Left.Accept(this);
+				var leftType = InferredType;
+				node.Right.Accept(this);
+				var rightType = InferredType;
+				if (leftType?.Kind == TypeKind.String || rightType?.Kind == TypeKind.String)
+					InferredType = _context.Types.GetType(TypeKind.String);
+				else
+					InferredType = leftType;
+				return;
+			}
+
 			node.Left.Accept(this);
 		}
 
