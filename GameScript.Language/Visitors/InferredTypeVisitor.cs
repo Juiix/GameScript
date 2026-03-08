@@ -31,13 +31,10 @@ namespace GameScript.Language.Visitors
 		public override void Visit(IdentifierNode node)
 		{
 			// A bare @label identifier is a method reference, not a call.
-			// Only no-arg labels can be used as label references.
+			// Any label (with or without params) can be used as a label reference.
 			if (node.Type == IdentifierType.Label)
 			{
-				var methodSymbol = _context.Symbols.GetSymbol(node.Name);
-				InferredType = methodSymbol?.ParamTypes == null
-					? _context.Types.GetType("label")
-					: null;
+				InferredType = _context.Types.GetType("label");
 				return;
 			}
 
