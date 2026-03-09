@@ -66,6 +66,9 @@ namespace GameScript.LanguageServer.Handlers
 		protected override async Task Tokenize(SemanticTokensBuilder builder, ITextDocumentIdentifierParams identifier, CancellationToken cancellationToken)
 #pragma warning restore CS1998 // Async method lacks 'await' operators and will run synchronously
 		{
+			if (!identifier.TextDocument.Uri.IsFileUri())
+				return;
+
 			var filePath = identifier.TextDocument.Uri.GetNormalizedFilePath();
 			if (!_astCache.TryGetRoot(filePath, out var rootData))
 			{

@@ -17,6 +17,9 @@ internal class DidOpenTextDocumentHandler(
 
 	public Task<Unit> Handle(DidOpenTextDocumentParams request, CancellationToken cancellationToken)
 	{
+		if (!request.TextDocument.Uri.IsFileUri())
+			return Unit.Task;
+
 		var filePath = request.TextDocument.Uri.GetNormalizedFilePath();
 		var text = request.TextDocument.Text;
 

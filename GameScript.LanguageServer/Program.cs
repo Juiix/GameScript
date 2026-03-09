@@ -73,6 +73,7 @@ var server = await LanguageServer.From(options =>
 		services.AddSingleton<ReferencesHandler>();
 		services.AddSingleton<RenameHandler>();
 		services.AddSingleton<SemanticTokensHandler>();
+		services.AddSingleton<SignatureHelpHandler>();
 		services.AddSingleton<WorkspaceSymbolResolveHandler>();
 		services.AddSingleton<WorkspaceSymbolsHandler>();
 	});
@@ -155,6 +156,10 @@ static void RegisterCapabilities(ServerCapabilities capabilities, ProgramFlags f
 			Legend = SemanticTokensHandler.Legend,
 			Full = true,
 			Range = true
+		};
+		capabilities.SignatureHelpProvider = new SignatureHelpRegistrationOptions.StaticOptions
+		{
+			TriggerCharacters = new Container<string>("(", ",")
 		};
 		capabilities.WorkspaceSymbolProvider = new BooleanOr<WorkspaceSymbolRegistrationOptions.StaticOptions>(new WorkspaceSymbolRegistrationOptions.StaticOptions
 		{

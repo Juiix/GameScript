@@ -86,6 +86,15 @@ namespace GameScript.LanguageServer.Extensions
 			uri.GetFileSystemPath().NormalizePath();
 
 		/// <summary>
+		/// Returns <see langword="true"/> when <paramref name="uri"/> uses the
+		/// <c>file:</c> scheme, i.e. it represents a real file on disk rather than
+		/// a virtual document such as those shown in git-diff windows (<c>git:</c>)
+		/// or editor preview panes.
+		/// </summary>
+		public static bool IsFileUri(this DocumentUri uri) =>
+			string.Equals(uri.Scheme, Uri.UriSchemeFile, StringComparison.OrdinalIgnoreCase);
+
+		/// <summary>
 		/// Maps an <see cref="IdentifierType"/> to the closest LSP <see cref="SymbolKind"/>.
 		/// </summary>
 		public static SymbolKind GetSymbolKind(this IdentifierType identifierType) =>
