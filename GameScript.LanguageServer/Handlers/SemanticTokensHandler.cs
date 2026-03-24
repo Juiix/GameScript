@@ -139,7 +139,8 @@ namespace GameScript.LanguageServer.Handlers
 					builder.Push(line, column, length, 0, 0);
 					break;
 				case OperatorNode operatorNode:
-					builder.Push(line, column, length, 6, 0);
+					var opType = operatorNode.Operator is "and" or "or" ? 0 : 6;
+					builder.Push(line, column, length, opType, 0);
 					break;
 				case CommentNode commentNode:
 					builder.Push(line, column, length, 5, 0);

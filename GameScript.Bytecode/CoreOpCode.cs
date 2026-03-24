@@ -37,6 +37,8 @@
 		// Control flow
 		Jump,
 		JumpIfFalse,
+		JumpIfFalseKeep,  // like JumpIfFalse but doesn't pop the value
+		JumpIfTrueKeep,   // like JumpIfTrue but doesn't pop the value
 
 		// Calls
 		Call,

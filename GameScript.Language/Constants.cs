@@ -14,7 +14,9 @@ namespace GameScript.Language
 			"command",
 			"break",
 			"returns",
-			"continue"
+			"continue",
+			"and",
+			"or"
 		];
 
 		public static readonly IReadOnlyList<string> Bools = [

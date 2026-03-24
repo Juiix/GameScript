@@ -565,7 +565,7 @@ public ref struct AstParser
 	private ExpressionNode ParseAssignmentExpression()
 	{
 		var start = _current.Start;
-		var target = ParseEqualityExpression();           // left-hand side
+		var target = ParseOrExpression();                  // left-hand side
 
 		// Single assignment op (=, +=, …) — right-associative
 		if (_current.Type == TokenType.Operator &&
@@ -582,6 +582,46 @@ public ref struct AstParser
 		}
 
 		return target;
+	}
+
+	// Parses 'or' (left-associative, lowest logical precedence).
+	private ExpressionNode ParseOrExpression()
+	{
+		var start = _current.Start;
+		var expr = ParseAndExpression();
+
+		while (_current.Type == TokenType.Keyword &&
+			   _current.Value.SequenceEqual("or".AsSpan()))
+		{
+			var opNode = new OperatorNode(_current.Value.ToString(), _filePath, CurrentRange);
+			Advance();
+
+			expr = new BinaryExpressionNode(
+				expr, BinaryOperator.Or, opNode, ParseAndExpression(),
+				_filePath, new FileRange(start, _previous.End));
+		}
+
+		return expr;
+	}
+
+	// Parses 'and' (left-associative, binds tighter than 'or').
+	private ExpressionNode ParseAndExpression()
+	{
+		var start = _current.Start;
+		var expr = ParseEqualityExpression();
+
+		while (_current.Type == TokenType.Keyword &&
+			   _current.Value.SequenceEqual("and".AsSpan()))
+		{
+			var opNode = new OperatorNode(_current.Value.ToString(), _filePath, CurrentRange);
+			Advance();
+
+			expr = new BinaryExpressionNode(
+				expr, BinaryOperator.And, opNode, ParseEqualityExpression(),
+				_filePath, new FileRange(start, _previous.End));
+		}
+
+		return expr;
 	}
 
 	// Parses equality.

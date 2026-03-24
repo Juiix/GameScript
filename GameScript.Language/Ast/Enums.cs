@@ -16,9 +16,12 @@ namespace GameScript.Language.Ast
 		LessThan = 1 << 7,
 		GreaterThanOrEqual = 1 << 8,
 		LessThanOrEqual = 1 << 9,
+		And = 1 << 10,
+		Or = 1 << 11,
 
 		Operational = Add | Subtract | Multiply | Divide,
-		Relational = EqualTo | NotEqualTo | GreaterThan | LessThan | GreaterThanOrEqual | LessThanOrEqual
+		Relational = EqualTo | NotEqualTo | GreaterThan | LessThan | GreaterThanOrEqual | LessThanOrEqual,
+		Logical = And | Or
 	}
 
 	public enum UnaryOperator

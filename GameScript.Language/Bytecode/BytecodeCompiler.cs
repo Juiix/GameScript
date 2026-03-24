@@ -423,6 +423,25 @@ public sealed class BytecodeCompiler<TCommandOp> where TCommandOp : struct, Enum
 				return 1;
 
 			case BinaryExpressionNode bin:
+				if (bin.Operator == BinaryOperator.And)
+				{
+					EmitExpression(bin.Left);
+					int jumpEnd = EmitPlaceholder(CoreOpCode.JumpIfFalseKeep, expression.FileRange.Start.Line);
+					Emit(CoreOpCode.Pop, 0, expression.FileRange.Start.Line);
+					EmitExpression(bin.Right);
+					Patch(jumpEnd, _ops.Count - jumpEnd);
+					return 1;
+				}
+				if (bin.Operator == BinaryOperator.Or)
+				{
+					EmitExpression(bin.Left);
+					int jumpEnd = EmitPlaceholder(CoreOpCode.JumpIfTrueKeep, expression.FileRange.Start.Line);
+					Emit(CoreOpCode.Pop, 0, expression.FileRange.Start.Line);
+					EmitExpression(bin.Right);
+					Patch(jumpEnd, _ops.Count - jumpEnd);
+					return 1;
+				}
+
 				EmitExpression(bin.Left);
 				EmitExpression(bin.Right);
 

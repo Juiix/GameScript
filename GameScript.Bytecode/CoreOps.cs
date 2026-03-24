@@ -144,6 +144,16 @@ internal static class CoreOps<TContext> where TContext : IScriptContext
 				state.Jump(state.Operand - 1);
 			}
 		},
+		[(ushort)CoreOpCode.JumpIfFalseKeep] = static state =>
+		{
+			if (!state.Peek().Bool)
+				state.Jump(state.Operand - 1);
+		},
+		[(ushort)CoreOpCode.JumpIfTrueKeep] = static state =>
+		{
+			if (state.Peek().Bool)
+				state.Jump(state.Operand - 1);
+		},
 
 		// -----------------
 		// ----- calls -----

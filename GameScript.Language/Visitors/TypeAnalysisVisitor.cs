@@ -116,6 +116,15 @@ namespace GameScript.Language.Visitors
 				return; // type check error
 			}
 
+			if ((node.Operator & BinaryOperator.Logical) != BinaryOperator.Unknown)
+			{
+				if (leftType.Kind != TypeKind.Bool)
+					Error($"Left operand of '{node.OperatorNode.Operator}' must be 'bool' type.", node.Left);
+				if (rightType.Kind != TypeKind.Bool)
+					Error($"Right operand of '{node.OperatorNode.Operator}' must be 'bool' type.", node.Right);
+				return;
+			}
+
 			var isStringAdd = node.Operator == BinaryOperator.Add &&
 				(leftType.Kind == TypeKind.String || rightType.Kind == TypeKind.String);
 

@@ -52,7 +52,7 @@ namespace GameScript.Language.Visitors
 		// For binary expressions, assume that if both sides have the same inferred type, that is the type of the binary expression.
 		public override void Visit(BinaryExpressionNode node)
 		{
-			if ((node.Operator & BinaryOperator.Relational) != BinaryOperator.Unknown)
+			if ((node.Operator & (BinaryOperator.Relational | BinaryOperator.Logical)) != BinaryOperator.Unknown)
 			{
 				InferredType = _context.Types.GetType(TypeKind.Bool);
 				return;

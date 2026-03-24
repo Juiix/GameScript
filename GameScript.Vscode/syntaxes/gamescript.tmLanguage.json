@@ -44,7 +44,7 @@
     },
     "keywords": {
       "patterns": [
-        { "name": "keyword.control.gamescript", "match": "\\b(?:if|else|return)\\b" },
+        { "name": "keyword.control.gamescript", "match": "\\b(?:if|else|return|while|break|continue|and|or)\\b" },
         { "name": "keyword.declaration.gamescript", "match": "\\b(?:func|label|command)\\b" }
       ]
     },

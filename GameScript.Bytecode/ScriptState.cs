@@ -96,6 +96,8 @@ public sealed class ScriptState<TContext>(int stackSize = 1024, int frameSize = 
         return value;
     }
 
+    public Value Peek() => _stack[_sp - 1];
+
     public void PopDiscard()
     {
         _stack[--_sp] = default;
