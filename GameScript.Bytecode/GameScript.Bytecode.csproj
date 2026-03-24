@@ -7,7 +7,7 @@
 
     <!-- NuGet package metadata -->
     <PackageId>GameScript.Bytecode</PackageId>
-    <Version>1.2.2</Version>
+    <Version>1.2.3</Version>
     <Authors>Tucker Ulrich</Authors>
     <Company>Ye Olde Games</Company>
     <Description>Runtime bytecode layer for GameScript: instruction set definitions, lightweight VM, and script execution engine.</Description>
