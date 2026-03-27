@@ -16,6 +16,7 @@
       <string>varp</string>
       <string>obj</string>
       <string>tile</string>
+      <string>inv</string>
     </array>
 
     <!-- ───────────────────────── patterns ───────────────────────── -->
