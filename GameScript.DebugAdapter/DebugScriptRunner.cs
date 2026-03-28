@@ -23,41 +23,52 @@ public sealed class DebugScriptRunner<TContext>(
 
     public ScriptExecution Run(ScriptState<TContext> state)
     {
-        while (state.Execution == ScriptExecution.Running)
+        if (state.Program is null)
+            throw new InvalidOperationException("ScriptState has no program assigned. Call Start() before running.");
+
+        state.Execution = ScriptExecution.Running;
+        try
         {
-            state.Next();
-
-            var frame = state.CurrentFrameView;
-            var (line, file) = GetLineAndFile(frame);
-
-            // Clear last-paused tracking once we move to a different line.
-            if (file != _lastPausedFile || line != _lastPausedLine)
+            while (state.Execution == ScriptExecution.Running)
             {
-                _lastPausedFile = null;
-                _lastPausedLine = -1;
-            }
+                state.Next();
 
-            var shouldPause = token.CheckAndPause(state.FrameDepth, line, out var reason);
-            if (!shouldPause && line >= 0 && file != null
-                && !(_lastPausedFile == file && _lastPausedLine == line)
-                && breakpointIndex.IsBreakpoint(file, line))
-            {
-                shouldPause = true;
-                reason = PauseReason.Breakpoint;
-            }
+                var frame = state.CurrentFrameView;
+                var (line, file) = GetLineAndFile(frame);
 
-            if (shouldPause)
-            {
-                _lastPausedFile = file;
-                _lastPausedLine = line;
-                host.ScriptPaused?.Invoke(threadId, reason);
-                token.WaitForResume();
-                if (token.IsDisconnected) break;
-            }
+                // Clear last-paused tracking once we move to a different line.
+                if (file != _lastPausedFile || line != _lastPausedLine)
+                {
+                    _lastPausedFile = null;
+                    _lastPausedLine = -1;
+                }
 
-            var handler = runner.GetHandler(state.OpCode)
-                ?? throw new NotImplementedException($"Operation not implemented for OpCode: {state.OpCode}");
-            handler.Handle(state);
+                var shouldPause = token.CheckAndPause(state.FrameDepth, line, out var reason);
+                if (!shouldPause && line >= 0 && file != null
+                    && !(_lastPausedFile == file && _lastPausedLine == line)
+                    && breakpointIndex.IsBreakpoint(file, line))
+                {
+                    shouldPause = true;
+                    reason = PauseReason.Breakpoint;
+                }
+
+                if (shouldPause)
+                {
+                    _lastPausedFile = file;
+                    _lastPausedLine = line;
+                    host.ScriptPaused?.Invoke(threadId, reason);
+                    token.WaitForResume();
+                }
+
+                var handler = runner.GetHandler(state.OpCode)
+                    ?? throw new NotImplementedException($"Operation not implemented for OpCode: {state.OpCode}");
+                handler.Handle(state);
+            }
+        }
+        catch (Exception)
+        {
+            state.Execution = ScriptExecution.Aborted;
+            throw;
         }
         return state.Execution;
     }
