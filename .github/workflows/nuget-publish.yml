@@ -4,6 +4,7 @@ on:
   push:
     branches: [ main ]
     paths:
+      - "Directory.Build.props"
       - "GameScript.Language/**"
       - "GameScript.Bytecode/**"
       - "GameScript.DebugAdapter/**"

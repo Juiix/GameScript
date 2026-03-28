@@ -7,7 +7,7 @@
 
     <!-- NuGet package metadata -->
     <PackageId>GameScript.Language</PackageId>
-    <Version>1.3.0</Version>
+    <Version>$(GameScriptVersion)</Version>
     <Authors>Tucker Ulrich</Authors>
     <Company>Ye Olde Games</Company>
     <Description>Core compiler front‑end for GameScript: AST, lexer, parser, type checker, and bytecode emitter.</Description>

@@ -28,10 +28,27 @@ public sealed class ScriptDebugHost
     }
 
     /// <summary>
+    /// Swap in a new program at runtime (hot reload). Fires <see cref="ProgramReloaded"/>
+    /// so the active debug session can re-verify breakpoints and rebuild its method map.
+    /// </summary>
+    public void ReloadProgram(BytecodeProgram program, BytecodeProgramMetadata metadata)
+    {
+        Program = program;
+        Metadata = metadata;
+        ProgramReloaded?.Invoke(program, metadata);
+    }
+
+    /// <summary>
     /// Invoked on the game thread when any script pauses.
     /// Set by <see cref="GameScriptSession"/> on attach; cleared on disconnect.
     /// </summary>
     public Action<int, PauseReason>? ScriptPaused { get; set; }
+
+    /// <summary>
+    /// Invoked after <see cref="ReloadProgram"/> swaps in a new program.
+    /// Set by <see cref="GameScriptSession"/>; cleared on disconnect.
+    /// </summary>
+    public Action<BytecodeProgram, BytecodeProgramMetadata>? ProgramReloaded { get; set; }
 
     /// <summary>
     /// Fired when a script thread is registered or unregistered.
@@ -72,6 +89,7 @@ public sealed class ScriptDebugHost
     public void DisconnectAll()
     {
         ScriptPaused = null;
+        ProgramReloaded = null;
         foreach (var entry in _entries.Values)
             entry.Token.Disconnect();
     }

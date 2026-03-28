@@ -4,7 +4,11 @@ on:
   push:
     branches: [main]
     paths:
+      - "Directory.Build.props"
       - "GameScript.VisualStudio/**"
+      - "GameScript.LanguageServer/**"
+      - "GameScript.Language/**"
+      - "GameScript.Bytecode/**"
     tags: ['v*']          # same trigger as the VS Code workflow
 
 jobs:
@@ -23,6 +27,15 @@ jobs:
       uses: microsoft/setup-msbuild@v2
       with:
         msbuild-architecture: x64
+
+    # ── Stamp version from Directory.Build.props ─────────────────────
+    - name: Set version
+      shell: pwsh
+      run: |
+        $version = (Select-Xml -Path Directory.Build.props -XPath '//*[local-name()="GameScriptVersion"]').Node.InnerText
+        $manifest = Get-Content GameScript.VisualStudio/source.extension.vsixmanifest -Raw
+        $manifest = $manifest -replace '(<Identity\b[^>]*\bVersion=")[^"]*(")', "`${1}$version`$2"
+        $manifest | Set-Content GameScript.VisualStudio/source.extension.vsixmanifest
 
     # ── Build language-server for win-x64 only ───────────────────────
     - name: Publish LSP (win-x64)

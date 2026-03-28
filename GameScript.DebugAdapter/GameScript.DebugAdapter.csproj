@@ -7,7 +7,7 @@
 
     <!-- NuGet package metadata -->
     <PackageId>GameScript.DebugAdapter</PackageId>
-    <Version>1.3.0</Version>
+    <Version>$(GameScriptVersion)</Version>
     <Authors>Tucker Ulrich</Authors>
     <Company>Ye Olde Games</Company>
     <Description>Debug Adapter Protocol (DAP) server for GameScript: embed in your game process to enable breakpoints, step execution, and variable inspection from VS Code.</Description>

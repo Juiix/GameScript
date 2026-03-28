@@ -47,6 +47,26 @@ internal sealed class GameScriptSession(
             };
             server.SendNotification(new StoppedEvent { ThreadId = threadId, Reason = reasonStr });
         };
+
+        host.ProgramReloaded = (program, metadata) =>
+        {
+            _methodMap = BuildMethodMap(program, metadata);
+
+            var changes = breakpointIndex.Reload(program, metadata);
+            foreach (var (file, line, verified) in changes)
+            {
+                server.SendNotification(new BreakpointEvent
+                {
+                    Reason = BreakpointEventReason.Changed,
+                    Breakpoint = new Breakpoint
+                    {
+                        Verified = verified,
+                        Line = line,
+                        Source = new Source { Path = file },
+                    },
+                });
+            }
+        };
     }
 
     public Task<AttachResponse> Handle(AttachRequestArguments request, CancellationToken ct)

@@ -4,7 +4,11 @@ on:
   push:
     branches: [main]
     paths:
+      - "Directory.Build.props"
       - "GameScript.Vscode/**"
+      - "GameScript.LanguageServer/**"
+      - "GameScript.Language/**"
+      - "GameScript.Bytecode/**"
     tags: ['v*']          # publish on version tags, adjust as needed
 
 jobs:
@@ -25,6 +29,13 @@ jobs:
         node-version: '20'
         cache: 'npm'
         cache-dependency-path: 'GameScript.Vscode/package-lock.json'
+
+    # ── Stamp version from Directory.Build.props ─────────────────────
+    - name: Set version
+      run: |
+        VERSION=$(grep -oP '(?<=<GameScriptVersion>)[^<]+' Directory.Build.props)
+        jq --arg v "$VERSION" '.version = $v' GameScript.Vscode/package.json > tmp.json
+        mv tmp.json GameScript.Vscode/package.json
 
     # ── Build language-server (all RIDs) ──────────────────────────────
     - name: Make build script executable
