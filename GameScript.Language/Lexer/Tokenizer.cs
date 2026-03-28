@@ -190,7 +190,7 @@ namespace GameScript.Language.Lexer
 			/*──────────────────────────────────────────────────────────────
 			 * 8.  Identifier / keyword / boolean
 			 *──────────────────────────────────────────────────────────────*/
-			if (char.IsLetter(ch) || IsVariableAccessor(ch) || IsFunctionCall(ch))
+			if (char.IsLetter(ch) || ch == '_' || IsVariableAccessor(ch) || IsFunctionCall(ch))
 			{
 				int start = _column;
 				while (_column < _text.Length &&
