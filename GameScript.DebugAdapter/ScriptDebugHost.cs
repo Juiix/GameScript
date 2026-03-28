@@ -20,11 +20,13 @@ public sealed class ScriptDebugHost
     /// </summary>
     public BytecodeProgram? Program { get; private set; }
     public BytecodeProgramMetadata? Metadata { get; private set; }
+    public Dictionary<BytecodeMethod, (int index, BytecodeMethodMetadata meta)>? MethodMap { get; private set; }
 
     public void SetProgramInfo(BytecodeProgram program, BytecodeProgramMetadata metadata)
     {
         Program = program;
         Metadata = metadata;
+        MethodMap = BuildMethodMap(program, metadata);
     }
 
     /// <summary>
@@ -35,7 +37,17 @@ public sealed class ScriptDebugHost
     {
         Program = program;
         Metadata = metadata;
+        MethodMap = BuildMethodMap(program, metadata);
         ProgramReloaded?.Invoke(program, metadata);
+    }
+
+    private static Dictionary<BytecodeMethod, (int, BytecodeMethodMetadata)> BuildMethodMap(
+        BytecodeProgram program, BytecodeProgramMetadata metadata)
+    {
+        var map = new Dictionary<BytecodeMethod, (int, BytecodeMethodMetadata)>(program.Methods.Length);
+        for (int i = 0; i < program.Methods.Length; i++)
+            map[program.Methods[i]] = (i, metadata.MethodMetadata[i]);
+        return map;
     }
 
     /// <summary>

@@ -29,8 +29,6 @@ internal sealed class GameScriptSession(
       IStepOutHandler,
       IPauseHandler
 {
-    // Built at attach time for O(1) stack-trace line lookup
-    private Dictionary<BytecodeMethod, (int index, BytecodeMethodMetadata meta)>? _methodMap;
 
     /// <summary>
     /// Called from the server's OnInitialized callback to wire up the pause notification.
@@ -50,8 +48,6 @@ internal sealed class GameScriptSession(
 
         host.ProgramReloaded = (program, metadata) =>
         {
-            _methodMap = BuildMethodMap(program, metadata);
-
             var changes = breakpointIndex.Reload(program, metadata);
             foreach (var (file, line, verified) in changes)
             {
@@ -69,18 +65,13 @@ internal sealed class GameScriptSession(
         };
     }
 
-    public Task<AttachResponse> Handle(AttachRequestArguments request, CancellationToken ct)
-    {
-        if (host.Program != null && host.Metadata != null)
-            _methodMap = BuildMethodMap(host.Program, host.Metadata);
-        return Task.FromResult(new AttachResponse());
-    }
+    public Task<AttachResponse> Handle(AttachRequestArguments request, CancellationToken ct) =>
+        Task.FromResult(new AttachResponse());
 
     public Task<DisconnectResponse> Handle(DisconnectArguments request, CancellationToken ct)
     {
         host.DisconnectAll();
         breakpointIndex.Clear();
-        _methodMap = null;
         return Task.FromResult(new DisconnectResponse());
     }
 
@@ -235,15 +226,12 @@ internal sealed class GameScriptSession(
         return Task.FromResult(new PauseResponse());
     }
 
-    private int GetCurrentLine(IScriptState state)
-    {
-        var frames = new FrameView[1];
-        return state.CopyFrames(frames) > 0 ? GetLineAndFile(frames[0]).line : -1;
-    }
+    private int GetCurrentLine(IScriptState state) =>
+        GetLineAndFile(state.CurrentFrameView).line;
 
     private (int line, string? file) GetLineAndFile(FrameView frame)
     {
-        if (_methodMap == null || !_methodMap.TryGetValue(frame.Method, out var entry))
+        if (host.MethodMap == null || !host.MethodMap.TryGetValue(frame.Method, out var entry))
             return (-1, null);
 
         var lineNumbers = entry.meta.LineNumbers;
@@ -262,12 +250,4 @@ internal sealed class GameScriptSession(
         _                                    => value.ToString() ?? "?",
     };
 
-    private static Dictionary<BytecodeMethod, (int, BytecodeMethodMetadata)> BuildMethodMap(
-        BytecodeProgram program, BytecodeProgramMetadata metadata)
-    {
-        var map = new Dictionary<BytecodeMethod, (int, BytecodeMethodMetadata)>(program.Methods.Length);
-        for (int i = 0; i < program.Methods.Length; i++)
-            map[program.Methods[i]] = (i, metadata.MethodMetadata[i]);
-        return map;
-    }
 }

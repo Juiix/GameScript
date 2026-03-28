@@ -7,6 +7,7 @@ public interface IScriptState
     ScriptExecution Execution { get; }
     BytecodeProgram? Program { get; }
     int FrameDepth { get; }
+    FrameView CurrentFrameView { get; }
     int CopyFrames(Span<FrameView> destination);
     Value GetLocalInFrame(int frameIndex, int localIndex);
 }

@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using GameScript.Bytecode;
 
 namespace GameScript.DebugAdapter;
@@ -12,17 +11,11 @@ public sealed class DebugScriptRunner<TContext>(
     ScriptRunner<TContext> runner,
     ScriptDebugToken token,
     BreakpointIndex breakpointIndex,
-    BytecodeProgram program,
-    BytecodeProgramMetadata metadata,
     ScriptDebugHost host,
     int threadId)
     : IScriptRunner<TContext>
     where TContext : IScriptContext
 {
-    // Maps BytecodeMethod → (methodIndex, metadata) for O(1) line-number lookup
-    private readonly Dictionary<BytecodeMethod, (int index, BytecodeMethodMetadata meta)> _methodMap
-        = BuildMethodMap(program, metadata);
-
     public ScriptExecution Run(ScriptState<TContext> state)
     {
         while (state.Execution == ScriptExecution.Running)
@@ -55,7 +48,7 @@ public sealed class DebugScriptRunner<TContext>(
 
     private (int line, string? file) GetLineAndFile(FrameView frame)
     {
-        if (!_methodMap.TryGetValue(frame.Method, out var entry))
+        if (host.MethodMap == null || !host.MethodMap.TryGetValue(frame.Method, out var entry))
             return (-1, null);
 
         var lineNumbers = entry.meta.LineNumbers;
@@ -63,14 +56,5 @@ public sealed class DebugScriptRunner<TContext>(
             return (-1, null);
 
         return (lineNumbers[frame.Ip], entry.meta.FilePath);
-    }
-
-    private static Dictionary<BytecodeMethod, (int, BytecodeMethodMetadata)> BuildMethodMap(
-        BytecodeProgram program, BytecodeProgramMetadata metadata)
-    {
-        var map = new Dictionary<BytecodeMethod, (int, BytecodeMethodMetadata)>(program.Methods.Length);
-        for (int i = 0; i < program.Methods.Length; i++)
-            map[program.Methods[i]] = (i, metadata.MethodMetadata[i]);
-        return map;
     }
 }
