@@ -26,7 +26,7 @@ public sealed class DebugScriptRunner<TContext>(
             var (line, file) = GetLineAndFile(frame);
 
             var shouldPause = token.CheckAndPause(state.FrameDepth, line, out var reason);
-            if (!shouldPause && line >= 0 && file != null && breakpointIndex.IsBreakpoint(file, line))
+            if (!shouldPause && !token.IsStepping && line >= 0 && file != null && breakpointIndex.IsBreakpoint(file, line))
             {
                 shouldPause = true;
                 reason = PauseReason.Breakpoint;
@@ -55,6 +55,6 @@ public sealed class DebugScriptRunner<TContext>(
         if ((uint)frame.Ip >= (uint)lineNumbers.Length)
             return (-1, null);
 
-        return (lineNumbers[frame.Ip], entry.meta.FilePath);
+        return (lineNumbers[frame.Ip] + 1, entry.meta.FilePath);
     }
 }

@@ -13,6 +13,7 @@ public sealed class ScriptDebugToken
     private readonly SemaphoreSlim _pauseGate = new(0, 1);
 
     public bool IsDisconnected { get; private set; }
+    public bool IsStepping => _stepContext != null;
 
     /// <summary>
     /// Called by the DAP thread to request a pause at the next instruction.
