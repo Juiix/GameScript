@@ -160,10 +160,15 @@ public sealed class BytecodeCompiler<TCommandOp> where TCommandOp : struct, Enum
 			nextSlot - paramCount,
 			methodNode.ReturnTypes?.Count ?? 0);
 
+		var localNames = new string[nextSlot];
+		foreach (var (localName, slot) in _localSlots)
+			localNames[slot] = localName;
+
 		var metadata = new BytecodeMethodMetadata(
 			name,
 			[.. _lineNumbers],
-			methodNode.FilePath);
+			methodNode.FilePath,
+			localNames);
 
 		return new BytecodeMethodResult(method, metadata);
 	}

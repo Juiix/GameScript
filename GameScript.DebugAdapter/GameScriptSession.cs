@@ -175,14 +175,19 @@ internal sealed class GameScriptSession(
         var localCount = frame.Method.ParamCount + frame.Method.LocalsCount;
         var variables = new List<Variable>(localCount);
 
+        var localNames = host.MethodMap != null && host.MethodMap.TryGetValue(frame.Method, out var methodEntry)
+            ? methodEntry.meta.LocalNames
+            : [];
+
         for (int i = 0; i < localCount; i++)
         {
             var value = entry.State.GetLocalInFrame(frameIndex, i);
+            var name = localNames != null && i < localNames.Length && localNames[i] != null
+                ? localNames[i]
+                : i < frame.Method.ParamCount ? $"param_{i}" : $"local_{i - frame.Method.ParamCount}";
             variables.Add(new Variable
             {
-                Name = i < frame.Method.ParamCount
-                    ? $"param_{i}"
-                    : $"local_{i - frame.Method.ParamCount}",
+                Name = name,
                 Value = FormatValue(value),
                 VariablesReference = 0,
             });
