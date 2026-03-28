@@ -16,6 +16,11 @@ public sealed class DebugScriptRunner<TContext>(
     : IScriptRunner<TContext>
     where TContext : IScriptContext
 {
+    // Tracks the file+line where we last paused so we don't re-break on the
+    // same position immediately after resuming (handles both Continue and Step).
+    private string? _lastPausedFile;
+    private int _lastPausedLine = -1;
+
     public ScriptExecution Run(ScriptState<TContext> state)
     {
         while (state.Execution == ScriptExecution.Running)
@@ -25,8 +30,17 @@ public sealed class DebugScriptRunner<TContext>(
             var frame = state.CurrentFrameView;
             var (line, file) = GetLineAndFile(frame);
 
+            // Clear last-paused tracking once we move to a different line.
+            if (file != _lastPausedFile || line != _lastPausedLine)
+            {
+                _lastPausedFile = null;
+                _lastPausedLine = -1;
+            }
+
             var shouldPause = token.CheckAndPause(state.FrameDepth, line, out var reason);
-            if (!shouldPause && !token.IsStepping && line >= 0 && file != null && breakpointIndex.IsBreakpoint(file, line))
+            if (!shouldPause && line >= 0 && file != null
+                && !(_lastPausedFile == file && _lastPausedLine == line)
+                && breakpointIndex.IsBreakpoint(file, line))
             {
                 shouldPause = true;
                 reason = PauseReason.Breakpoint;
@@ -34,6 +48,8 @@ public sealed class DebugScriptRunner<TContext>(
 
             if (shouldPause)
             {
+                _lastPausedFile = file;
+                _lastPausedLine = line;
                 host.ScriptPaused?.Invoke(threadId, reason);
                 token.WaitForResume();
                 if (token.IsDisconnected) break;
