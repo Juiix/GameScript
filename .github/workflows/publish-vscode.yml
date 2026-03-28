@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
     paths:
+      - ".github/workflows/publish-vscode.yml"
       - "Directory.Build.props"
       - "GameScript.Vscode/**"
       - "GameScript.LanguageServer/**"
