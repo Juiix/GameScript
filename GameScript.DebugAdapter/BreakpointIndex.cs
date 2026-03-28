@@ -38,7 +38,7 @@ public sealed class BreakpointIndex
                 continue;
 
             foreach (var line in methodMeta.LineNumbers)
-                validLines.Add(line);
+                validLines.Add(line + 1); // metadata is 0-indexed; DAP lines are 1-indexed
         }
 
         var verified = new List<int>(requestedLines.Length);
@@ -89,7 +89,7 @@ public sealed class BreakpointIndex
                     if (!string.Equals(Canonicalize(methodMeta.FilePath), canonical, StringComparison.OrdinalIgnoreCase))
                         continue;
                     foreach (var line in methodMeta.LineNumbers)
-                        validLines.Add(line);
+                        validLines.Add(line + 1); // metadata is 0-indexed; DAP lines are 1-indexed
                 }
 
                 var prev = _index.TryGetValue(canonical, out var prevSet) ? prevSet : new HashSet<int>();

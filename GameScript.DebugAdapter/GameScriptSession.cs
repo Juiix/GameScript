@@ -243,7 +243,7 @@ internal sealed class GameScriptSession(
         if ((uint)frame.Ip >= (uint)lineNumbers.Length)
             return (-1, entry.meta.FilePath);
 
-        return (lineNumbers[frame.Ip], entry.meta.FilePath);
+        return (lineNumbers[frame.Ip] + 1, entry.meta.FilePath); // metadata is 0-indexed; DAP expects 1-indexed
     }
 
     private static string FormatValue(Value value) => value.Type switch
