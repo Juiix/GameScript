@@ -101,6 +101,26 @@ export function activate(context: vscode.ExtensionContext): void {
 
     // VS Code will call client.dispose() automatically on shutdown
     context.subscriptions.push(client);
+
+    // 8) Register the debug adapter factory — connects VS Code directly
+    //    to the game's TCP DAP server (no adapter executable needed)
+    context.subscriptions.push(
+        vscode.debug.registerDebugAdapterDescriptorFactory(
+            'gamescript',
+            new GameScriptDebugAdapterFactory()
+        )
+    );
+}
+
+class GameScriptDebugAdapterFactory implements vscode.DebugAdapterDescriptorFactory {
+    createDebugAdapterDescriptor(
+        session: vscode.DebugSession,
+        _executable: vscode.DebugAdapterExecutable | undefined
+    ): vscode.ProviderResult<vscode.DebugAdapterDescriptor> {
+        const host: string = session.configuration.host ?? '127.0.0.1';
+        const port: number = session.configuration.port ?? 4711;
+        return new vscode.DebugAdapterServer(port, host);
+    }
 }
 
 /**

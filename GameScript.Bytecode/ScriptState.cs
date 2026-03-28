@@ -2,7 +2,7 @@ using System;
 
 namespace GameScript.Bytecode;
 
-public sealed class ScriptState<TContext>(int stackSize = 1024, int frameSize = 64) where TContext : IScriptContext
+public sealed class ScriptState<TContext>(int stackSize = 1024, int frameSize = 64) : IScriptState where TContext : IScriptContext
 {
     private int _sp = 0;
     private int _fp = 0;
@@ -66,6 +66,21 @@ public sealed class ScriptState<TContext>(int stackSize = 1024, int frameSize = 
         OpCode = frame.CurrentOpCode;
         Operand = frame.CurrentOperand;
     }
+
+    public int FrameDepth => _fp;
+
+    public FrameView CurrentFrameView => new(_frames[_fp].Method, _frames[_fp].Ip, _frames[_fp].StackStart);
+
+    public int CopyFrames(Span<FrameView> destination)
+    {
+        var count = Math.Min(_fp + 1, destination.Length);
+        for (int i = 0; i < count; i++)
+            destination[i] = new FrameView(_frames[i].Method, _frames[i].Ip, _frames[i].StackStart);
+        return count;
+    }
+
+    public Value GetLocalInFrame(int frameIndex, int localIndex) =>
+        _stack[_frames[frameIndex].StackStart + localIndex];
 
     public ref Value GetLocal(int localIndex)
     {

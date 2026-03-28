@@ -2,9 +2,12 @@
 
 namespace GameScript.Bytecode;
 
-public sealed class ScriptRunner<TContext>(IScriptHandler<TContext>[] handlers) where TContext : IScriptContext
+public sealed class ScriptRunner<TContext>(IScriptHandler<TContext>[] handlers) : IScriptRunner<TContext> where TContext : IScriptContext
 {
     private readonly IScriptHandler<TContext>[] _handlers = handlers;
+
+    public IScriptHandler<TContext>? GetHandler(ushort opCode) =>
+        (uint)opCode < (uint)_handlers.Length ? _handlers[opCode] : null;
 
     public ScriptExecution Run(ScriptState<TContext> state)
     {

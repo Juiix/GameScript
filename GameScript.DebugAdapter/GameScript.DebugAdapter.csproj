@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
@@ -6,16 +6,16 @@
     <LangVersion>latest</LangVersion>
 
     <!-- NuGet package metadata -->
-    <PackageId>GameScript.Language</PackageId>
+    <PackageId>GameScript.DebugAdapter</PackageId>
     <Version>1.3.0</Version>
     <Authors>Tucker Ulrich</Authors>
     <Company>Ye Olde Games</Company>
-    <Description>Core compiler front‑end for GameScript: AST, lexer, parser, type checker, and bytecode emitter.</Description>
+    <Description>Debug Adapter Protocol (DAP) server for GameScript: embed in your game process to enable breakpoints, step execution, and variable inspection from VS Code.</Description>
     <PackageProjectUrl>https://github.com/Juiix/GameScript</PackageProjectUrl>
     <RepositoryUrl>https://github.com/Juiix/GameScript</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
-    <PackageTags>GameScript;Scripting;GameDev;Toolchain</PackageTags>
+    <PackageTags>GameScript;DebugAdapter;DAP;Debugger;Breakpoints;VSCode</PackageTags>
 
     <!-- Symbols & SourceLink -->
     <IncludeSymbols>true</IncludeSymbols>
@@ -23,9 +23,9 @@
     <EmbedUntrackedSources>true</EmbedUntrackedSources>
   </PropertyGroup>
 
-  <PropertyGroup Condition="'$(TargetFramework)' == 'net8.0'">
-    <Nullable>enable</Nullable>
-  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="OmniSharp.Extensions.DebugAdapter.Server" Version="0.19.9" />
+  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\GameScript.Bytecode\GameScript.Bytecode.csproj" />

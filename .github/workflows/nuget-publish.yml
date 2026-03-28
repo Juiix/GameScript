@@ -6,6 +6,7 @@ on:
     paths:
       - "GameScript.Language/**"
       - "GameScript.Bytecode/**"
+      - "GameScript.DebugAdapter/**"
   workflow_dispatch: {}
 
 jobs:
@@ -29,16 +30,19 @@ jobs:
         run: |
           dotnet restore GameScript.Language/GameScript.Language.csproj
           dotnet restore GameScript.Bytecode/GameScript.Bytecode.csproj
+          dotnet restore GameScript.DebugAdapter/GameScript.DebugAdapter.csproj
 
       - name: 🏗️ Build (Release)
         run: |
           dotnet build GameScript.Language/GameScript.Language.csproj --configuration Release --no-restore
           dotnet build GameScript.Bytecode/GameScript.Bytecode.csproj --configuration Release --no-restore
+          dotnet build GameScript.DebugAdapter/GameScript.DebugAdapter.csproj --configuration Release --no-restore
 
       - name: 📦 Pack NuGet packages
         run: |
           dotnet pack GameScript.Language/GameScript.Language.csproj --configuration Release --no-build --output ./nupkgs
           dotnet pack GameScript.Bytecode/GameScript.Bytecode.csproj --configuration Release --no-build --output ./nupkgs
+          dotnet pack GameScript.DebugAdapter/GameScript.DebugAdapter.csproj --configuration Release --no-build --output ./nupkgs
 
       - name: 🚚 Upload built packages as workflow artifact
         uses: actions/upload-artifact@v4
