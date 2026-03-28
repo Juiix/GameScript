@@ -33,7 +33,7 @@ jobs:
     # ── Stamp version from Directory.Build.props ─────────────────────
     - name: Set version
       run: |
-        VERSION=$(grep -oP '(?<=<GameScriptVersion>)[^<]+' Directory.Build.props)
+        VERSION=$(sed -n 's/.*<GameScriptVersion>\(.*\)<\/GameScriptVersion>.*/\1/p' Directory.Build.props)
         jq --arg v "$VERSION" '.version = $v' GameScript.Vscode/package.json > tmp.json
         mv tmp.json GameScript.Vscode/package.json
 
