@@ -805,7 +805,11 @@ public ref struct AstParser
 	// Parses a call expression when an identifier is followed by an argument list.
 	private CallExpressionNode ParseCallExpression(Token ident, IdentifierType identifierType, FilePosition funcStart)
 	{
-		var name = ident.Value.TrimStart("~@".AsSpan()).ToString();
+		var raw = ident.Value.TrimStart("~@".AsSpan());
+		int dotPrefix = 0;
+		while (dotPrefix < raw.Length && raw[dotPrefix] == '.')
+			dotPrefix++;
+		var name = raw.Slice(dotPrefix).ToString();
 		var nameNode = new IdentifierNode(name, identifierType, _filePath, ident.Range);
 
 		// '(' already expected next
@@ -827,7 +831,7 @@ public ref struct AstParser
 		}
 
 		var fileRange = new FileRange(funcStart, _previous.End);
-		return new CallExpressionNode(nameNode, args, _filePath, in fileRange);
+		return new CallExpressionNode(nameNode, args, dotPrefix, _filePath, in fileRange);
 	}
 
 	private ExpressionNode ParseTupleOrGroupingExpression()
@@ -1136,6 +1140,7 @@ public ref struct AstParser
 			'%' => IdentifierType.Context,
 			'~' => IdentifierType.Func,
 			'@' => IdentifierType.Label,
+			'.' => IdentifierType.Command,
 			_ => char.IsLetter(name[0]) ? IdentifierType.Command : IdentifierType.Unknown
 		};
 	}

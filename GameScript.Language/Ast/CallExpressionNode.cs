@@ -7,11 +7,13 @@ namespace GameScript.Language.Ast
 	public sealed class CallExpressionNode(
 		IdentifierNode functionName,
 		List<ExpressionNode>? arguments,
+		int dotPrefix,
 		string filePath,
 		in FileRange fileRange) : ExpressionNode(filePath, in fileRange)
 	{
 		public IdentifierNode FunctionName { get; } = functionName;
 		public List<ExpressionNode>? Arguments { get; } = arguments;
+		public int DotPrefix { get; } = dotPrefix;
 		public override IEnumerable<AstNode> Children
 		{
 			get

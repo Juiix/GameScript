@@ -26,7 +26,7 @@ internal sealed class CompletionHandler(
 		{
 			DocumentSelector = TextDocumentSelector.ForLanguage("gamescript"),
 			ResolveProvider = false,
-			TriggerCharacters = new Container<string>("$", "^", "%", "~", "@")
+			TriggerCharacters = new Container<string>("$", "^", "%", "~", "@", ".")
 		};
 	}
 
@@ -43,17 +43,27 @@ internal sealed class CompletionHandler(
 		}
 
 		var prefix = rootData.GetPrefix(text, request.Position, out var targetType);
-		var returnSymbols = new List<SymbolInfo>();
+		// strip leading dots for matching — symbol names don't include the dot prefix
+		prefix = prefix.TrimStart('.');
+		var startsWithSymbols = new List<SymbolInfo>();
+		var containsSymbols = new List<SymbolInfo>();
 
 		// get local scope
 		var localIndex = rootData.GetLocalIndex(request.Position.Line, request.Position.Character);
 		if (localIndex != null)
 		{
-			returnSymbols.AddRange(localIndex.Symbols.Where(x => Matches(x.Name, x.IdentifierType, prefix, targetType)));
+			foreach (var x in localIndex.Symbols)
+				AddIfMatch(x, prefix, targetType, startsWithSymbols, containsSymbols);
 		}
 
 		// add global symbols
-		returnSymbols.AddRange(_symbols.Symbols.Where(x => x.IdentifierType != IdentifierType.Trigger && Matches(x.Name, x.IdentifierType, prefix, targetType)));
+		foreach (var x in _symbols.Symbols)
+		{
+			if (x.IdentifierType != IdentifierType.Trigger)
+				AddIfMatch(x, prefix, targetType, startsWithSymbols, containsSymbols);
+		}
+
+		var returnSymbols = startsWithSymbols.Concat(containsSymbols);
 
 		// symbol items
 		var symbolItems = returnSymbols.Select(x => new CompletionItem
@@ -79,8 +89,9 @@ internal sealed class CompletionHandler(
 		// keyword items
 		if (targetType == IdentifierType.Unknown)
 		{
-			var keywordItems = Constants.AllKeywords
-				.Where(x => x.StartsWith(prefix))
+			var startsWithKeywords = Constants.AllKeywords.Where(x => x.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
+			var containsKeywords = Constants.AllKeywords.Where(x => !x.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) && x.Contains(prefix, StringComparison.OrdinalIgnoreCase));
+			var keywordItems = startsWithKeywords.Concat(containsKeywords)
 				.Select(x => new CompletionItem
 				{
 					Label = x,
@@ -91,9 +102,15 @@ internal sealed class CompletionHandler(
 		return new CompletionList(items, false);
 	}
 
-	private static bool Matches(string name, IdentifierType idType, string prefix, IdentifierType targetType)
+	private static void AddIfMatch(SymbolInfo symbol, string prefix, IdentifierType targetType,
+		List<SymbolInfo> startsWithList, List<SymbolInfo> containsList)
 	{
-		return name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) &&
-			(targetType == IdentifierType.Unknown || idType == targetType);
+		if (targetType != IdentifierType.Unknown && symbol.IdentifierType != targetType)
+			return;
+
+		if (symbol.Name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+			startsWithList.Add(symbol);
+		else if (symbol.Name.Contains(prefix, StringComparison.OrdinalIgnoreCase))
+			containsList.Add(symbol);
 	}
 }

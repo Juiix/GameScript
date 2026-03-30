@@ -525,7 +525,7 @@ public sealed class BytecodeCompiler<TCommandOp> where TCommandOp : struct, Enum
 					case IdentifierType.Command:
 						if (CommandHandler<TCommandOp>.TryGetOp(call.FunctionName.Name, out var commandOp))
 						{
-							Emit(commandOp, 0, expression.FileRange.Start.Line);
+							Emit(commandOp, call.DotPrefix, expression.FileRange.Start.Line);
 							break;
 						}
 						else

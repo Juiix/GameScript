@@ -188,6 +188,21 @@ namespace GameScript.Language.Lexer
 			}
 
 			/*──────────────────────────────────────────────────────────────
+			 * 7b. Dot-prefixed command identifier (e.g. .test, ..test)
+			 *──────────────────────────────────────────────────────────────*/
+			if (ch == '.' && HasLetterAfterDots(_column))
+			{
+				int start = _column;
+				while (_column < _text.Length && _text[_column] == '.')
+					_column++;
+				while (_column < _text.Length && (char.IsLetterOrDigit(_text[_column]) || _text[_column] == '_'))
+					_column++;
+
+				ReadOnlySpan<char> span = _text.Slice(start, _column - start);
+				return new Token(TokenType.Identifier, span, CurrentRange(pos));
+			}
+
+			/*──────────────────────────────────────────────────────────────
 			 * 8.  Identifier / keyword / boolean
 			 *──────────────────────────────────────────────────────────────*/
 			if (char.IsLetter(ch) || ch == '_' || IsVariableAccessor(ch) || IsFunctionCall(ch))
@@ -323,6 +338,12 @@ namespace GameScript.Language.Lexer
 		private static bool IsFunctionCall(char c)
 		{
 			return c == '@' || c == '~';
+		}
+
+		private bool HasLetterAfterDots(int pos)
+		{
+			while (pos < _text.Length && _text[pos] == '.') pos++;
+			return pos < _text.Length && (char.IsLetter(_text[pos]) || _text[pos] == '_');
 		}
 
 		private static long EncodeSpan(ReadOnlySpan<char> span)

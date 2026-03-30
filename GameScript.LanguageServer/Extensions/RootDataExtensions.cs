@@ -65,8 +65,18 @@ namespace GameScript.LanguageServer.Extensions
 			while (i >= 0 && (char.IsLetterOrDigit(text[i]) || text[i] == '_'))
 				i--;
 
+			// walk back over dot prefixes for command calls (e.g. .test, ..test)
+			while (i >= 0 && text[i] == '.')
+				i--;
+
 			identifierType = i >= 0 ? GetIdentifierType(text[i]) : IdentifierType.Unknown;
-			return text[(i + 1)..offset];
+
+			// if we walked back over dots, this is a command regardless of what precedes
+			var prefix = text[(i + 1)..offset];
+			if (prefix.Length > 0 && prefix[0] == '.')
+				identifierType = IdentifierType.Command;
+
+			return prefix;
 		}
 
 		/// <summary>
