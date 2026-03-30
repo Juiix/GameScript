@@ -411,6 +411,8 @@ public sealed class BytecodeCompiler<TCommandOp> where TCommandOp : struct, Enum
 			case IdentifierNode id:
 				if (TryGetVarSlot(id.Type, id.Name, out slot))
 				{
+					if (id.DotPrefix > 0)
+						slot = (id.DotPrefix << 16) | (slot & 0xFFFF);
 					EmitLoadVar(id.Type, slot, expression.FileRange.Start.Line);
 				}
 				else if (id.Type == IdentifierType.Constant && _globals.TryGetValue(id.Name, out var constValue))
@@ -469,6 +471,9 @@ public sealed class BytecodeCompiler<TCommandOp> where TCommandOp : struct, Enum
 				{
 					throw new Exception("Invalid left‑hand side in assignment");
 				}
+
+				if (vid.DotPrefix > 0)
+					slot = (vid.DotPrefix << 16) | (slot & 0xFFFF);
 
 				// Handle simple '='
 				if (assign.Operator == AssignmentOperator.Assign)
@@ -546,6 +551,8 @@ public sealed class BytecodeCompiler<TCommandOp> where TCommandOp : struct, Enum
 					unary.Operand is IdentifierNode incrTarget &&
 					TryGetVarSlot(incrTarget.Type, incrTarget.Name, out slot))
 				{
+					if (incrTarget.DotPrefix > 0)
+						slot = (incrTarget.DotPrefix << 16) | (slot & 0xFFFF);
 					// prefix: evaluate to (x = x ± 1), leave new value on stack
 					EmitLoadVar(incrTarget.Type, slot, expression.FileRange.Start.Line);
 
@@ -585,6 +592,8 @@ public sealed class BytecodeCompiler<TCommandOp> where TCommandOp : struct, Enum
 					postfix.Operand is IdentifierNode target &&
 					TryGetVarSlot(target.Type, target.Name, out slot))
 				{
+					if (target.DotPrefix > 0)
+						slot = (target.DotPrefix << 16) | (slot & 0xFFFF);
 					// postfix: evaluate to original x, but side-effect x = x ± 1
 					// push original x first (this is the expression result)
 					EmitLoadVar(target.Type, slot, expression.FileRange.Start.Line);
@@ -691,6 +700,9 @@ public sealed class BytecodeCompiler<TCommandOp> where TCommandOp : struct, Enum
 				throw new KeyNotFoundException($"Unknown local variable '{ident.Name}'");
 			}
 
+			if (ident.DotPrefix > 0)
+				slot = (ident.DotPrefix << 16) | (slot & 0xFFFF);
+
 			// store the top of the stack into that slot
 			EmitStoreVar(ident.Type, slot, left.FileRange.Start.Line);
 		}
@@ -707,6 +719,9 @@ public sealed class BytecodeCompiler<TCommandOp> where TCommandOp : struct, Enum
 			{
 				throw new KeyNotFoundException($"Unknown local variable '{ident.Name}'");
 			}
+
+			if (ident.DotPrefix > 0)
+				slot = (ident.DotPrefix << 16) | (slot & 0xFFFF);
 
 			// load them back on the stack
 			EmitLoadVar(ident.Type, slot, left.FileRange.Start.Line);

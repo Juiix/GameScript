@@ -161,6 +161,15 @@ namespace GameScript.Language.Visitors
 				}
 			}
 
+			if (node.DotPrefix > 0 && node.Type != IdentifierType.Context)
+			{
+				Error($"'.' prefix is not supported on {node.Type} variables.", node);
+			}
+			else if (node.DotPrefix > 1)
+			{
+				Error($"Context variables only support a single '.' prefix.", node);
+			}
+
 			if (symbol?.IdentifierType == IdentifierType.Local &&
 				node.FileRange.Start.Position < symbol.FileRange.Start.Position)
 			{

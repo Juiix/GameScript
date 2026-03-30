@@ -190,10 +190,13 @@ namespace GameScript.Language.Lexer
 			/*──────────────────────────────────────────────────────────────
 			 * 7b. Dot-prefixed command identifier (e.g. .test, ..test)
 			 *──────────────────────────────────────────────────────────────*/
-			if (ch == '.' && HasLetterAfterDots(_column))
+			if (ch == '.' && HasLetterOrAccessorAfterDots(_column))
 			{
 				int start = _column;
 				while (_column < _text.Length && _text[_column] == '.')
+					_column++;
+				// consume variable accessor prefix (e.g. % in .%foo)
+				if (_column < _text.Length && IsVariableAccessor(_text[_column]))
 					_column++;
 				while (_column < _text.Length && (char.IsLetterOrDigit(_text[_column]) || _text[_column] == '_'))
 					_column++;
@@ -340,10 +343,10 @@ namespace GameScript.Language.Lexer
 			return c == '@' || c == '~';
 		}
 
-		private bool HasLetterAfterDots(int pos)
+		private bool HasLetterOrAccessorAfterDots(int pos)
 		{
 			while (pos < _text.Length && _text[pos] == '.') pos++;
-			return pos < _text.Length && (char.IsLetter(_text[pos]) || _text[pos] == '_');
+			return pos < _text.Length && (char.IsLetter(_text[pos]) || _text[pos] == '_' || IsVariableAccessor(_text[pos]));
 		}
 
 		private static long EncodeSpan(ReadOnlySpan<char> span)

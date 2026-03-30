@@ -780,12 +780,14 @@ public ref struct AstParser
 					return ParseCallExpression(ident, idType, start);
 
 				var bareName = ident.Value.TrimStart("@".AsSpan()).ToString();
-				return new IdentifierNode(bareName, idType,
+				return new IdentifierNode(bareName, idType, 0,
 										  _filePath, new FileRange(start, _previous.End));
 			}
 
-			var name = ident.Value.TrimStart("^$%".AsSpan()).ToString();
-			return new IdentifierNode(name, idType,
+			var raw = ident.Value.TrimStart(".".AsSpan());
+			int dotPrefix = ident.Value.Length - raw.Length;
+			var name = raw.TrimStart("^$%".AsSpan()).ToString();
+			return new IdentifierNode(name, idType, dotPrefix,
 									  _filePath, new FileRange(start, _previous.End));
 		}
 
@@ -809,8 +811,10 @@ public ref struct AstParser
 		int dotPrefix = 0;
 		while (dotPrefix < raw.Length && raw[dotPrefix] == '.')
 			dotPrefix++;
+		if (dotPrefix > 1)
+			Error("Commands only support a single '.' prefix.", ident.Range);
 		var name = raw.Slice(dotPrefix).ToString();
-		var nameNode = new IdentifierNode(name, identifierType, _filePath, ident.Range);
+		var nameNode = new IdentifierNode(name, identifierType, 0, _filePath, ident.Range);
 
 		// '(' already expected next
 		Expect(TokenType.OpenParen, "Expected '(' after method identifier", "(".AsSpan());
@@ -1133,6 +1137,13 @@ public ref struct AstParser
 	private static IdentifierType ParseIdentifierType(ReadOnlySpan<char> name)
 	{
 		if (name.IsEmpty) return IdentifierType.Unknown;
+		// dot-prefixed context variable (e.g. .%foo)
+		if (name[0] == '.')
+		{
+			int i = 0;
+			while (i < name.Length && name[i] == '.') i++;
+			if (i < name.Length && name[i] == '%') return IdentifierType.Context;
+		}
 		return name[0] switch
 		{
 			'$' => IdentifierType.Local,
