@@ -2,6 +2,11 @@
 
 All notable changes to GameScript will be documented in this file.
 
+## [1.4.1]
+
+### Added
+- Constant syntax highlighting (`^`) in object definition data files
+
 ## [1.4.0]
 
 ### Added

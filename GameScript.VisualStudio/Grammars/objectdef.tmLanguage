@@ -106,6 +106,12 @@
         <array>
           <dict>
             <key>name</key>
+            <string>variable.other.constant.objectdef</string>
+            <key>match</key>
+            <string>\^[A-Za-z_]\w*</string>
+          </dict>
+          <dict>
+            <key>name</key>
             <string>string.unquoted.value.objectdef</string>
             <key>match</key>
             <string>[^#\r\n]+</string>
