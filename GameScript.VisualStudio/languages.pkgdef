@@ -19,6 +19,10 @@
 "*.tile"="source.objectdef"
 "*.obj"="source.objectdef"
 "*.inv"="source.objectdef"
+"*.anim"="source.objectdef"
+"*.param"="source.objectdef"
+"*.tex"="source.objectdef"
+"*.rig"="source.objectdef"
 
 ;----------------------------------------
 ; Map scope name → specific grammar file
@@ -49,4 +53,12 @@
 [$RootKey$\ShellFileAssociations\.obj]
 "DefaultIconMoniker"="KnownMonikers.ComponentFile"
 [$RootKey$\ShellFileAssociations\.inv]
+"DefaultIconMoniker"="KnownMonikers.ComponentFile"
+[$RootKey$\ShellFileAssociations\.anim]
+"DefaultIconMoniker"="KnownMonikers.ComponentFile"
+[$RootKey$\ShellFileAssociations\.param]
+"DefaultIconMoniker"="KnownMonikers.ComponentFile"
+[$RootKey$\ShellFileAssociations\.tex]
+"DefaultIconMoniker"="KnownMonikers.ComponentFile"
+[$RootKey$\ShellFileAssociations\.rig]
 "DefaultIconMoniker"="KnownMonikers.ComponentFile"

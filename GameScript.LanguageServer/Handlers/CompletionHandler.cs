@@ -4,6 +4,7 @@ using GameScript.Language.Index;
 using GameScript.Language.Symbols;
 using GameScript.LanguageServer.Caches;
 using GameScript.LanguageServer.Extensions;
+using GameScript.LanguageServer.Tools;
 using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Protocol.Document;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
@@ -24,7 +25,9 @@ internal sealed class CompletionHandler(
 	{
 		return new()
 		{
-			DocumentSelector = TextDocumentSelector.ForLanguage("gamescript"),
+			DocumentSelector = new TextDocumentSelector(
+				TextDocumentFilter.ForLanguage("gamescript"),
+				TextDocumentFilter.ForLanguage("objectdef")),
 			ResolveProvider = false,
 			TriggerCharacters = new Container<string>("$", "^", "%", "~", "@", ".")
 		};
@@ -35,6 +38,11 @@ internal sealed class CompletionHandler(
 #pragma warning restore CS1998 // Async method lacks 'await' operators and will run synchronously
 	{
 		var filePath = request.TextDocument.Uri.GetNormalizedFilePath();
+
+		// Object definition files only support constant completion
+		if (ExtensionFilter.IsObjectDef(filePath))
+			return HandleObjectDefCompletion(filePath, request.Position);
+
 		if (!_openDocumentCache.TryGet(filePath, out var text, out var fileVersion) ||
 			!_astCache.TryGetRoot(filePath, out var rootData))
 		{
@@ -100,6 +108,57 @@ internal sealed class CompletionHandler(
 			items = keywordItems.Concat(symbolItems);
 		}
 		return new CompletionList(items, false);
+	}
+
+	private CompletionList HandleObjectDefCompletion(string filePath, Position position)
+	{
+		if (!_openDocumentCache.TryGet(filePath, out var text, out _))
+			return new CompletionList();
+
+		var offset = GetOffsetFromPosition(text, position.Line, position.Character);
+		if (offset < 0) return new CompletionList();
+
+		// walk backwards to collect identifier characters
+		var i = offset - 1;
+		while (i >= 0 && (char.IsLetterOrDigit(text[i]) || text[i] == '_'))
+			i--;
+
+		// only offer completions after ^
+		if (i < 0 || text[i] != '^')
+			return new CompletionList();
+
+		var prefix = text[(i + 1)..offset];
+
+		var startsWithSymbols = new List<SymbolInfo>();
+		var containsSymbols = new List<SymbolInfo>();
+		foreach (var symbol in _symbols.Symbols)
+		{
+			if (symbol.IdentifierType != IdentifierType.Constant)
+				continue;
+			if (symbol.Name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+				startsWithSymbols.Add(symbol);
+			else if (symbol.Name.Contains(prefix, StringComparison.OrdinalIgnoreCase))
+				containsSymbols.Add(symbol);
+		}
+
+		var items = startsWithSymbols.Concat(containsSymbols).Select(x => new CompletionItem
+		{
+			Label = x.Name,
+			Kind = CompletionItemKind.Variable,
+			Detail = x.Signature
+		});
+		return new CompletionList(items, false);
+	}
+
+	private static int GetOffsetFromPosition(string text, int line, int character)
+	{
+		var offset = 0;
+		for (int l = 0; l < line; l++)
+		{
+			offset = text.IndexOf('\n', offset) + 1;
+			if (offset == 0) return -1;
+		}
+		return Math.Min(offset + character, text.Length);
 	}
 
 	private static void AddIfMatch(SymbolInfo symbol, string prefix, IdentifierType targetType,

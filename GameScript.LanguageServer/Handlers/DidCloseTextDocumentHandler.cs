@@ -23,7 +23,9 @@ internal sealed class DidCloseTextDocumentHandler(
 	{
 		return new()
 		{
-			DocumentSelector = TextDocumentSelector.ForLanguage("gamescript")
+			DocumentSelector = new TextDocumentSelector(
+				TextDocumentFilter.ForLanguage("gamescript"),
+				TextDocumentFilter.ForLanguage("objectdef"))
 		};
 	}
 }

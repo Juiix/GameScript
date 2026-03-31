@@ -79,7 +79,8 @@ export function activate(context: vscode.ExtensionContext): void {
     const serverOptions: ServerOptions = { run, debug };
     const clientOptions: LanguageClientOptions = {
         documentSelector: [
-            { scheme: 'file',     language: 'gamescript' }
+            { scheme: 'file',     language: 'gamescript' },
+            { scheme: 'file',     language: 'objectdef' }
         ],
         workspaceFolder: vscode.workspace.workspaceFolders?.[0],
         synchronize: {

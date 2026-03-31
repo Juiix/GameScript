@@ -1,6 +1,7 @@
 using GameScript.LanguageServer.Caches;
 using GameScript.LanguageServer.Extensions;
 using GameScript.LanguageServer.Services;
+using GameScript.LanguageServer.Tools;
 using MediatR;
 using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Protocol.Document;
@@ -96,7 +97,10 @@ internal sealed class DidChangeTextDocumentHandler(
 
 		var newVersion = requestVersion ?? ((currentVersion ?? 0) + 1);
 		_openDocumentCache.Update(filePath, text, newVersion);
-		_fileProcessingService.Queue(filePath);
+
+		if (ExtensionFilter.IsGameScript(filePath))
+			_fileProcessingService.Queue(filePath);
+
 		return Unit.Task;
 	}
 
@@ -104,7 +108,9 @@ internal sealed class DidChangeTextDocumentHandler(
 	{
 		return new()
 		{
-			DocumentSelector = TextDocumentSelector.ForLanguage("gamescript"),
+			DocumentSelector = new TextDocumentSelector(
+				TextDocumentFilter.ForLanguage("gamescript"),
+				TextDocumentFilter.ForLanguage("objectdef")),
 			SyncKind = TextDocumentSyncKind.Incremental
 		};
 	}

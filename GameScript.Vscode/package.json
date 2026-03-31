@@ -49,7 +49,11 @@
                   ".menu",
                   ".obj",
                   ".tile",
-                  ".inv"
+                  ".inv",
+                  ".anim",
+                  ".param",
+                  ".tex",
+                  ".rig"
                 ],
                 "configuration": "./resources/objectdef-configuration.json",
                 "icon": {

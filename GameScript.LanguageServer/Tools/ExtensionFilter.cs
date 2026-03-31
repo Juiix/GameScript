@@ -9,6 +9,10 @@
 		private static readonly HashSet<string> _ext =
 			new(StringComparer.OrdinalIgnoreCase) { ".gs", ".const", ".context" };
 
+		private static readonly HashSet<string> _objectDefExt =
+			new(StringComparer.OrdinalIgnoreCase)
+			{ ".varp", ".item", ".npc", ".menu", ".obj", ".tile", ".inv", ".anim", ".param", ".tex", ".rig" };
+
 		/// <summary>
 		/// Determines whether the specified file should be processed by the language server.
 		/// </summary>
@@ -18,5 +22,11 @@
 		/// </returns>
 		public static bool IsGameScript(string filePath) =>
 			_ext.Contains(Path.GetExtension(filePath));
+
+		/// <summary>
+		/// Determines whether the specified file is an object definition data file.
+		/// </summary>
+		public static bool IsObjectDef(string filePath) =>
+			_objectDefExt.Contains(Path.GetExtension(filePath));
 	}
 }
