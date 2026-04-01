@@ -2,6 +2,11 @@
 
 All notable changes to GameScript will be documented in this file.
 
+## [1.4.3]
+
+### Fixed
+- Negative integer literals now allowed in constant declarations
+
 ## [1.4.2]
 
 ### Added

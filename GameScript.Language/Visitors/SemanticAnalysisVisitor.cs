@@ -48,7 +48,9 @@ namespace GameScript.Language.Visitors
 		{
 			base.Visit(node);
 
-			if (node.Initializer is not LiteralNode)
+			var isLiteral = node.Initializer is LiteralNode;
+			var isNegatedLiteral = node.Initializer is UnaryExpressionNode { Operator: UnaryOperator.Negate, Operand: LiteralNode };
+			if (!isLiteral && !isNegatedLiteral)
 			{
 				Error("Only literal assignments are allowed in constant declaration.", node.Initializer);
 			}

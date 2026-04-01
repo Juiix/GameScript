@@ -85,12 +85,20 @@ public sealed class BytecodeCompiler<TCommandOp> where TCommandOp : struct, Enum
 		// for each top‐level constant
 		foreach (var c in constants)
 		{
-			if (c.Initializer is not LiteralNode literal)
+			Value v;
+			if (c.Initializer is LiteralNode literal)
+			{
+				v = ParseLiteral(literal);
+			}
+			else if (c.Initializer is UnaryExpressionNode { Operator: UnaryOperator.Negate, Operand: LiteralNode negLiteral })
+			{
+				v = Value.FromInt(-ParseLiteral(negLiteral).Int);
+			}
+			else
 			{
 				throw new InvalidOperationException("Constant initializer must be a literal expression");
 			}
 
-			Value v = ParseLiteral(literal);
 			_globals[c.Name.Name] = v;
 		}
 	}
