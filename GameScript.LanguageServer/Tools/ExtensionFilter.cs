@@ -11,7 +11,7 @@
 
 		private static readonly HashSet<string> _objectDefExt =
 			new(StringComparer.OrdinalIgnoreCase)
-			{ ".varp", ".item", ".npc", ".menu", ".obj", ".tile", ".inv", ".anim", ".param", ".tex", ".rig" };
+			{ ".varp", ".item", ".npc", ".menu", ".obj", ".tile", ".inv", ".anim", ".param", ".tex", ".rig", ".varn" };
 
 		/// <summary>
 		/// Determines whether the specified file should be processed by the language server.

@@ -53,7 +53,8 @@
                   ".anim",
                   ".param",
                   ".tex",
-                  ".rig"
+                  ".rig",
+                  ".varn"
                 ],
                 "configuration": "./resources/objectdef-configuration.json",
                 "icon": {

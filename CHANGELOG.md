@@ -2,6 +2,11 @@
 
 All notable changes to GameScript will be documented in this file.
 
+## [1.4.2]
+
+### Added
+- New data file extension: `.varn`
+
 ## [1.4.1]
 
 ### Added

@@ -23,6 +23,7 @@
 "*.param"="source.objectdef"
 "*.tex"="source.objectdef"
 "*.rig"="source.objectdef"
+"*.varn"="source.objectdef"
 
 ;----------------------------------------
 ; Map scope name → specific grammar file
@@ -61,4 +62,6 @@
 [$RootKey$\ShellFileAssociations\.tex]
 "DefaultIconMoniker"="KnownMonikers.ComponentFile"
 [$RootKey$\ShellFileAssociations\.rig]
+"DefaultIconMoniker"="KnownMonikers.ComponentFile"
+[$RootKey$\ShellFileAssociations\.varn]
 "DefaultIconMoniker"="KnownMonikers.ComponentFile"
