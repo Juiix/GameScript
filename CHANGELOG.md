@@ -2,6 +2,11 @@
 
 All notable changes to GameScript will be documented in this file.
 
+## [1.4.4]
+
+### Fixed
+- `IScriptContext` returning an int for a bool context variable is now coerced correctly (non-zero = true)
+
 ## [1.4.3]
 
 ### Fixed
