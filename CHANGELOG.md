@@ -2,6 +2,11 @@
 
 All notable changes to GameScript will be documented in this file.
 
+## [1.4.5]
+
+### Fixed
+- `Value.Int` now coerces bool to int (true = 1, false = 0)
+
 ## [1.4.4]
 
 ### Fixed

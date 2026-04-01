@@ -29,7 +29,7 @@ namespace GameScript.Bytecode
 			get
 			{
 				if (Type == ValueType.Null) return 0;
-				if (Type != ValueType.Int) throw new InvalidCastException();
+				if (Type != ValueType.Int && Type != ValueType.Bool) throw new InvalidCastException();
 				return (int)_number;
 			}
 		}
