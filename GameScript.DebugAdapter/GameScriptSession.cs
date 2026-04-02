@@ -193,6 +193,20 @@ internal sealed class GameScriptSession(
             });
         }
 
+        if (host.Metadata != null)
+        {
+            foreach (var (ctxName, slot) in host.Metadata.ContextNames)
+            {
+                var value = entry.State.GetContextValue(slot);
+                variables.Add(new Variable
+                {
+                    Name = ctxName,
+                    Value = FormatValue(value),
+                    VariablesReference = 0,
+                });
+            }
+        }
+
         return Task.FromResult(new VariablesResponse { Variables = new Container<Variable>(variables) });
     }
 

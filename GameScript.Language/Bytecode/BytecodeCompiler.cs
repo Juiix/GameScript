@@ -67,7 +67,8 @@ public sealed class BytecodeCompiler<TCommandOp> where TCommandOp : struct, Enum
 			[.. _methods],
 			[.. _constPool]
 		);
-		var metadata = new BytecodeProgramMetadata([.. _methodMetadata]);
+		var contextNames = _ctxSlots.Select(kv => (kv.Key, kv.Value)).OrderBy(x => x.Value).ToArray();
+		var metadata = new BytecodeProgramMetadata([.. _methodMetadata], contextNames);
 		return new BytecodeCompilerResult(program, metadata);
 	}
 

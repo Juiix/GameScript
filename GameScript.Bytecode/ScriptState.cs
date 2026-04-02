@@ -82,6 +82,8 @@ public sealed class ScriptState<TContext>(int stackSize = 1024, int frameSize = 
     public Value GetLocalInFrame(int frameIndex, int localIndex) =>
         _stack[_frames[frameIndex].StackStart + localIndex];
 
+    public Value GetContextValue(int slot) => Context!.GetValue(slot);
+
     public ref Value GetLocal(int localIndex)
     {
         return ref _stack[CurrentFrame.StackStart + localIndex];

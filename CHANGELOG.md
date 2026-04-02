@@ -2,6 +2,11 @@
 
 All notable changes to GameScript will be documented in this file.
 
+## [1.4.6]
+
+### Added
+- Context variables are now shown in the locals panel when paused in the debug adapter
+
 ## [1.4.5]
 
 ### Fixed
