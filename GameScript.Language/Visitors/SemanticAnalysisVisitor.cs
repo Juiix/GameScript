@@ -1,7 +1,9 @@
 ﻿using GameScript.Language.Ast;
+using GameScript.Language.File;
 using GameScript.Language.Index;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace GameScript.Language.Visitors
 {
@@ -75,6 +77,42 @@ namespace GameScript.Language.Visitors
 			_loopDepth++;
 			base.Visit(node);
 			_loopDepth--;
+		}
+
+		public override void Visit(BlockNode node)
+		{
+			UnreachableCodeCheck(node);
+			base.Visit(node);
+		}
+
+		private void UnreachableCodeCheck(BlockNode node)
+		{
+			if (node.Statements == null) return;
+
+			for (int i = 0; i < node.Statements.Count - 1; i++)
+			{
+				if (!IsTerminator(node.Statements[i])) continue;
+
+				var deadRange = FileRange.Combine(node.Statements
+					.Skip(i + 1)
+					.Select(x => x.FileRange));
+				Warning("Unreachable code detected.", deadRange, FileErrorTag.Unnecessary);
+				return;
+			}
+		}
+
+		// A statement that never falls through to the next statement in its block:
+		// return, break, continue, or a label call (one-way jump that never returns).
+		private static bool IsTerminator(AstNode statement)
+		{
+			return statement switch
+			{
+				ReturnStatementNode => true,
+				BreakStatementNode => true,
+				ContinueStatementNode => true,
+				CallExpressionNode call => call.FunctionName.Type == IdentifierType.Label,
+				_ => false,
+			};
 		}
 
 		public override void Visit(BreakStatementNode node)

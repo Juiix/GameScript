@@ -9,7 +9,7 @@
     <PackageId>GameScript.Language</PackageId>
     <Version>$(GameScriptVersion)</Version>
     <Authors>Tucker Ulrich</Authors>
-    <Company>Ye Olde Games</Company>
+    <Company>Giant Blade</Company>
     <Description>Core compiler front‑end for GameScript: AST, lexer, parser, type checker, and bytecode emitter.</Description>
     <PackageProjectUrl>https://github.com/Juiix/GameScript</PackageProjectUrl>
     <RepositoryUrl>https://github.com/Juiix/GameScript</RepositoryUrl>

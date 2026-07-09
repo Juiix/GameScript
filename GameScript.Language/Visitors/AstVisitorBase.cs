@@ -202,5 +202,10 @@ namespace GameScript.Language.Visitors
 		{
 			_errors.Add(new FileError(message, fileRange));
 		}
+
+		protected void Warning(string message, in FileRange fileRange, FileErrorTag tag = FileErrorTag.None)
+		{
+			_errors.Add(new FileError(message, fileRange, FileErrorSeverity.Warning, tag));
+		}
 	}
 }

@@ -72,7 +72,8 @@ namespace GameScript.LanguageServer.Services
 			{
 				Range = error.FileRange.ConvertRange(),
 				Message = error.Message,
-				Severity = DiagnosticSeverity.Error,
+				Severity = ConvertSeverity(error.Severity),
+				Tags = ConvertTag(error.Tag),
 				Source = "GameScript"
 			});
 
@@ -81,6 +82,27 @@ namespace GameScript.LanguageServer.Services
 				Uri = DocumentUri.FromFileSystemPath(filePath),
 				Diagnostics = new Container<Diagnostic>(diagnostics)
 			});
+		}
+
+		private static DiagnosticSeverity ConvertSeverity(FileErrorSeverity severity)
+		{
+			return severity switch
+			{
+				FileErrorSeverity.Warning => DiagnosticSeverity.Warning,
+				FileErrorSeverity.Information => DiagnosticSeverity.Information,
+				FileErrorSeverity.Hint => DiagnosticSeverity.Hint,
+				_ => DiagnosticSeverity.Error,
+			};
+		}
+
+		private static Container<DiagnosticTag>? ConvertTag(FileErrorTag tag)
+		{
+			return tag switch
+			{
+				FileErrorTag.Unnecessary => new Container<DiagnosticTag>(DiagnosticTag.Unnecessary),
+				FileErrorTag.Deprecated => new Container<DiagnosticTag>(DiagnosticTag.Deprecated),
+				_ => null,
+			};
 		}
 	}
 }

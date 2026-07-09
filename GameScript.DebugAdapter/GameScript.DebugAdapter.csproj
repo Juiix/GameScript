@@ -9,7 +9,7 @@
     <PackageId>GameScript.DebugAdapter</PackageId>
     <Version>$(GameScriptVersion)</Version>
     <Authors>Tucker Ulrich</Authors>
-    <Company>Ye Olde Games</Company>
+    <Company>Giant Blade</Company>
     <Description>Debug Adapter Protocol (DAP) server for GameScript: embed in your game process to enable breakpoints, step execution, and variable inspection from VS Code.</Description>
     <PackageProjectUrl>https://github.com/Juiix/GameScript</PackageProjectUrl>
     <RepositoryUrl>https://github.com/Juiix/GameScript</RepositoryUrl>
