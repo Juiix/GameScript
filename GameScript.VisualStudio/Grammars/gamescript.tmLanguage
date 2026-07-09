@@ -111,7 +111,7 @@
             <key>name</key>
             <string>constant.numeric.gamescript</string>
             <key>match</key>
-            <string>\b\d+(?:\.\d+)?\b</string>
+            <string>\b(?:0[xX][0-9a-fA-F]+|\d+(?:\.\d+)?)\b</string>
           </dict>
         </array>
       </dict>

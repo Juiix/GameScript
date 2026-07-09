@@ -163,7 +163,7 @@ namespace GameScript.Language.Visitors
 			if (node is not LiteralNode literal) return Value.Null;
 			return literal.Type switch
 			{
-				LiteralType.Number => int.TryParse(literal.Value, out var i) ? i : null,
+				LiteralType.Number => LiteralNode.TryParseNumber(literal.Value, out var i) ? i : null,
 				LiteralType.Boolean => bool.TryParse(literal.Value, out var b) ? b : null,
 				LiteralType.String => literal.Value.Substring(1, literal.Value.Length - 2),
 				_ => null

@@ -1,4 +1,4 @@
-{
+﻿{
   "name": "GameScript",
   "scopeName": "source.gamescript",
   "patterns": [
@@ -37,7 +37,7 @@
       ]
     },
     "numbers": {
-      "patterns": [ { "name": "constant.numeric.gamescript", "match": "\\b\\d+(?:\\.\\d+)?\\b" } ]
+      "patterns": [ { "name": "constant.numeric.gamescript", "match": "\\b(?:0[xX][0-9a-fA-F]+|\\d+(?:\\.\\d+)?)\\b" } ]
     },
     "boolean-literals": {
       "patterns": [ { "name": "constant.language.boolean.gamescript", "match": "\\b(?:true|false)\\b" } ]

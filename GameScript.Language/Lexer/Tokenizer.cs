@@ -179,8 +179,22 @@ namespace GameScript.Language.Lexer
 			if (char.IsDigit(ch))
 			{
 				int start = _column;
-				while (_column < _text.Length && char.IsDigit(_text[_column]))
-					_column++;
+
+				// hex literal (0x...) — only when at least one hex digit follows the prefix,
+				// otherwise "0x" lexes as "0" + identifier and fails at parse time
+				if (ch == '0' && _column + 2 < _text.Length &&
+					(_text[_column + 1] == 'x' || _text[_column + 1] == 'X') &&
+					Uri.IsHexDigit(_text[_column + 2]))
+				{
+					_column += 2;
+					while (_column < _text.Length && Uri.IsHexDigit(_text[_column]))
+						_column++;
+				}
+				else
+				{
+					while (_column < _text.Length && char.IsDigit(_text[_column]))
+						_column++;
+				}
 
 				return new Token(TokenType.Number,
 								 _text.Slice(start, _column - start),

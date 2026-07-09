@@ -771,7 +771,7 @@ public sealed class BytecodeCompiler<TCommandOp> where TCommandOp : struct, Enum
 	{
 		return node.Type switch
 		{
-			LiteralType.Number => Value.FromInt(int.Parse(node.Value)),
+			LiteralType.Number => Value.FromInt(LiteralNode.ParseNumber(node.Value)),
 			LiteralType.Boolean => Value.FromBool(bool.Parse(node.Value)),
 			LiteralType.String => Value.FromString(node.Value.Substring(1, node.Value.Length - 2)),
 			_ => throw new InvalidOperationException($"Cannot parse LiteralType.{node.Type}"),
