@@ -39,7 +39,7 @@ Bring the full power of the **GameScript** language into Visual Studio Code. The
 
 1. **Install**
 
-   * Open the *Extensions* view (`Ctrl + Shift + X`) and search for **GameScript**, **or**
+   * Open the *Extensions* view (`Ctrl + Shift + X`) and search for **GameScript Tools** (publisher **Giant Blade**), **or**
    * Download the latest `.vsix` from the releases page and run **Extensions › Install from VSIX…**.
 
 2. **Reload VS Code** when prompted.

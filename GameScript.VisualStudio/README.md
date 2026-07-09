@@ -39,7 +39,7 @@ Bring the full power of the **GameScript** language into Visual Studio 2022. The
 
 1. **Install**
 
-   * Download from the Visual Studio Marketplace **or** use the in-IDE *Extensions › Manage Extensions* dialog and search for **GameScript**.
+   * Download from the Visual Studio Marketplace **or** use the in-IDE *Extensions › Manage Extensions* dialog and search for **GameScript Tools** (publisher **Giant Blade**).
 
 2. **Reload Visual Studio** when prompted.
 
