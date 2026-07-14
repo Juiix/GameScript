@@ -2,6 +2,11 @@
 
 All notable changes to GameScript will be documented in this file.
 
+## [1.4.7]
+
+### Added
+- Hex support for int constants, for example: `int $value = 0xff`
+
 ## [1.4.6]
 
 ### Added

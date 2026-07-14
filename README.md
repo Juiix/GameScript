@@ -42,7 +42,10 @@ mn_button_1 login:submit()            // trigger — UI event entry point
 | Constant     | `^`    | `.const`      |
 | Context var  | `%`    | `.context`    |
 
-See **[GUIDE.md](GUIDE.md)** for the full language reference, including tuple returns, type rules, and the bytecode compiler API.
+**Learn more:**
+
+- **[LANGUAGE.md](LANGUAGE.md)** — full language reference: types, operators, control flow, triggers, and common patterns
+- **[EMBEDDING.md](EMBEDDING.md)** — hosting GameScript in your C# game: compiling, running, suspending, and debugging scripts
 
 ---
 
@@ -52,6 +55,7 @@ See **[GUIDE.md](GUIDE.md)** for the full language reference, including tuple re
 | ---------------------------- | -------------------------------------------------------------------- |
 | `GameScript.Language/`       | Lexer, parser, AST, visitors (index, semantic, type), bytecode compiler |
 | `GameScript.Bytecode/`       | Bytecode VM and runtime (`ScriptState`, `ScriptRunner`)              |
+| `GameScript.DebugAdapter/`   | DAP debug server — embed in your game to debug scripts from VS Code |
 | `GameScript.LanguageServer/` | LSP server executable                                                |
 | `GameScript.Vscode/`         | VS Code extension                                                    |
 | `GameScript.VisualStudio/`   | Visual Studio 2022 extension                                         |
@@ -64,6 +68,7 @@ See **[GUIDE.md](GUIDE.md)** for the full language reference, including tuple re
 | ------------------------- | ----------------------------------------------------------------------------- |
 | **`GameScript.Bytecode`** | Embed the VM — register opcode handlers, create `ScriptState`, run bytecode.  |
 | **`GameScript.Language`** | Full toolchain — parse source, build the symbol index, run analysis passes, compile to bytecode. |
+| **`GameScript.DebugAdapter`** | In-process DAP server — attach VS Code to a running game and debug live scripts. |
 
 ---
 
@@ -75,7 +80,8 @@ The **VS Code extension** (`GameScript.Vscode`) bundles the language server and 
 - Completions, hover tooltips, and real-time diagnostics
 - Go to Definition, Find All References, Document Highlights
 - Rename Symbol, Document Symbols, Workspace Symbols
-- Syntax highlighting for Object Definition files (`.varp`, `.item`, `.npc`, `.menu`, `.obj`, `.tile`)
+- Script debugging — attach to a running game, set breakpoints, step, and inspect variables (see [EMBEDDING.md](EMBEDDING.md#10-debugging-dap))
+- Syntax highlighting and constant completion for Object Definition files (`.varp`, `.varn`, `.item`, `.npc`, `.menu`, `.obj`, `.tile`, `.inv`, `.anim`, `.param`, `.tex`, `.rig`)
 
 A **Visual Studio 2022 extension** (`GameScript.VisualStudio`) is also available.
 
