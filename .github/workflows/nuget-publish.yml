@@ -11,6 +11,10 @@ on:
       - "GameScript.DebugAdapter/**"
   workflow_dispatch: {}
 
+permissions:
+  contents: read
+  id-token: write # required for NuGet trusted publishing (OIDC)
+
 jobs:
   build-and-publish:
     runs-on: ubuntu-latest
@@ -52,11 +56,15 @@ jobs:
           name: nupkgs
           path: ./nupkgs/*.nupkg
 
+      - name: 🔐 NuGet login (trusted publishing)
+        id: nuget-login
+        uses: NuGet/login@v1
+        with:
+          user: ${{ secrets.NUGET_USER }}
+
       - name: 🚀 Publish to NuGet
-        env:
-          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
         run: |
           dotnet nuget push "./nupkgs/*.nupkg" \
             --source "https://api.nuget.org/v3/index.json" \
-            --api-key "$NUGET_API_KEY" \
+            --api-key "${{ steps.nuget-login.outputs.NUGET_API_KEY }}" \
             --skip-duplicate
