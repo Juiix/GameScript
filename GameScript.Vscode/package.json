@@ -55,7 +55,8 @@
                   ".param",
                   ".tex",
                   ".rig",
-                  ".varn"
+                  ".varn",
+                  ".palette"
                 ],
                 "configuration": "./resources/objectdef-configuration.json",
                 "icon": {

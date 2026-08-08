@@ -9,6 +9,7 @@ import {
     Executable,
     Trace
 } from 'vscode-languageclient/node';
+import { PaletteManager, PaletteCompletionProvider, HexColorProvider } from './palette';
 
 // ──────────────────────────────────────────────────────────────
 // Client bootstrap
@@ -20,6 +21,24 @@ let client: LanguageClient;
  * Extension entry-point.
  */
 export function activate(context: vscode.ExtensionContext): void {
+    // Color palette: swatches + completion for 0xRRGGBB[AA] values,
+    // backed by *.palette files in the workspace. Registered before the
+    // LSP bootstrap so it works even if the server binary is missing.
+    const colorSelector: vscode.DocumentSelector = [
+        { scheme: 'file', language: 'gamescript' },
+        { scheme: 'file', language: 'objectdef' }
+    ];
+    const palette = new PaletteManager();
+    palette.load();
+    context.subscriptions.push(
+        palette,
+        vscode.languages.registerCompletionItemProvider(
+            colorSelector, new PaletteCompletionProvider(palette),
+            ...PaletteCompletionProvider.triggerCharacters
+        ),
+        vscode.languages.registerColorProvider(colorSelector, new HexColorProvider())
+    );
+
     // 1) Figure out OS + architecture
     const platform = process.platform;     // 'win32' | 'darwin' | 'linux'
     const arch     = os.arch();            // 'x64' | 'arm64' | ...
