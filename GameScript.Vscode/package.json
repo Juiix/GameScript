@@ -56,6 +56,7 @@
                   ".tex",
                   ".rig",
                   ".varn",
+                  ".fx",
                   ".palette"
                 ],
                 "configuration": "./resources/objectdef-configuration.json",

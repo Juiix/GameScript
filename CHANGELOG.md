@@ -2,6 +2,21 @@
 
 All notable changes to GameScript will be documented in this file.
 
+## [1.5.2]
+
+### Added
+- New data file extension: `.fx`
+
+## [1.5.1]
+
+### Changed
+- NuGet packages are now published via trusted publishing
+
+## [1.5.0]
+
+### Added
+- Color palette picker and completion for hex values, backed by `.palette` files
+
 ## [1.4.7]
 
 ### Added
