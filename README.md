@@ -81,7 +81,7 @@ The **VS Code extension** (`GameScript.Vscode`) bundles the language server and 
 - Go to Definition, Find All References, Document Highlights
 - Rename Symbol, Document Symbols, Workspace Symbols
 - Script debugging — attach to a running game, set breakpoints, step, and inspect variables (see [EMBEDDING.md](EMBEDDING.md#10-debugging-dap))
-- Syntax highlighting and constant completion for Object Definition files (`.varp`, `.varn`, `.item`, `.npc`, `.menu`, `.obj`, `.tile`, `.inv`, `.anim`, `.param`, `.tex`, `.rig`, `.fx`)
+- Syntax highlighting and constant completion for Object Definition files (`.varp`, `.varn`, `.item`, `.npc`, `.menu`, `.obj`, `.tile`, `.inv`, `.anim`, `.param`, `.tex`, `.rig`, `.fx`, `.option`)
 
 A **Visual Studio 2022 extension** (`GameScript.VisualStudio`) is also available.
 

@@ -2,6 +2,11 @@
 
 All notable changes to GameScript will be documented in this file.
 
+## [1.5.3]
+
+### Added
+- New data file extension: `.option`
+
 ## [1.5.2]
 
 ### Added

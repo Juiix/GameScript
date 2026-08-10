@@ -32,7 +32,7 @@ Mixing categories in the same file is a parser error.
 
 **There are no imports.** All files in a project share one global namespace: any `func`, `label`, `^constant`, or `%context` variable is visible from every script. Projects typically organize by feature folder and generate `.const` files as symbol tables for game data (item IDs, menu IDs, sounds, …).
 
-The editor tooling also recognizes **object definition** data files (`.varp`, `.varn`, `.item`, `.npc`, `.menu`, `.obj`, `.tile`, `.inv`, `.anim`, `.param`, `.tex`, `.rig`, `.fx`) — these hold game data referenced from scripts via `^constants`, not GameScript code.
+The editor tooling also recognizes **object definition** data files (`.varp`, `.varn`, `.item`, `.npc`, `.menu`, `.obj`, `.tile`, `.inv`, `.anim`, `.param`, `.tex`, `.rig`, `.fx`, `.option`) — these hold game data referenced from scripts via `^constants`, not GameScript code.
 
 ### Indentation
 
