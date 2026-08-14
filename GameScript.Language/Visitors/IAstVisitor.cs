@@ -43,6 +43,7 @@ namespace GameScript.Language.Visitors
 		void Visit(AssignmentExpressionNode node);
 		void Visit(OperatorNode node);
 		void Visit(CallExpressionNode node);
+		void Visit(DeclarationExpressionNode node);
 		void Visit(UnparsableExpressionNode node);
 
 		// Other nodes

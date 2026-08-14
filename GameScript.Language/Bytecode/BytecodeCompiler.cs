@@ -38,6 +38,7 @@ public sealed class BytecodeCompiler<TCommandOp> where TCommandOp : struct, Enum
 	private readonly Dictionary<string, int> _localSlots = [];
 	private readonly Dictionary<string, int> _ctxSlots = [];
 	private readonly Stack<LoopContext> _loopStack = [];
+	private int _nextSlot;
 
 	public BytecodeCompilerResult Compile(
 		IEnumerable<ConstantDefinitionNode> constants,
@@ -160,14 +161,14 @@ public sealed class BytecodeCompiler<TCommandOp> where TCommandOp : struct, Enum
 				_localSlots[methodNode.Parameters[i].Name.Name] = i;
 			}
 		}
-		int nextSlot = paramCount;
+		_nextSlot = paramCount;
 
 		// 2) Emit body statements
 		if (methodNode.Body?.Statements != null)
 		{
 			foreach (var statement in methodNode.Body.Statements)
 			{
-				EmitStatement(statement, ref nextSlot);
+				EmitStatement(statement);
 			}
 		}
 
@@ -189,10 +190,10 @@ public sealed class BytecodeCompiler<TCommandOp> where TCommandOp : struct, Enum
 			[.. _ops],
 			[.. _operands],
 			paramCount,
-			nextSlot - paramCount,
+			_nextSlot - paramCount,
 			methodNode.ReturnTypes?.Count ?? 0);
 
-		var localNames = new string[nextSlot];
+		var localNames = new string[_nextSlot];
 		foreach (var (localName, slot) in _localSlots)
 			localNames[slot] = localName;
 
@@ -205,7 +206,7 @@ public sealed class BytecodeCompiler<TCommandOp> where TCommandOp : struct, Enum
 		return new BytecodeMethodResult(method, metadata);
 	}
 
-	private void EmitStatement(AstNode statement, ref int nextSlot)
+	private void EmitStatement(AstNode statement)
 	{
 		switch (statement)
 		{
@@ -222,7 +223,7 @@ public sealed class BytecodeCompiler<TCommandOp> where TCommandOp : struct, Enum
 					}
 
 					// allocate a slot
-					int slot = nextSlot++;
+					int slot = _nextSlot++;
 					_localSlots[name.Name] = slot;
 					if (initializer != null)
 					{
@@ -277,7 +278,7 @@ public sealed class BytecodeCompiler<TCommandOp> where TCommandOp : struct, Enum
 				{
 					foreach (var s in ifStatement.IfBlock.Statements)
 					{
-						EmitStatement(s, ref nextSlot);
+						EmitStatement(s);
 					}
 				}
 
@@ -303,7 +304,7 @@ public sealed class BytecodeCompiler<TCommandOp> where TCommandOp : struct, Enum
 						{
 							foreach (var s in elseIf.Block.Statements)
 							{
-								EmitStatement(s, ref nextSlot);
+								EmitStatement(s);
 							}
 						}
 
@@ -326,7 +327,7 @@ public sealed class BytecodeCompiler<TCommandOp> where TCommandOp : struct, Enum
 				{
 					foreach (var s in ifStatement.ElseBlock.Statements)
 					{
-						EmitStatement(s, ref nextSlot);
+						EmitStatement(s);
 					}
 				}
 
@@ -392,7 +393,7 @@ public sealed class BytecodeCompiler<TCommandOp> where TCommandOp : struct, Enum
 					{
 						foreach (var s in whileStmt.Body.Statements)
 						{
-							EmitStatement(s, ref nextSlot);
+							EmitStatement(s);
 						}
 					}
 
@@ -743,45 +744,55 @@ public sealed class BytecodeCompiler<TCommandOp> where TCommandOp : struct, Enum
 			EmitExpression(rightCall);
 		}
 
+		// 1b) Allocate slots for any inline declarations (left to right, before storing)
+		foreach (var element in left.Elements)
+		{
+			if (element is DeclarationExpressionNode decl)
+			{
+				_localSlots[decl.Name.Name] = _nextSlot++;
+			}
+		}
+
 		// 2) Pop them into the LHS identifiers *in reverse order*
 		for (int i = left.Elements.Count - 1; i >= 0; i--)
 		{
-			if (left.Elements[i] is not IdentifierNode ident)
-			{
-				throw new InvalidOperationException("LHS of tuple must be identifiers");
-			}
-
-			if (!TryGetVarSlot(ident.Type, ident.Name, out int slot))
-			{
-				throw new KeyNotFoundException($"Unknown local variable '{ident.Name}'");
-			}
-
-			if (ident.DotPrefix > 0)
-				slot = (ident.DotPrefix << 16) | (slot & 0xFFFF);
+			var (type, slot) = ResolveTupleTarget(left.Elements[i]);
 
 			// store the top of the stack into that slot
-			EmitStoreVar(ident.Type, slot, left.FileRange.Start.Line);
+			EmitStoreVar(type, slot, left.FileRange.Start.Line);
 		}
 
 		// 3) Load values back onto the stack for chain tuple assignment (EmitPopLast will clean up trailing loads)
 		for (int i = 0; i < left.Elements.Count; i++)
 		{
-			if (left.Elements[i] is not IdentifierNode ident)
-			{
-				throw new InvalidOperationException("LHS of tuple must be identifiers");
-			}
-
-			if (!TryGetVarSlot(ident.Type, ident.Name, out int slot))
-			{
-				throw new KeyNotFoundException($"Unknown local variable '{ident.Name}'");
-			}
-
-			if (ident.DotPrefix > 0)
-				slot = (ident.DotPrefix << 16) | (slot & 0xFFFF);
+			var (type, slot) = ResolveTupleTarget(left.Elements[i]);
 
 			// load them back on the stack
-			EmitLoadVar(ident.Type, slot, left.FileRange.Start.Line);
+			EmitLoadVar(type, slot, left.FileRange.Start.Line);
 		}
+	}
+
+	private (IdentifierType Type, int Slot) ResolveTupleTarget(ExpressionNode element)
+	{
+		if (element is DeclarationExpressionNode decl)
+		{
+			return (IdentifierType.Local, _localSlots[decl.Name.Name]);
+		}
+
+		if (element is not IdentifierNode ident)
+		{
+			throw new InvalidOperationException("LHS of tuple must be identifiers or inline declarations");
+		}
+
+		if (!TryGetVarSlot(ident.Type, ident.Name, out int slot))
+		{
+			throw new KeyNotFoundException($"Unknown local variable '{ident.Name}'");
+		}
+
+		if (ident.DotPrefix > 0)
+			slot = (ident.DotPrefix << 16) | (slot & 0xFFFF);
+
+		return (ident.Type, slot);
 	}
 
 	private static CoreOpCode GetOpCode(BinaryOperator binOp)

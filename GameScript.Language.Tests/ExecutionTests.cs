@@ -313,6 +313,82 @@ public class ExecutionTests
 	}
 
 	[Fact]
+	public void Not_Keyword_Negates()
+	{
+		var (host, program) = Build("""
+			func main()
+			    bool $flag = false
+			    if not $flag
+			        print("negated")
+			    if not (1 == 2) and not false
+			        print("compound")
+			""");
+		host.Start(program, "main");
+		Assert.Equal(new[] { "negated", "compound" }, host.Context.Printed);
+	}
+
+	[Fact]
+	public void String_Interpolation_Compiles_To_Concat()
+	{
+		var (host, program) = Build("""
+			func skill_name(int $skill) returns string
+			    return "attack"
+
+			func main()
+			    int $after = 50
+			    int $skill = 0
+			    print("Congratulations, your {~skill_name($skill)} level is now {$after}!")
+			""");
+		host.Start(program, "main");
+		Assert.Equal(new[] { "Congratulations, your attack level is now 50!" }, host.Context.Printed);
+	}
+
+	[Fact]
+	public void String_Interpolation_Edge_Shapes()
+	{
+		var (host, program) = Build("""
+			func main()
+			    int $x = 7
+			    print("{$x}")
+			    print("{{literal}} {$x + 1}")
+			    print("tail {$x}")
+			""");
+		host.Start(program, "main");
+		Assert.Equal(new[] { "7", "{literal} 8", "tail 7" }, host.Context.Printed);
+	}
+
+	[Fact]
+	public void Declare_And_Destructure_In_One_Line()
+	{
+		var (host, program) = Build("""
+			func pair() returns (int $x, string $y)
+			    return (5, "ok")
+
+			func main()
+			    (int $a, string $b) = ~pair()
+			    print($b + int_to_str($a))
+			""");
+		host.Start(program, "main");
+		Assert.Equal(new[] { "ok5" }, host.Context.Printed);
+	}
+
+	[Fact]
+	public void Mixed_Destructure_With_Existing_Local()
+	{
+		var (host, program) = Build("""
+			func pair() returns (int $x, int $y)
+			    return (3, 4)
+
+			func main()
+			    int $a
+			    ($a, int $b) = ~pair()
+			    print(int_to_str($a * 10 + $b))
+			""");
+		host.Start(program, "main");
+		Assert.Equal(new[] { "34" }, host.Context.Printed);
+	}
+
+	[Fact]
 	public void Negation_Operator()
 	{
 		var (host, program) = Build("""

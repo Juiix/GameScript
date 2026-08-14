@@ -16,6 +16,7 @@ namespace GameScript.Language.Lexer
 		private FilePosition _lineStart;
 		private int _indent;
 		private bool _inMultilineComment;
+		private readonly FilePosition _origin;
 		private readonly List<int> _lineOffsets = [];
 
 		public Tokenizer(ReadOnlySpan<char> source)
@@ -28,8 +29,21 @@ namespace GameScript.Language.Lexer
 			_inMultilineComment = false;
 		}
 
+		/// <summary>
+		/// Tokenizes a fragment embedded in a larger file (e.g. a string-interpolation
+		/// expression). <paramref name="origin"/> offsets all token positions so
+		/// diagnostics land at the fragment's real location. Fragments must be single-line.
+		/// </summary>
+		public Tokenizer(ReadOnlySpan<char> source, FilePosition origin) : this(source)
+		{
+			_origin = origin;
+		}
+
 		public IReadOnlyList<int> LineOffsets => _lineOffsets;
-		private FilePosition CurrentFilePosition => new(_lineStart.Position + _column, _lineStart.Line, _lineStart.Column + _column);
+		private FilePosition CurrentFilePosition => new(
+			_origin.Position + _lineStart.Position + _column,
+			_origin.Line + _lineStart.Line,
+			(_lineStart.Line == 0 ? _origin.Column : 0) + _lineStart.Column + _column);
 		private FileRange CurrentRange(FilePosition start) => new(start, CurrentFilePosition);
 
 		/// <summary>
@@ -245,10 +259,10 @@ namespace GameScript.Language.Lexer
 			}
 
 			/*──────────────────────────────────────────────────────────────
-			 * 9.  Unknown – skip char and retry
+			 * 9.  Unknown character – emit an Error token
 			 *──────────────────────────────────────────────────────────────*/
-			_column++;
-			return NextToken();
+			var errStart = _column++;
+			return new Token(TokenType.Error, _text.Slice(errStart, 1), CurrentRange(pos));
 		}
 
 		private bool ProcessIndentation(out Token token)

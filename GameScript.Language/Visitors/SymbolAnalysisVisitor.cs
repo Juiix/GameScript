@@ -93,6 +93,12 @@ namespace GameScript.Language.Visitors
 			base.Visit(node);
 		}
 
+		public override void Visit(DeclarationExpressionNode node)
+		{
+			CheckSymbol(LocalIndex, node.Name.Name, node.Name);
+			base.Visit(node);
+		}
+
 		private void CheckSymbol(ISymbolIndex? index, string symbolName, AstNode node)
 		{
 			if (InvalidSymbolName(symbolName))

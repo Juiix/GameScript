@@ -27,6 +27,26 @@ public ref struct AstParser
 		_tokenizer = new Tokenizer(source);
 	}
 
+	/// <summary>
+	/// Parser over a single-line fragment embedded at <paramref name="origin"/>
+	/// within a larger file (string interpolation expressions).
+	/// </summary>
+	internal AstParser(string filePath, ReadOnlySpan<char> source, FilePosition origin) : this()
+	{
+		_filePath = filePath;
+		_tokenizer = new Tokenizer(source, origin);
+	}
+
+	/// <summary>Parses the entire source as one expression (used for interpolation fragments).</summary>
+	internal ExpressionNode ParseExpressionFragment()
+	{
+		Advance(); // prime tokenizer
+		var expr = ParseExpression();
+		if (_current.Type is not (TokenType.EndOfFile or TokenType.EndOfLine))
+			Error($"Unexpected token in interpolation expression: {_current.Value.ToString()}", _current.Range);
+		return expr;
+	}
+
 	public IReadOnlyList<FileError> Errors => _errors;
 	public IReadOnlyList<CommentNode> Comments => _comments;
 	public IReadOnlyList<int> LineOffsets => _tokenizer.LineOffsets;
@@ -725,6 +745,18 @@ public ref struct AstParser
 	{
 		var start = _current.Start;
 
+		// 'not' keyword — word form of logical negation
+		if (CurrentIsKeyword("not"))
+		{
+			var notNode = new OperatorNode(_current.Value.ToString(), _filePath, CurrentRange);
+			Advance();
+			var notOperand = ParseUnaryExpression();
+
+			return new UnaryExpressionNode(
+				UnaryOperator.Not, notNode, notOperand, _filePath,
+				new FileRange(start, _previous.End));
+		}
+
 		// Prefix operator?
 		if (_current.Type == TokenType.Operator &&
 			TryParseUnaryOperator(_current, out var op))
@@ -773,6 +805,10 @@ public ref struct AstParser
 		{
 			var token = _current;
 			Advance();
+
+			if (lit == LiteralType.String)
+				return ParseStringLiteral(token, start);
+
 			return new LiteralNode(lit, token.Value.ToString(),
 								   _filePath, new FileRange(start, _previous.End));
 		}
@@ -816,6 +852,106 @@ public ref struct AstParser
 		return new UnparsableExpressionNode(_filePath, in badRange);
 	}
 
+	// Parses a string literal, expanding "{expr}" interpolation into the equivalent
+	// '+' concatenation chain. "{{" and "}}" produce literal braces.
+	private ExpressionNode ParseStringLiteral(Token token, FilePosition start)
+	{
+		var raw = token.Value; // includes surrounding quotes
+		var range = new FileRange(start, _previous.End);
+
+		// Fast path: no braces, no interpolation machinery
+		if (raw.IndexOfAny('{', '}') < 0)
+			return new LiteralNode(LiteralType.String, raw.ToString(), _filePath, range);
+
+		// inner text bounds (tolerate an unterminated string missing its closing quote)
+		int innerEnd = raw.Length >= 2 && raw[raw.Length - 1] == '"' ? raw.Length - 1 : raw.Length;
+
+		var parts = new List<ExpressionNode>();
+		var sb = new StringBuilder();
+
+		for (int i = 1; i < innerEnd; i++)
+		{
+			char c = raw[i];
+			if (c == '{')
+			{
+				if (i + 1 < innerEnd && raw[i + 1] == '{')
+				{
+					sb.Append('{');
+					i++;
+					continue;
+				}
+
+				int close = -1;
+				for (int j = i + 1; j < innerEnd; j++)
+				{
+					if (raw[j] == '}') { close = j; break; }
+				}
+				if (close < 0)
+				{
+					Error("Unmatched '{' in string interpolation (use '{{' for a literal brace)", range);
+					sb.Append(c);
+					continue;
+				}
+				if (close == i + 1)
+				{
+					Error("Empty interpolation expression '{}'", range);
+					i = close;
+					continue;
+				}
+
+				if (sb.Length > 0 || parts.Count == 0)
+				{
+					// pending literal text; an empty leading literal also anchors the
+					// chain so "{x}" still produces a string result
+					parts.Add(new LiteralNode(LiteralType.String, $"\"{sb}\"", _filePath, range));
+					sb.Clear();
+				}
+
+				// parse the embedded expression at its true file position
+				var exprSpan = raw.Slice(i + 1, close - i - 1);
+				var origin = new FilePosition(
+					token.Start.Position + i + 1,
+					token.Start.Line,
+					token.Start.Column + i + 1);
+				var fragmentParser = new AstParser(_filePath, exprSpan, origin);
+				parts.Add(fragmentParser.ParseExpressionFragment());
+				foreach (var fragmentError in fragmentParser.Errors)
+					_errors.Add(fragmentError);
+
+				i = close;
+			}
+			else if (c == '}')
+			{
+				if (i + 1 < innerEnd && raw[i + 1] == '}')
+				{
+					sb.Append('}');
+					i++;
+					continue;
+				}
+				Error("Unexpected '}' in string (use '}}' for a literal brace)", range);
+				sb.Append(c);
+			}
+			else
+			{
+				sb.Append(c);
+			}
+		}
+
+		if (sb.Length > 0 || parts.Count == 0)
+			parts.Add(new LiteralNode(LiteralType.String, $"\"{sb}\"", _filePath, range));
+
+		// left-associative '+' chain — identical shape (and bytecode) to manual concat
+		var result = parts[0];
+		for (int i = 1; i < parts.Count; i++)
+		{
+			result = new BinaryExpressionNode(
+				result, BinaryOperator.Add,
+				new OperatorNode("+", _filePath, range),
+				parts[i], _filePath, range);
+		}
+		return result;
+	}
+
 	// Parses a call expression when an identifier is followed by an argument list.
 	private CallExpressionNode ParseCallExpression(Token ident, IdentifierType identifierType, FilePosition funcStart)
 	{
@@ -855,12 +991,19 @@ public ref struct AstParser
 		var start = _current.Start;
 		Expect(TokenType.OpenParen, "Expected '(' at start of expression");
 
-		var first = ParseExpression();
+		var first = ParseTupleElement();
 
 		// No comma → just a parenthesised expression
 		if (!Match(TokenType.Comma))
 		{
 			Expect(TokenType.CloseParen, "Expected ')' after expression", ")".AsSpan());
+
+			// a lone declaration '(bool $ok)' is a 1-element destructure target
+			if (first is DeclarationExpressionNode)
+			{
+				var declRange = new FileRange(start, _previous.End);
+				return new TupleExpressionNode([first], _filePath, in declRange);
+			}
 			return first;
 		}
 
@@ -868,7 +1011,7 @@ public ref struct AstParser
 		var elements = new List<ExpressionNode> { first };
 		do
 		{
-			elements.Add(ParseExpression());
+			elements.Add(ParseTupleElement());
 		}
 		while (Match(TokenType.Comma));
 
@@ -876,6 +1019,29 @@ public ref struct AstParser
 
 		var fileRange = new FileRange(start, _previous.End);
 		return new TupleExpressionNode(elements, _filePath, in fileRange);
+	}
+
+	// A tuple element is either an inline declaration ('bool $ok') for destructuring,
+	// or an ordinary expression.
+	private ExpressionNode ParseTupleElement()
+	{
+		var isDeclaration =
+			(_current.Type == TokenType.Identifier || CurrentIsKeyword("label")) &&
+			PeekIsIdentifier();
+
+		if (!isDeclaration)
+			return ParseExpression();
+
+		var start = _current.Start;
+		var typeTok = ExpectTypeIdentifier("Expected a type for inline declaration");
+		var typeNode = new TypeNode(typeTok.Value.ToString(), _filePath, PreviousRange);
+
+		var nameTok = ExpectStartsWith(TokenType.Identifier, "$", "Expected variable name (must start with '$')", "$?".AsSpan());
+		var nameNode = new IdentifierDeclarationNode(nameTok.Value.TrimStart('$').ToString(),
+													 IdentifierType.Local, null, _filePath, PreviousRange);
+
+		return new DeclarationExpressionNode(typeNode, nameNode, _filePath,
+											 new FileRange(start, _previous.End));
 	}
 
 	// Advances to the next token.
@@ -897,6 +1063,11 @@ public ref struct AstParser
 				_summaryBuilder?.Clear();
 
 			var token = _tokenizer.NextToken();
+			if (token.Type == TokenType.Error)
+			{
+				Error($"Unexpected character '{token.Value.ToString()}'", token.Range);
+				continue;
+			}
 			if (token.Type != TokenType.Comment)
 			{
 				if (token.Type == TokenType.EndOfLine

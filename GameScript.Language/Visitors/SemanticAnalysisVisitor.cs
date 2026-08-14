@@ -138,7 +138,9 @@ namespace GameScript.Language.Visitors
 			{
 				foreach (var child in leftTuple.Children)
 				{
-					if (!IsAssignableIdentifier(child))
+					// inline declarations ('bool $ok') declare-and-receive in place
+					if (child is not DeclarationExpressionNode &&
+						!IsAssignableIdentifier(child))
 					{
 						Error("Tuple element must be an assignable variable.", child.FileRange);
 					}

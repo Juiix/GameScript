@@ -158,6 +158,36 @@ public class ParserTests
 	}
 
 	[Fact]
+	public void Semicolon_Is_An_Unexpected_Character()
+	{
+		var (_, errors) = ParseProgram("""
+			func main()
+			    return;
+			""");
+		Assert.Contains(errors, e => e.Message.Contains("Unexpected character ';'"));
+	}
+
+	[Fact]
+	public void Unmatched_Interpolation_Brace_Is_An_Error()
+	{
+		var (_, errors) = ParseProgram("""
+			func main()
+			    return "oops {unclosed"
+			""");
+		Assert.Contains(errors, e => e.Message.Contains("Unmatched '{'"));
+	}
+
+	[Fact]
+	public void Empty_Interpolation_Is_An_Error()
+	{
+		var (_, errors) = ParseProgram("""
+			func main()
+			    return "oops {}"
+			""");
+		Assert.Contains(errors, e => e.Message.Contains("Empty interpolation"));
+	}
+
+	[Fact]
 	public void Missing_Paren_Produces_Error()
 	{
 		var (_, errors) = ParseProgram("""

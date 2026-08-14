@@ -117,6 +117,27 @@ namespace GameScript.Language.Visitors
 			}
 		}
 
+		public override void Visit(DeclarationExpressionNode node)
+		{
+			if (InvalidSymbolName(node.Name.Name))
+				return;
+
+			var varSymbol = new SymbolInfo(
+				IdentifierType.Local,
+				node.Name.Name,
+				_context.Types.GetType(node.Type.Name),
+				null,
+				null,
+				null,
+				node.Name.Summary,
+				null,
+				_context.FilePath,
+				node.Name.FileRange
+			);
+
+			_localIndex?.AddSymbol(varSymbol);
+		}
+
 		public override void Visit(ParameterNode node)
 		{
 			if (InvalidSymbolName(node.Name.Name))

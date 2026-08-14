@@ -94,6 +94,12 @@ namespace GameScript.Language.Visitors
 			node.FunctionName.Accept(this);
 		}
 
+		// An inline declaration's type is its declared type.
+		public override void Visit(DeclarationExpressionNode node)
+		{
+			InferredType = _context.Types.GetType(node.Type.Name);
+		}
+
 		// For tuple expressions, we need to generate a tuple type composed of the types of its elements.
 		public override void Visit(TupleExpressionNode node)
 		{

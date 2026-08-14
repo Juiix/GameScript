@@ -17,6 +17,7 @@
 		Indent,
 		Dedent,
 		Comment,
-		Colon
+		Colon,
+		Error
 	}
 }
