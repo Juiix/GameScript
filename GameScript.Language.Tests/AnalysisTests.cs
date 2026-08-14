@@ -122,6 +122,97 @@ public class AnalysisTests
 		Assert.Empty(errors);
 	}
 
+	// ---------------------------------------------------------------
+	// Overloading (2.0): same name, different parameter signatures
+	// ---------------------------------------------------------------
+
+	[Fact]
+	public void Func_Overloads_By_Arity_Are_Allowed()
+	{
+		var errors = ErrorsFor("""
+			func greet()
+			    print("hi")
+
+			func greet(string $name)
+			    print("hi " + $name)
+
+			func main()
+			    ~greet()
+			    ~greet("bob")
+			""");
+		Assert.Empty(errors);
+	}
+
+	[Fact]
+	public void Func_Overloads_By_Type_Are_Allowed()
+	{
+		var errors = ErrorsFor("""
+			func show(int $value)
+			    print(int_to_str($value))
+
+			func show(string $value)
+			    print($value)
+
+			func main()
+			    ~show(5)
+			    ~show("five")
+			""");
+		Assert.Empty(errors);
+	}
+
+	[Fact]
+	public void Command_Overloads_Are_Allowed()
+	{
+		var errors = ErrorsFor("""
+			func main()
+			    return
+			""",
+			("extra.gs", """
+			command overloaded(int $a)
+			command overloaded(int $a, int $b)
+			"""));
+		Assert.Empty(errors);
+	}
+
+	[Fact]
+	public void Duplicate_Signature_Differing_Only_By_Return_Is_Reported()
+	{
+		var errors = ErrorsFor("""
+			func same(int $a) returns int
+			    return $a
+
+			func same(int $a) returns string
+			    return "x"
+			""");
+		Assert.Contains(errors, e => e.Contains("already defined"));
+	}
+
+	[Fact]
+	public void Func_Duplicating_Command_Signature_Is_Reported()
+	{
+		var errors = ErrorsFor("""
+			func print(string $text)
+			    return
+			""");
+		Assert.Contains(errors, e => e.Contains("already defined"));
+	}
+
+	[Fact]
+	public void Call_Matching_No_Overload_Is_Reported()
+	{
+		var errors = ErrorsFor("""
+			func show(int $value)
+			    print(int_to_str($value))
+
+			func show(string $value)
+			    print($value)
+
+			func main()
+			    ~show(true)
+			""");
+		Assert.Contains(errors, e => e.Contains("No overload"));
+	}
+
 	[Fact]
 	public void Use_Before_Declaration_Is_Reported()
 	{

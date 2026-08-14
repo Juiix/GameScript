@@ -29,6 +29,20 @@ namespace GameScript.Language.Symbols
 		public FileRange FileRange { get; } = fileRange;
 		public string Signature { get; } = CreateSignature(identifierType, name, type, typeNames, paramTypes, paramNames);
 
+		/// <summary>Number of declared parameters (methods only; 0 otherwise).</summary>
+		public int Arity => ParamTypes == null ? 0 :
+			ParamTypes.Kind == TypeKind.Tuple ? ParamTypes.TypeParameters!.Count : 1;
+
+		/// <summary>
+		/// Canonical parameter-type signature, e.g. "()", "(int)", "(int,string)".
+		/// Return types deliberately excluded — they don't participate in overload identity.
+		/// </summary>
+		public string ParamSignature => ParamTypes == null ? "()" :
+			ParamTypes.Kind == TypeKind.Tuple ? ParamTypes.Name : $"({ParamTypes.Name})";
+
+		/// <summary>Name + ParamSignature; unique per overload.</summary>
+		public string MangledName => $"{Name}{ParamSignature}";
+
 		public bool IsGlobalSymbol => IdentifierType == IdentifierType.Func ||
 			IdentifierType == IdentifierType.Label ||
 			IdentifierType == IdentifierType.Command ||

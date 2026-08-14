@@ -1,5 +1,6 @@
 ﻿using GameScript.Language.Ast;
 using GameScript.Language.Index;
+using GameScript.Language.Symbols;
 using System.Collections.Generic;
 
 namespace GameScript.Language.Visitors
@@ -24,8 +25,57 @@ namespace GameScript.Language.Visitors
 
 		public override void Visit(MethodDefinitionNode node)
 		{
-			CheckSymbol(_context.Symbols, node.SymbolName, node.Name);
+			// Triggers stay name-unique (their SymbolName embeds the trigger keyword);
+			// funcs/labels/commands may overload as long as parameter signatures differ.
+			if (node.Name.Type == IdentifierType.Trigger)
+				CheckSymbol(_context.Symbols, node.SymbolName, node.Name);
+			else
+				CheckOverloadableSymbol(node);
 			base.Visit(node);
+		}
+
+		private void CheckOverloadableSymbol(MethodDefinitionNode node)
+		{
+			var symbolName = node.SymbolName;
+			if (InvalidSymbolName(symbolName))
+				return;
+
+			SymbolInfo? self = null;
+			var others = new List<SymbolInfo>();
+			foreach (var symbol in _context.Symbols.GetSymbols(symbolName))
+			{
+				if (self == null &&
+					symbol.FilePath.Equals(node.Name.FilePath) &&
+					symbol.FileRange == node.Name.FileRange)
+				{
+					self = symbol;
+				}
+				else
+				{
+					others.Add(symbol);
+				}
+			}
+
+			if (self == null)
+			{
+				// something went wrong?
+				Error($"Something went wrong with '{symbolName}'", node.Name);
+				return;
+			}
+
+			foreach (var other in others)
+			{
+				if (!other.IsCallable())
+				{
+					Error($"'{symbolName}' is already defined in this context.", node.Name);
+					return;
+				}
+				if (other.ParamSignature == self.ParamSignature)
+				{
+					Error($"'{symbolName}{self.ParamSignature}' is already defined in this context. Overloads must differ by parameter types (return types don't count).", node.Name);
+					return;
+				}
+			}
 		}
 
 		public override void Visit(VariableDefinitionNode node)

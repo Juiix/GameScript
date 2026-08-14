@@ -14,6 +14,13 @@ namespace GameScript.Language.Visitors
 		private readonly VisitorContext _context = context;
 		private readonly InferredTypeVisitor _inferredTypeVisitor = new(context);
 
+		/// <summary>
+		/// The overload chosen for each call site. Populated during analysis and
+		/// consumed by the bytecode compiler so codegen never re-derives argument
+		/// types (see BytecodeCompiler's resolution input).
+		/// </summary>
+		public Dictionary<CallExpressionNode, SymbolInfo> ResolvedCalls { get; } = [];
+
 		public override void Visit(VariableDefinitionNode node)
 		{
 			base.Visit(node);
@@ -193,29 +200,52 @@ namespace GameScript.Language.Visitors
 		{
 			base.Visit(node);
 
-			var symbol = _context.Symbols.GetSymbol(node.FunctionName.Name);
-			if (symbol != null)
+			var name = node.FunctionName.Name;
+			var argTypes = node.Arguments?.Select(GetInferredType).ToList() ?? [];
+			var resolved = _context.Symbols.ResolveCallable(name, argTypes, out var status);
+			switch (status)
 			{
-				// check params
-				if (symbol.ParamTypes != null)
-				{
-					if (node.Arguments != null)
+				case CallableResolutionStatus.NotFound:
+					// unknown symbols are reported by the semantic pass
+					break;
+
+				case CallableResolutionStatus.Match:
+					ResolvedCalls[node] = resolved!;
+					break;
+
+				case CallableResolutionStatus.Ambiguous:
+					Error($"Ambiguous call to '{name}': multiple overloads match.", node);
+					break;
+
+				case CallableResolutionStatus.NoOverloadMatches:
+					var candidates = _context.Symbols.GetSymbols(name).Where(x => x.IsCallable()).ToList();
+					if (candidates.Count == 1)
 					{
-						var argumentType = GetInferredType(node.Arguments);
-						if (argumentType != symbol.ParamTypes)
+						// legacy single-symbol diagnostics
+						var symbol = candidates[0];
+						if (symbol.ParamTypes != null)
 						{
-							Error($"Type mismatch, cannot call '{symbol.Name}{symbol.ParamTypes}' with '{argumentType}'", node.Arguments);
+							if (node.Arguments != null)
+							{
+								var argumentType = GetInferredType(node.Arguments);
+								Error($"Type mismatch, cannot call '{symbol.Name}{symbol.ParamSignature}' with '{argumentType}'", node.Arguments);
+							}
+							else
+							{
+								Error($"Missing arguments {symbol.ParamSignature}.", node);
+							}
+						}
+						else if (node.Arguments != null)
+						{
+							Error($"{symbol.IdentifierType} {symbol.Name} does not require arguments.", node.Arguments);
 						}
 					}
 					else
 					{
-						Error($"Missing arguments {symbol.ParamTypes}.", node);
+						var argSignature = $"({string.Join(",", argTypes.Select(x => x?.Name ?? "?"))})";
+						Error($"No overload of '{name}' matches {argSignature}.", node);
 					}
-				}
-				else if (node.Arguments != null)
-				{
-					Error($"{symbol.IdentifierType} {symbol.Name} does not require arguments.", node.Arguments);
-				}
+					break;
 			}
 		}
 
