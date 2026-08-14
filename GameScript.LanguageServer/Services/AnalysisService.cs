@@ -53,7 +53,9 @@ namespace GameScript.LanguageServer.Services
 				var context = new VisitorContext(_types, _symbols, rootNode.FilePath);
 				var errors = new List<FileError>();
 
-				// Run each analysis pass.
+				// Run each analysis pass. Name resolution must come first — it
+				// classifies bare identifiers that every later pass relies on.
+				VisitAst(rootNode, new NameResolutionVisitor(localIndexes, context), errors);
 				VisitAst(rootNode, new SymbolAnalysisVisitor(localIndexes, context), errors);
 				VisitAst(rootNode, new SemanticAnalysisVisitor(localIndexes, context), errors);
 				VisitAst(rootNode, new TypeAnalysisVisitor(localIndexes, context), errors);

@@ -95,7 +95,23 @@
                 <key>name</key>
                 <string>constant.character.escape.gamescript</string>
                 <key>match</key>
-                <string>\\.</string>
+                <string>\{\{|\}\}</string>
+              </dict>
+              <dict>
+                <key>name</key>
+                <string>meta.interpolation.gamescript</string>
+                <key>begin</key>
+                <string>\{</string>
+                <key>end</key>
+                <string>\}</string>
+                <key>patterns</key>
+                <array>
+                  <dict><key>include</key><string>#method-call</string></dict>
+                  <dict><key>include</key><string>#keywords</string></dict>
+                  <dict><key>include</key><string>#boolean-literals</string></dict>
+                  <dict><key>include</key><string>#numbers</string></dict>
+                  <dict><key>include</key><string>#variables</string></dict>
+                </array>
               </dict>
             </array>
           </dict>
@@ -139,13 +155,19 @@
             <key>name</key>
             <string>keyword.control.gamescript</string>
             <key>match</key>
-            <string>\b(?:if|else|return)\b</string>
+            <string>\b(?:if|else|return|while|break|continue|and|or|not)\b</string>
           </dict>
           <dict>
             <key>name</key>
             <string>keyword.declaration.gamescript</string>
             <key>match</key>
-            <string>\b(?:func|label|command)\b</string>
+            <string>\b(?:func|command)\b</string>
+          </dict>
+          <dict>
+            <key>name</key>
+            <string>invalid.deprecated.gamescript</string>
+            <key>match</key>
+            <string>\blabel\b</string>
           </dict>
         </array>
       </dict>
@@ -159,7 +181,7 @@
             <key>name</key>
             <string>storage.type.gamescript</string>
             <key>match</key>
-            <string>\b(?:int|bool|string)\b</string>
+            <string>\b(?:int|bool|string|func)\b</string>
           </dict>
         </array>
       </dict>
@@ -171,15 +193,9 @@
         <array>
           <dict>
             <key>name</key>
-            <string>variable.other.local.gamescript</string>
-            <key>match</key>
-            <string>\$[A-Za-z_][\w]*</string>
-          </dict>
-          <dict>
-            <key>name</key>
             <string>variable.other.context.gamescript</string>
             <key>match</key>
-            <string>%[A-Za-z_][\w]*</string>
+            <string>@[A-Za-z_][\w]*</string>
           </dict>
           <dict>
             <key>name</key>
@@ -199,7 +215,7 @@
             <key>name</key>
             <string>meta.function.declaration.gamescript</string>
             <key>begin</key>
-            <string>^(\\s*)(?:(func|label|command)|([A-Za-z_][\\w]*))\\s+([A-Za-z_][\\w]*(?::[A-Za-z_][\\w]*)?)\\s*\\(</string>
+            <string>^(\\s*)(?:(func|command)|([A-Za-z_][\\w]*))\\s+([A-Za-z_][\\w]*(?::[A-Za-z_][\\w]*)?)\\s*(?=\\(|$)</string>
             <key>beginCaptures</key>
             <dict>
               <key>1</key>
@@ -239,7 +255,7 @@
             <key>name</key>
             <string>meta.variable.declaration.gamescript</string>
             <key>match</key>
-            <string>^(\\s*)(int|bool|string)\\s+((?:\\$|%|\\^)[A-Za-z_][\\w]*)</string>
+            <string>^(\\s*)(int|bool|string|func)\\s+((?:@|\\^)?[A-Za-z_][\\w]*)</string>
             <key>captures</key>
             <dict>
               <key>2</key>
@@ -258,21 +274,9 @@
         <array>
           <dict>
             <key>name</key>
-            <string>support.function.call.label.gamescript</string>
+            <string>support.function.call.gamescript</string>
             <key>match</key>
-            <string>@[A-Za-z_][\\w]*(?::[A-Za-z_][\\w]*)?(?=\\()</string>
-          </dict>
-          <dict>
-            <key>name</key>
-            <string>support.function.call.func.gamescript</string>
-            <key>match</key>
-            <string>~[A-Za-z_][\\w]*(?::[A-Za-z_][\\w]*)?\\s*(?=\\()</string>
-          </dict>
-          <dict>
-            <key>name</key>
-            <string>support.function.call.command.gamescript</string>
-            <key>match</key>
-            <string>\\b[A-Za-z_][\\w]*(?::[A-Za-z_][\\w]*)?\\s*(?=\\()</string>
+            <string>\\.?\\b[A-Za-z_][\\w]*(?::[A-Za-z_][\\w]*)?\\s*(?=\\()</string>
           </dict>
         </array>
       </dict>

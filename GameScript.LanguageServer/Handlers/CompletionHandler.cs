@@ -29,7 +29,7 @@ internal sealed class CompletionHandler(
 				TextDocumentFilter.ForLanguage("gamescript"),
 				TextDocumentFilter.ForLanguage("objectdef")),
 			ResolveProvider = false,
-			TriggerCharacters = new Container<string>("$", "^", "%", "~", "@", ".")
+			TriggerCharacters = new Container<string>("^", "@", ".")
 		};
 	}
 
