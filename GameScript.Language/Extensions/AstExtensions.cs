@@ -9,8 +9,11 @@
 
 		public static T? FindNodeAtPosition<T>(this AstNode astNode, int position) where T : class
 		{
-			// If offset is not within this node's range, return null immediately
-			if (!astNode.FileRange.Contains(position))
+			// If offset is not within this node's range, return null immediately.
+			// Zero-width nodes are synthetic (e.g. interpolation '+' operators) and
+			// are never "under the cursor".
+			if (astNode.FileRange.Start == astNode.FileRange.End ||
+				!astNode.FileRange.Contains(position))
 			{
 				return default;
 			}
@@ -32,8 +35,11 @@
 
 		public static T? FindNodeAtPosition<T>(this AstNode astNode, int line, int character) where T : class
 		{
-			// If offset is not within this node's range, return null immediately
-			if (!astNode.FileRange.Contains(line, character))
+			// If offset is not within this node's range, return null immediately.
+			// Zero-width nodes are synthetic (e.g. interpolation '+' operators) and
+			// are never "under the cursor".
+			if (astNode.FileRange.Start == astNode.FileRange.End ||
+				!astNode.FileRange.Contains(line, character))
 			{
 				return default;
 			}
@@ -55,8 +61,10 @@
 
 		public static (T? Node, AstNode? Parent) FindNodeAndParentAtPosition<T>(this AstNode astNode, int position) where T : class
 		{
-			// If offset is not within this node's range, return null immediately
-			if (!astNode.FileRange.Contains(position))
+			// If offset is not within this node's range, return null immediately.
+			// Zero-width nodes are synthetic and never "under the cursor".
+			if (astNode.FileRange.Start == astNode.FileRange.End ||
+				!astNode.FileRange.Contains(position))
 			{
 				return default;
 			}
@@ -78,8 +86,10 @@
 
 		public static (T? Node, AstNode? Parent) FindNodeAndParentAtPosition<T>(this AstNode astNode, int line, int character) where T : class
 		{
-			// If offset is not within this node's range, return null immediately
-			if (!astNode.FileRange.Contains(line, character))
+			// If offset is not within this node's range, return null immediately.
+			// Zero-width nodes are synthetic and never "under the cursor".
+			if (astNode.FileRange.Start == astNode.FileRange.End ||
+				!astNode.FileRange.Contains(line, character))
 			{
 				return default;
 			}

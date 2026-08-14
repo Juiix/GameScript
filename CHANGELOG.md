@@ -2,6 +2,11 @@
 
 All notable changes to GameScript will be documented in this file.
 
+## [2.0.2]
+
+### Fixed
+- Find-references, rename, and document highlight now work on symbols inside interpolated strings: the cursor lookup previously landed on the synthesized string/operator nodes instead of the embedded identifier. Zero-width synthetic nodes are excluded from position lookups.
+
 ## [2.0.1]
 
 ### Fixed

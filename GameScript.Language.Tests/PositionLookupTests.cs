@@ -22,6 +22,7 @@ public class PositionLookupTests
 		    print(skill_name(localValue))
 		    @hp = localValue + ^max_level
 		    print("lvl {skill_name(localValue)}!")
+		    print("{localValue}")
 		""";
 
 	private static (AstNode Root, GlobalSymbolTable Symbols, System.Collections.Generic.Dictionary<MethodDefinitionNode, LocalIndex> Locals) Setup()
@@ -74,5 +75,36 @@ public class PositionLookupTests
 		var symbol = localIndex?.GetSymbol(identifier.Name) ?? symbols.GetSymbol(identifier.Name);
 		Assert.NotNull(symbol);
 		Assert.Equal(expectedName, symbol!.Name);
+	}
+
+	// References/Rename/Highlight resolve the cursor with the UNTYPED lookup: a
+	// synthetic zero-width node (interpolation '+') at the same position must not
+	// win over the real identifier.
+	[Theory]
+	[InlineData(8, 16, "skill_name")]  // first char of an embedded call
+	[InlineData(9, 12, "localValue")]  // first char of a "{x}"-style embedded local
+	public void Untyped_Lookup_Skips_Synthetic_Zero_Width_Nodes(int line, int character, string expectedName)
+	{
+		var (root, _, _) = Setup();
+
+		var node = root.FindNodeAtPosition(line, character);
+		var identifier = Assert.IsType<IdentifierNode>(node);
+		Assert.Equal(expectedName, identifier.Name);
+	}
+
+	[Fact]
+	public void Local_References_Include_Interpolated_Usages()
+	{
+		var (_, _, locals) = Setup();
+
+		// mirror ReferencesHandler: local symbol -> local reference list
+		var mainIndex = locals.Values.First(x => x.GetSymbol("localValue") != null);
+		var references = mainIndex.GetReferences("localValue").ToList();
+
+		// usages: call arg (line 6), @hp assignment (line 7),
+		// inside "lvl {skill_name(localValue)}!" (line 8), inside "{localValue}" (line 9)
+		Assert.Contains(references, r => r.FileRange.Start.Line == 8);
+		Assert.Contains(references, r => r.FileRange.Start.Line == 9);
+		Assert.Equal(4, references.Count);
 	}
 }
