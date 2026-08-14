@@ -46,6 +46,10 @@
 		Return,
 
 		// Method references
-		LoadMethodRef   // push method index (operand) as int onto the stack
+		LoadMethodRef,  // push method index (operand) as int onto the stack
+
+		// Appended in 2.0 (values must stay stable for bytecode compatibility)
+		Modulo,         // a % b
+		TailCall        // call that replaces the current frame instead of pushing a new one
 	}
 }

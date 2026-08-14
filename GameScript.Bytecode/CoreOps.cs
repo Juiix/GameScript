@@ -75,6 +75,12 @@ internal static class CoreOps<TContext> where TContext : IScriptContext
 			var a = state.Pop();
 			state.Push(Value.FromInt(a.Int / b.Int));
 		},
+		[(ushort)CoreOpCode.Modulo] = static state =>
+		{
+			var b = state.Pop();
+			var a = state.Pop();
+			state.Push(Value.FromInt(a.Int % b.Int));
+		},
 
 		// -----------------
 		// ----- unary -----
@@ -168,6 +174,11 @@ internal static class CoreOps<TContext> where TContext : IScriptContext
 			var method = state.Program!.Methods[state.Operand];
 			state.Goto(method);
 		},
+		[(ushort)CoreOpCode.TailCall] = static state =>
+		{
+			var method = state.Program!.Methods[state.Operand];
+			state.TailCall(method);
+		},
 		[(ushort)CoreOpCode.Return] = static state =>
 		{
 			state.Return();
@@ -180,7 +191,7 @@ internal static class CoreOps<TContext> where TContext : IScriptContext
 		{
 			state.Push(Value.FromInt(state.Operand));
 		},
-	};
+	};
 	private static string ValueToString(Value v) => v.Type switch
 	{
 		ValueType.String => v.String ?? string.Empty,

@@ -166,6 +166,31 @@ public sealed class ScriptState<TContext>(int stackSize = 1024, int frameSize = 
         _sp = method.ParamCount + method.LocalsCount;
     }
 
+    /// <summary>
+    /// Replaces the current frame with <paramref name="method"/> (tail transfer).
+    /// The caller chain and the frame's StackStart are preserved, so the callee's
+    /// eventual Return delivers its values to the original caller. The callee's
+    /// ReturnCount must match the replaced method's (enforced by the compiler).
+    /// </summary>
+    public void TailCall(BytecodeMethod method)
+    {
+        ref var frame = ref _frames[_fp];
+        var stackStart = frame.StackStart;
+        var span = _stack.AsSpan();
+
+        // copy args (top of stack) down to the frame start
+        var paramCount = method.ParamCount;
+        var paramValues = span.Slice(_sp - paramCount, paramCount);
+        var paramValuesTarget = span.Slice(stackStart, paramCount);
+        paramValues.CopyTo(paramValuesTarget);
+
+        // clear the rest of the old frame's stack region
+        span.Slice(stackStart + paramCount, _sp - stackStart - paramCount).Clear();
+
+        frame = new CallFrame(method, stackStart);
+        _sp = stackStart + paramCount + method.LocalsCount;
+    }
+
     public void Return()
     {
         ref var frame = ref _frames[_fp--];
