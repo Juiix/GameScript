@@ -981,7 +981,10 @@ public ref struct AstParser
 			FlushLiteral(raw.Length); // include the closing quote
 
 		// left-associative '+' chain — identical shape (and bytecode) to manual concat.
-		// Operator nodes get zero-width ranges so they emit no visible semantic token.
+		// Operator nodes get zero-width ranges so they emit no visible semantic token,
+		// and each chain node spans exactly its own parts: a whole-token range here
+		// would swallow position lookups for parts to its right (the untyped search
+		// returns the first node that contains the cursor when no child does).
 		var result = parts[0];
 		for (int i = 1; i < parts.Count; i++)
 		{
@@ -989,7 +992,7 @@ public ref struct AstParser
 			result = new BinaryExpressionNode(
 				result, BinaryOperator.Add,
 				new OperatorNode("+", _filePath, new FileRange(opPosition, opPosition)),
-				parts[i], _filePath, range);
+				parts[i], _filePath, FileRange.Combine(result.FileRange, parts[i].FileRange));
 		}
 		return result;
 	}

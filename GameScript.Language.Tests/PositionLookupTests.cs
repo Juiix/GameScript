@@ -93,6 +93,66 @@ public class PositionLookupTests
 	}
 
 	[Fact]
+	public void References_Work_On_Local_Inside_Interpolation_RealWorldShape()
+	{
+		// mirror of the reported case: gain_xp's 'after' local, cursor inside {after}
+		const string source = """
+			command p_level(int skill) returns int
+			command add_xp(int skill, int amount)
+			command play_fx(int fx)
+			command play_jingle(int jingle)
+			command message(string text)
+			func skill_jingle(int skill) returns int
+			    return 0
+			func skill_name(int skill) returns string
+			    return "attack"
+
+			func gain_xp(int skill, int amount)
+			    int before = p_level(skill)
+			    add_xp(skill, amount)
+			    int after = p_level(skill)
+			    if after > before
+			        play_fx(^fx_level_up)
+			        play_jingle(skill_jingle(skill))
+			        message("Congratulations, your {skill_name(skill)} level is now {after}!")
+			""";
+
+		var symbols = new GlobalSymbolTable();
+		var types = new GlobalTypeIndex();
+		var parser = new AstParser("test.gs", source);
+		var root = parser.ParseProgram();
+		var fileIndex = new FileIndex();
+		var indexVisitor = new IndexVisitor(fileIndex, new VisitorContext(types, symbols, "test.gs"));
+		root.Accept(indexVisitor);
+		symbols.AddFile("test.gs", fileIndex.FileSymbols);
+
+		var constParser = new AstParser("fx.const", "int ^fx_level_up = 1");
+		var constRoot = constParser.ParseConstants();
+		var constIndex = new FileIndex();
+		constRoot.Accept(new IndexVisitor(constIndex, new VisitorContext(types, symbols, "fx.const")));
+		symbols.AddFile("fx.const", constIndex.FileSymbols);
+
+		// line 17 = the message(...) line; '{after}' starts at col 74, 'after' at 75
+		var messageLine = source.Split('\n')[17];
+		var cursor = messageLine.IndexOf("{after}") + 1;
+
+		// ReferencesHandler flow
+		var node = root.FindNodeAtPosition(17, cursor);
+		Assert.NotNull(node);
+		var identifier = Assert.IsType<IdentifierNode>(node);
+		Assert.Equal("after", identifier.Name);
+
+		var localIndex = indexVisitor.LocalIndexes.Values
+			.FirstOrDefault(x => x.FileRange.Contains(17, cursor));
+		Assert.NotNull(localIndex);
+		Assert.NotNull(localIndex!.GetSymbol("after"));
+
+		var references = localIndex.GetReferences("after").ToList();
+		// declaration usage sites: 'if after > before' + '{after}'
+		Assert.Contains(references, r => r.FileRange.Start.Line == 17);
+	}
+
+	[Fact]
 	public void Local_References_Include_Interpolated_Usages()
 	{
 		var (_, _, locals) = Setup();

@@ -2,6 +2,11 @@
 
 All notable changes to GameScript will be documented in this file.
 
+## [2.0.3]
+
+### Fixed
+- Find-references/rename now also work on symbols in the *later* parts of an interpolated string (e.g. `{after}` in `"your {name} level is now {after}!"`): the desugared concat-chain nodes carried the whole string's range, swallowing cursor lookups for parts to their right. Chain nodes now span exactly their own parts.
+
 ## [2.0.2]
 
 ### Fixed
