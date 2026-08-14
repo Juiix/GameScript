@@ -220,6 +220,17 @@ public ref struct AstParser
 				returns = [ParseReturnType()];
 		}
 
+		/* ───── '=' internal-name binding (commands only) ───── */
+		string? internalName = null;
+		if (Match(TokenType.Operator, "="))
+		{
+			var eqRange = PreviousRange;
+			var internalTok = Expect(TokenType.Identifier, "Expected an engine-op name after '='", "?".AsSpan());
+			internalName = internalTok.Value.ToString();
+			if (idType != IdentifierType.Command)
+				Error("'=' op binding is only allowed on command declarations", eqRange);
+		}
+
 		/* ───── body ───── */
 		var body = ParseBlock();     // may be null if no nested indent
 		AstNode? lastNode = (AstNode?)body
@@ -230,7 +241,8 @@ public ref struct AstParser
 
 		return new MethodDefinitionNode(
 			kwNode, returnsKw, returns, nameNode, parameters, body, _filePath,
-			new FileRange(start, lastNode?.FileRange.End ?? start));
+			new FileRange(start, lastNode?.FileRange.End ?? start),
+			internalName);
 	}
 
 	private ConstantDefinitionNode ParseConstantDefinition()

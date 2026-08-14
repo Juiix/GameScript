@@ -12,7 +12,8 @@ namespace GameScript.Language.Ast
 		List<ParameterNode>? parameters,
 		BlockNode? body,
 		string filePath,
-		in FileRange fileRange) : AstNode(filePath, in fileRange)
+		in FileRange fileRange,
+		string? internalName = null) : AstNode(filePath, in fileRange)
 	{
 		public KeywordNode Keyword { get; } = keyword;
 		public KeywordNode? ReturnsKeyword { get; } = returnsKeyword;
@@ -22,6 +23,9 @@ namespace GameScript.Language.Ast
 		public BlockNode? Body { get; } = body;
 		public string SymbolName { get; } = name.Type == IdentifierType.Trigger ?
 					$"{keyword.Keyword} {name.Name}" : name.Name;
+
+		/// <summary>Engine-op name from a command's '= name' binding, if present.</summary>
+		public string? InternalName { get; } = internalName;
 
 		public override IEnumerable<AstNode> Children
 		{

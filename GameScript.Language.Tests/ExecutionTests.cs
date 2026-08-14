@@ -272,6 +272,47 @@ public class ExecutionTests
 	}
 
 	[Fact]
+	public void Overloaded_Funcs_Dispatch_By_Argument_Type()
+	{
+		var (host, program) = Build("""
+			func pick(int $v) returns int
+			    return 1
+
+			func pick(string $v) returns int
+			    return 2
+
+			func main()
+			    print(int_to_str(~pick(0) * 10 + ~pick("x")))
+			""");
+		host.Start(program, "main");
+		Assert.Equal(new[] { "12" }, host.Context.Printed);
+	}
+
+	[Fact]
+	public void Command_Overloads_With_Op_Binding_Hit_Distinct_Engine_Ops()
+	{
+		var (host, program) = Build("""
+			label deferred(int $x)
+			    print(int_to_str($x))
+
+			func main()
+			    enqueue(@deferred, 1)
+			    enqueue(@deferred, 2, 42)
+			""",
+			("overloads.gs", """
+			// One script name, two engine ops selected by '=' binding
+			command enqueue(label $method, int $delay) = queue_strong
+			command enqueue(label $method, int $delay, int $arg0) = queue_strong_int
+			"""));
+		host.Start(program, "main");
+
+		Assert.Equal(2, host.Context.Queued.Count);
+		Assert.Empty(host.Context.Queued[0].Args);       // routed to TestOp.QueueStrong
+		Assert.Single(host.Context.Queued[1].Args);      // routed to TestOp.QueueStrongInt
+		Assert.Equal(42, host.Context.Queued[1].Args[0].Int);
+	}
+
+	[Fact]
 	public void Negation_Operator()
 	{
 		var (host, program) = Build("""

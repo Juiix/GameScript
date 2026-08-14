@@ -76,7 +76,8 @@ namespace GameScript.Language.Visitors
 				node.Name.Summary,
 				null,
 				_context.FilePath,
-				node.Name.FileRange
+				node.Name.FileRange,
+				node.InternalName
 			);
 
 			_fileIndex.AddSymbol(symbol);

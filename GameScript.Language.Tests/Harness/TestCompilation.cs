@@ -24,6 +24,7 @@ public sealed class TestCompilation
 	public List<FileError> ParseErrors { get; } = [];
 	public List<FileError> AnalysisErrors { get; } = [];
 	public IEnumerable<FileError> AllErrors => ParseErrors.Concat(AnalysisErrors);
+	public Dictionary<CallExpressionNode, Symbols.SymbolInfo> ResolvedCalls { get; } = [];
 
 	public TestCompilation AddFile(string filePath, string source)
 	{
@@ -54,12 +55,16 @@ public sealed class TestCompilation
 	public TestCompilation Analyze()
 	{
 		AnalysisErrors.Clear();
+		ResolvedCalls.Clear();
 		foreach (var (filePath, root, locals) in _files)
 		{
 			var context = new VisitorContext(_types, _symbols, filePath);
 			Run(new SymbolAnalysisVisitor(locals, context));
 			Run(new SemanticAnalysisVisitor(locals, context));
-			Run(new TypeAnalysisVisitor(locals, context));
+			var typeVisitor = new TypeAnalysisVisitor(locals, context);
+			Run(typeVisitor);
+			foreach (var (call, symbol) in typeVisitor.ResolvedCalls)
+				ResolvedCalls[call] = symbol;
 
 			void Run<TVisitor>(TVisitor visitor) where TVisitor : IAstVisitor
 			{
@@ -83,7 +88,7 @@ public sealed class TestCompilation
 		var contexts = roots.OfType<ContextsNode>().SelectMany(x => x.Definitions ?? []);
 		var methods = roots.OfType<ProgramNode>().SelectMany(x => x.Methods ?? []);
 
-		var compiler = new BytecodeCompiler<TestOp>();
+		var compiler = new BytecodeCompiler<TestOp>(ResolvedCalls);
 		return compiler.Compile(constants, contexts, methods);
 	}
 

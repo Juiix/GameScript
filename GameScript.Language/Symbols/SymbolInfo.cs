@@ -15,7 +15,8 @@ namespace GameScript.Language.Symbols
 		string? summary,
 		object? literalValue,
 		string filePath,
-		FileRange fileRange)
+		FileRange fileRange,
+		string? internalName = null)
 	{
 		public IdentifierType IdentifierType { get; } = identifierType;
 		public string Name { get; } = name;
@@ -27,6 +28,13 @@ namespace GameScript.Language.Symbols
 		public object? LiteralValue { get; } = literalValue;
 		public string FilePath { get; } = filePath;
 		public FileRange FileRange { get; } = fileRange;
+
+		/// <summary>
+		/// Engine-op name a command declaration binds to via '= name'
+		/// (e.g. 'command queue(func m, int d, int a0) = queue_int'). Null when
+		/// the declaration binds by its own name (the default).
+		/// </summary>
+		public string? InternalName { get; } = internalName;
 		public string Signature { get; } = CreateSignature(identifierType, name, type, typeNames, paramTypes, paramNames);
 
 		/// <summary>Number of declared parameters (methods only; 0 otherwise).</summary>

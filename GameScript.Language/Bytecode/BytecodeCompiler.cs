@@ -13,6 +13,21 @@ public sealed class BytecodeCompiler<TCommandOp> where TCommandOp : struct, Enum
 	private readonly List<BytecodeMethodMetadata> _methodMetadata = [];
 	private readonly Dictionary<string, int> _methodIndex = [];
 	private readonly Dictionary<string, int> _returnCounts = [];
+	private readonly Dictionary<string, string?> _nameToKey = [];
+	private readonly IReadOnlyDictionary<CallExpressionNode, Symbols.SymbolInfo>? _resolvedCalls;
+
+	public BytecodeCompiler() : this(null) { }
+
+	/// <summary>
+	/// <paramref name="resolvedCalls"/> maps call sites to the overload chosen during
+	/// type analysis (TypeAnalysisVisitor.ResolvedCalls, merged across files). Without
+	/// it, calls to overloaded names cannot be compiled and '=' op bindings on
+	/// overloads are unreachable — only pass null for legacy single-overload content.
+	/// </summary>
+	public BytecodeCompiler(IReadOnlyDictionary<CallExpressionNode, Symbols.SymbolInfo>? resolvedCalls)
+	{
+		_resolvedCalls = resolvedCalls;
+	}
 	private readonly Dictionary<string, Value> _globals = [];
 	private readonly Dictionary<Value, int> _constMap = [];
 	private readonly List<Value> _constPool = [];
@@ -40,13 +55,17 @@ public sealed class BytecodeCompiler<TCommandOp> where TCommandOp : struct, Enum
 		_loopStack.Clear();
 		_lineNumbers.Clear();
 
-		// 1) Index all methods
+		// 1) Index all methods (keyed by name + parameter signature so overloads coexist)
 		int index = 0;
+		_nameToKey.Clear();
 		foreach (var method in methods)
 		{
+			var key = MangledKey(method);
 			var compiled = IsCompilable(method);
-			_methodIndex[method.SymbolName] = compiled ? index++ : 0;
-			_returnCounts[method.SymbolName] = method.ReturnTypes?.Count ?? 0;
+			_methodIndex[key] = compiled ? index++ : 0;
+			_returnCounts[key] = method.ReturnTypes?.Count ?? 0;
+			// plain-name shortcut for non-overloaded methods; null marks an overloaded name
+			_nameToKey[method.SymbolName] = _nameToKey.ContainsKey(method.SymbolName) ? null : key;
 		}
 
 		// 2) Compile constant init method
@@ -71,6 +90,10 @@ public sealed class BytecodeCompiler<TCommandOp> where TCommandOp : struct, Enum
 		var metadata = new BytecodeProgramMetadata([.. _methodMetadata], contextNames);
 		return new BytecodeCompilerResult(program, metadata);
 	}
+
+	/// <summary>Name + parameter-type signature, matching SymbolInfo.MangledName.</summary>
+	private static string MangledKey(MethodDefinitionNode method) =>
+		$"{method.SymbolName}({string.Join(",", method.Parameters?.Select(p => p.Type.Name) ?? [])})";
 
 	private static bool IsCompilable(MethodDefinitionNode method)
 	{
@@ -428,9 +451,12 @@ public sealed class BytecodeCompiler<TCommandOp> where TCommandOp : struct, Enum
 				{
 					EmitLoadConstant(constValue, expression.FileRange.Start.Line);
 				}
-				else if (id.Type == IdentifierType.Label && _methodIndex.TryGetValue(id.Name, out var methodIdx))
+				else if (id.Type == IdentifierType.Label &&
+					_nameToKey.TryGetValue(id.Name, out var refKey))
 				{
-					Emit(CoreOpCode.LoadMethodRef, methodIdx, expression.FileRange.Start.Line);
+					if (refKey == null)
+						throw new Exception($"Reference to '{id.Name}' is ambiguous: the name is overloaded.");
+					Emit(CoreOpCode.LoadMethodRef, _methodIndex[refKey], expression.FileRange.Start.Line);
 				}
 				else
 				{
@@ -521,12 +547,31 @@ public sealed class BytecodeCompiler<TCommandOp> where TCommandOp : struct, Enum
 					}
 				}
 
-				// 2) call
-				if (!_methodIndex.TryGetValue(call.FunctionName.Name, out var fid))
+				// 2) call — resolve the target overload
+				var callName = call.FunctionName.Name;
+				Symbols.SymbolInfo? resolvedSymbol = null;
+				_resolvedCalls?.TryGetValue(call, out resolvedSymbol);
+
+				string methodKey;
+				if (resolvedSymbol != null)
 				{
-					throw new Exception($"Unknown method '{call.FunctionName.Name}'");
+					methodKey = resolvedSymbol.MangledName;
 				}
-				var returnCount = _returnCounts[call.FunctionName.Name];
+				else if (_nameToKey.TryGetValue(callName, out var uniqueKey))
+				{
+					methodKey = uniqueKey ??
+						throw new Exception($"Call to overloaded method '{callName}' requires overload resolution data (pass TypeAnalysisVisitor.ResolvedCalls to the compiler).");
+				}
+				else
+				{
+					throw new Exception($"Unknown method '{callName}'");
+				}
+
+				if (!_methodIndex.TryGetValue(methodKey, out var fid))
+				{
+					throw new Exception($"Unknown method '{methodKey}'");
+				}
+				var returnCount = _returnCounts[methodKey];
 
 				switch (call.FunctionName.Type)
 				{
@@ -537,14 +582,16 @@ public sealed class BytecodeCompiler<TCommandOp> where TCommandOp : struct, Enum
 						Emit(CoreOpCode.Goto, fid, expression.FileRange.Start.Line);
 						break;
 					case IdentifierType.Command:
-						if (CommandHandler<TCommandOp>.TryGetOp(call.FunctionName.Name, out var commandOp))
+						// a '= name' binding routes this overload to a specific engine op
+						var opName = resolvedSymbol?.InternalName ?? callName;
+						if (CommandHandler<TCommandOp>.TryGetOp(opName, out var commandOp))
 						{
 							Emit(commandOp, call.DotPrefix, expression.FileRange.Start.Line);
 							break;
 						}
 						else
 						{
-							throw new NotImplementedException($"Command '{call.FunctionName.Name}' is not a supported operation.");
+							throw new NotImplementedException($"Command '{opName}' is not a supported operation.");
 						}
 					default:
 						throw new Exception($"Cannot call method of type '{call.FunctionName.Type}' ('{call.FunctionName.Name}')");

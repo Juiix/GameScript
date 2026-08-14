@@ -139,6 +139,25 @@ public class ParserTests
 	}
 
 	[Fact]
+	public void Parses_Command_Op_Binding()
+	{
+		var (root, errors) = ParseProgram("command enqueue(label $method, int $delay) = queue_strong");
+		Assert.Empty(errors);
+		var method = Assert.Single(root.Methods!);
+		Assert.Equal("queue_strong", method.InternalName);
+	}
+
+	[Fact]
+	public void Op_Binding_On_Func_Is_An_Error()
+	{
+		var (_, errors) = ParseProgram("""
+			func broken() = queue_strong
+			    return
+			""");
+		Assert.Contains(errors, e => e.Message.Contains("command declarations"));
+	}
+
+	[Fact]
 	public void Missing_Paren_Produces_Error()
 	{
 		var (_, errors) = ParseProgram("""
