@@ -166,6 +166,11 @@ namespace GameScript.Language.Visitors
 			Visit((AstNode)node);
 		}
 
+		public virtual void Visit(ParenthesizedExpressionNode node)
+		{
+			Visit((AstNode)node);
+		}
+
 		public virtual void Visit(UnparsableExpressionNode node)
 		{
 			// Leaf or dummy node, nothing to do.

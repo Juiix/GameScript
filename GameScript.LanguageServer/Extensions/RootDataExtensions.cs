@@ -95,11 +95,8 @@ namespace GameScript.LanguageServer.Extensions
 		{
 			return prefix switch
 			{
-				'$' => IdentifierType.Local,
 				'^' => IdentifierType.Constant,
-				'%' => IdentifierType.Context,
-				'~' => IdentifierType.Func,
-				'@' => IdentifierType.Label,
+				'@' => IdentifierType.Context,
 				_ => IdentifierType.Unknown
 			};
 		}

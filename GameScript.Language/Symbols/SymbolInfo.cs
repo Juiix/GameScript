@@ -113,10 +113,7 @@ namespace GameScript.Language.Symbols
 		{
 			return identifierType switch
 			{
-				IdentifierType.Func => "~",
-				IdentifierType.Label => "@",
-				IdentifierType.Local => "$",
-				IdentifierType.Context => "%",
+				IdentifierType.Context => "@",
 				IdentifierType.Constant => "^",
 				_ => string.Empty,
 			};
@@ -150,7 +147,6 @@ namespace GameScript.Language.Symbols
 					!string.IsNullOrWhiteSpace(names[paramCount - 1]))
 				{
 					vsb.Append(' ');
-					vsb.Append('$');
 					vsb.Append(names[paramCount - 1]);
 				}
 			}

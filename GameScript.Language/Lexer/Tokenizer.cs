@@ -236,14 +236,13 @@ namespace GameScript.Language.Lexer
 			/*──────────────────────────────────────────────────────────────
 			 * 8.  Identifier / keyword / boolean
 			 *──────────────────────────────────────────────────────────────*/
-			if (char.IsLetter(ch) || ch == '_' || IsVariableAccessor(ch) || IsFunctionCall(ch))
+			if (char.IsLetter(ch) || ch == '_' || IsVariableAccessor(ch))
 			{
 				int start = _column;
 				while (_column < _text.Length &&
 					   (char.IsLetterOrDigit(_text[_column]) ||
 						_text[_column] == '_' ||
-						(_column == start &&
-						 (IsVariableAccessor(_text[_column]) || IsFunctionCall(_text[_column])))))
+						(_column == start && IsVariableAccessor(_text[_column]))))
 				{
 					_column++;
 				}
@@ -271,7 +270,7 @@ namespace GameScript.Language.Lexer
 			var startPos = CurrentFilePosition;
 			int pos = _column;
 			int indent = 0;
-			// Count spaces (or expand tabs as needed).
+			bool sawTab = false;
 			while (pos < _text.Length)
 			{
 				char c = _text[pos];
@@ -281,14 +280,32 @@ namespace GameScript.Language.Lexer
 				}
 				else if (c == '\t')
 				{
-					// Convert tab to spaces (for example, assume 4 spaces per tab).
 					indent += 4;
+					sawTab = true;
 				}
 				else
 				{
 					break;
 				}
 				pos++;
+			}
+
+			// Strict indentation only applies to lines with content — whitespace-only
+			// lines keep the historical tolerant handling.
+			if (pos < _text.Length)
+			{
+				if (sawTab)
+				{
+					_column = pos;
+					token = new Token(TokenType.Error, TabIndentMessage.AsSpan(), CurrentRange(startPos));
+					return true;
+				}
+				if (indent % 4 != 0)
+				{
+					_column = pos;
+					token = new Token(TokenType.Error, BadIndentMessage.AsSpan(), CurrentRange(startPos));
+					return true;
+				}
 			}
 
 			var tabs = (indent + 2) / 4;
@@ -314,11 +331,17 @@ namespace GameScript.Language.Lexer
 			return false;
 		}
 
+		/// <summary>Long Error-token values are full messages; single chars are offenders.</summary>
+		public const string TabIndentMessage = "Tabs are not allowed; indent with 4 spaces";
+		public const string BadIndentMessage = "Indentation must be a multiple of 4 spaces";
+
 		private void SkipWhitespace()
 		{
+			// '\t' deliberately not skipped: interior tabs surface as Error tokens
 			while (_column < _text.Length &&
 				   char.IsWhiteSpace(_text[_column]) &&
-				   _text[_column] != '\n')
+				   _text[_column] != '\n' &&
+				   _text[_column] != '\t')
 			{
 				_column++;
 			}
@@ -326,7 +349,7 @@ namespace GameScript.Language.Lexer
 
 		private static bool IsOperatorChar(char c)
 		{
-			return c == '+' || c == '-' || c == '*' || c == '/' ||
+			return c == '+' || c == '-' || c == '*' || c == '/' || c == '%' ||
 				   c == '=' || c == '<' || c == '>' || c == '!';
 		}
 
@@ -342,7 +365,8 @@ namespace GameScript.Language.Lexer
 				   op.SequenceEqual("+=".AsSpan()) ||
 				   op.SequenceEqual("-=".AsSpan()) ||
 				   op.SequenceEqual("*=".AsSpan()) ||
-				   op.SequenceEqual("/=".AsSpan());
+				   op.SequenceEqual("/=".AsSpan()) ||
+				   op.SequenceEqual("%=".AsSpan());
 		}
 
 		private static bool IsKeyword(ReadOnlySpan<char> value)
@@ -363,12 +387,7 @@ namespace GameScript.Language.Lexer
 
 		private static bool IsVariableAccessor(char c)
 		{
-			return c == '^' || c == '$' || c == '%';
-		}
-
-		private static bool IsFunctionCall(char c)
-		{
-			return c == '@' || c == '~';
+			return c == '^' || c == '@';
 		}
 
 		private bool HasLetterOrAccessorAfterDots(int pos)

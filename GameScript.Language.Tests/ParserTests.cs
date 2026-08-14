@@ -21,8 +21,8 @@ public class ParserTests
 	public void Parses_Func_With_Params_And_Returns()
 	{
 		var (root, errors) = ParseProgram("""
-			func add(int $a, int $b) returns int
-			    return $a + $b
+			func add(int a, int b) returns int
+			    return a + b
 			""");
 		Assert.Empty(errors);
 		var method = Assert.Single(root.Methods!);
@@ -31,25 +31,42 @@ public class ParserTests
 	}
 
 	[Fact]
-	public void Parses_Label_Declaration()
+	public void Label_Declaration_Is_An_Error()
 	{
 		var (root, errors) = ParseProgram("""
-			label close_gate(int $coord)
+			label close_gate(int coord)
 			    return
 			""");
-		Assert.Empty(errors);
+		Assert.Contains(errors, e => e.Message.Contains("'label' declarations are removed"));
+		// still parses as a func for downstream tooling
 		var method = Assert.Single(root.Methods!);
-		Assert.Equal(IdentifierType.Label, method.Name.Type);
+		Assert.Equal(IdentifierType.Func, method.Name.Type);
 	}
 
 	[Fact]
 	public void Parses_Command_Declaration_Without_Body()
 	{
-		var (root, errors) = ParseProgram("command clamp(int $value, int $min, int $max) returns int");
+		var (root, errors) = ParseProgram("command clamp(int value, int minValue, int maxValue) returns int");
 		Assert.Empty(errors);
 		var method = Assert.Single(root.Methods!);
 		Assert.Equal(IdentifierType.Command, method.Name.Type);
 		Assert.Equal(3, method.Parameters!.Count);
+	}
+
+	[Fact]
+	public void Parses_Func_Type_In_Command_Params()
+	{
+		var (root, errors) = ParseProgram("command queue_strong(func method, int delay)");
+		Assert.Empty(errors);
+		var method = Assert.Single(root.Methods!);
+		Assert.Equal("func", method.Parameters![0].Type.Name);
+	}
+
+	[Fact]
+	public void Label_Type_In_Params_Is_An_Error()
+	{
+		var (_, errors) = ParseProgram("command queue_strong(label method, int delay)");
+		Assert.Contains(errors, e => e.Message.Contains("'label' type is removed"));
 	}
 
 	[Fact]
@@ -66,10 +83,32 @@ public class ParserTests
 	}
 
 	[Fact]
+	public void Trigger_With_Empty_Parens_Is_An_Error()
+	{
+		var (_, errors) = ParseProgram("""
+			obj_op_1 furnace()
+			    return
+			""");
+		Assert.Contains(errors, e => e.Message.Contains("omit the '()'"));
+	}
+
+	[Fact]
+	public void Trigger_With_Params_Keeps_Parens()
+	{
+		var (root, errors) = ParseProgram("""
+			mn_text username:input(string text)
+			    return
+			""");
+		Assert.Empty(errors);
+		var method = Assert.Single(root.Methods!);
+		Assert.Single(method.Parameters!);
+	}
+
+	[Fact]
 	public void Parses_Tuple_Returns_Declaration()
 	{
 		var (root, errors) = ParseProgram("""
-			func try_login() returns (bool $success, string $error)
+			func try_login() returns (bool success, string error)
 			    return (true, "")
 			""");
 		Assert.Empty(errors);
@@ -82,7 +121,7 @@ public class ParserTests
 	{
 		var (root, errors) = ParseProgram("""
 			func main()
-			    int $x, $y, $plane
+			    int x, y, plane
 			    return
 			""");
 		Assert.Empty(errors);
@@ -92,10 +131,10 @@ public class ParserTests
 	public void Parses_If_ElseIf_Else_Chain()
 	{
 		var (root, errors) = ParseProgram("""
-			func main(int $x)
-			    if $x == 1
+			func main(int x)
+			    if x == 1
 			        return
-			    else if $x == 2
+			    else if x == 2
 			        return
 			    else
 			        return
@@ -108,6 +147,41 @@ public class ParserTests
 	}
 
 	[Fact]
+	public void Full_Wrap_Condition_Parens_Are_An_Error()
+	{
+		var (_, errors) = ParseProgram("""
+			func main(int x)
+			    if (x == 1)
+			        return
+			""");
+		Assert.Contains(errors, e => e.Message.Contains("Remove the parentheses"));
+	}
+
+	[Fact]
+	public void Inner_Grouping_In_Conditions_Is_Allowed()
+	{
+		var (_, errors) = ParseProgram("""
+			func main(bool a, bool b, bool c)
+			    if (a or b) and c
+			        return
+			    while not (a and b)
+			        return
+			""");
+		Assert.Empty(errors);
+	}
+
+	[Fact]
+	public void Bang_Prefix_Is_An_Error()
+	{
+		var (_, errors) = ParseProgram("""
+			func main(bool flag)
+			    if !flag
+			        return
+			""");
+		Assert.Contains(errors, e => e.Message.Contains("Use 'not' instead of '!'"));
+	}
+
+	[Fact]
 	public void Parses_Constants_File()
 	{
 		var parser = new AstParser("skills.const", "int ^skill_attack = 0\nint ^skill_mining = 1");
@@ -117,31 +191,27 @@ public class ParserTests
 	}
 
 	[Fact]
-	public void Parses_Contexts_File()
+	public void Parses_Contexts_File_With_At_Mark()
 	{
-		var parser = new AstParser("player.context", "int %platform = 4");
+		var parser = new AstParser("player.context", "int @platform = 4");
 		var root = (ContextsNode)parser.ParseContexts();
 		Assert.Empty(parser.Errors ?? Enumerable.Empty<FileError>().ToList());
-		Assert.Single(root.Definitions!);
+		var def = Assert.Single(root.Definitions!);
+		Assert.Equal("platform", def.Name.Name);
 	}
 
 	[Fact]
-	public void Bare_Label_Reference_Is_Not_A_Call()
+	public void Context_File_With_Old_Percent_Mark_Is_An_Error()
 	{
-		var (root, errors) = ParseProgram("""
-			label deferred()
-			    return
-
-			func main()
-			    queue_strong(@deferred, 1)
-			""");
-		Assert.Empty(errors);
+		var parser = new AstParser("player.context", "int %platform = 4");
+		parser.ParseContexts();
+		Assert.NotEmpty(parser.Errors!);
 	}
 
 	[Fact]
 	public void Parses_Command_Op_Binding()
 	{
-		var (root, errors) = ParseProgram("command enqueue(label $method, int $delay) = queue_strong");
+		var (root, errors) = ParseProgram("command enqueue(func method, int delay) = queue_strong");
 		Assert.Empty(errors);
 		var method = Assert.Single(root.Methods!);
 		Assert.Equal("queue_strong", method.InternalName);
@@ -191,7 +261,7 @@ public class ParserTests
 	public void Missing_Paren_Produces_Error()
 	{
 		var (_, errors) = ParseProgram("""
-			func broken(int $a
+			func broken(int a
 			    return
 			""");
 		Assert.NotEmpty(errors);

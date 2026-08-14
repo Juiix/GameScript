@@ -39,6 +39,7 @@ public sealed class BytecodeCompiler<TCommandOp> where TCommandOp : struct, Enum
 	private readonly Dictionary<string, int> _ctxSlots = [];
 	private readonly Stack<LoopContext> _loopStack = [];
 	private int _nextSlot;
+	private int _currentReturnCount;
 
 	public BytecodeCompilerResult Compile(
 		IEnumerable<ConstantDefinitionNode> constants,
@@ -162,18 +163,30 @@ public sealed class BytecodeCompiler<TCommandOp> where TCommandOp : struct, Enum
 			}
 		}
 		_nextSlot = paramCount;
+		_currentReturnCount = methodNode.ReturnTypes?.Count ?? 0;
 
-		// 2) Emit body statements
-		if (methodNode.Body?.Statements != null)
+		// 2) Emit body statements. The final statement of a void method that is a
+		//    plain func call compiles as a tail transfer (frame replacement).
+		var statements = methodNode.Body?.Statements;
+		if (statements != null)
 		{
-			foreach (var statement in methodNode.Body.Statements)
+			for (int i = 0; i < statements.Count; i++)
 			{
-				EmitStatement(statement);
+				if (i == statements.Count - 1 &&
+					_currentReturnCount == 0 &&
+					statements[i] is CallExpressionNode lastCall &&
+					TryEmitTailCall(lastCall))
+				{
+					continue;
+				}
+				EmitStatement(statements[i]);
 			}
 		}
 
-		// 3) Ensure there's a Return at the end
-		var lastOpIsReturn = _ops.Count > 0 && ((CoreOpCode)_ops[_ops.Count - 1] == CoreOpCode.Return);
+		// 3) Ensure there's a Return at the end (a TailCall never falls through)
+		var lastOp = _ops.Count > 0 ? (CoreOpCode)_ops[_ops.Count - 1] : default;
+		var lastOpIsReturn = _ops.Count > 0 &&
+			(lastOp == CoreOpCode.Return || lastOp == CoreOpCode.TailCall);
 		if (!lastOpIsReturn)
 		{
 			for (int i = 0; i < (methodNode.ReturnTypes?.Count ?? 0); i++)
@@ -256,6 +269,12 @@ public sealed class BytecodeCompiler<TCommandOp> where TCommandOp : struct, Enum
 			// return statement
 			// ----------------------------------------
 			case ReturnStatementNode ret:
+				// 'return f(...)' where arities match compiles as a tail transfer
+				if (ret.Expression is CallExpressionNode retCall &&
+					TryEmitTailCall(retCall))
+				{
+					break;
+				}
 				if (ret.Expression != null)
 				{
 					EmitExpression(ret.Expression);
@@ -439,6 +458,12 @@ public sealed class BytecodeCompiler<TCommandOp> where TCommandOp : struct, Enum
 				return 1;
 
 			// ----------------------------------------
+			// Grouping: semantically transparent
+			// ----------------------------------------
+			case ParenthesizedExpressionNode paren:
+				return EmitExpression(paren.Inner);
+
+			// ----------------------------------------
 			// Variable or constant: load from a local slot
 			// ----------------------------------------
 			case IdentifierNode id:
@@ -452,7 +477,7 @@ public sealed class BytecodeCompiler<TCommandOp> where TCommandOp : struct, Enum
 				{
 					EmitLoadConstant(constValue, expression.FileRange.Start.Line);
 				}
-				else if (id.Type == IdentifierType.Label &&
+				else if (id.Type is IdentifierType.Func or IdentifierType.Label &&
 					_nameToKey.TryGetValue(id.Name, out var refKey))
 				{
 					if (refKey == null)
@@ -550,20 +575,7 @@ public sealed class BytecodeCompiler<TCommandOp> where TCommandOp : struct, Enum
 
 				// 2) call — resolve the target overload
 				var callName = call.FunctionName.Name;
-				Symbols.SymbolInfo? resolvedSymbol = null;
-				_resolvedCalls?.TryGetValue(call, out resolvedSymbol);
-
-				string methodKey;
-				if (resolvedSymbol != null)
-				{
-					methodKey = resolvedSymbol.MangledName;
-				}
-				else if (_nameToKey.TryGetValue(callName, out var uniqueKey))
-				{
-					methodKey = uniqueKey ??
-						throw new Exception($"Call to overloaded method '{callName}' requires overload resolution data (pass TypeAnalysisVisitor.ResolvedCalls to the compiler).");
-				}
-				else
+				if (!TryResolveCall(call, out var methodKey, out var resolvedSymbol))
 				{
 					throw new Exception($"Unknown method '{callName}'");
 				}
@@ -574,7 +586,7 @@ public sealed class BytecodeCompiler<TCommandOp> where TCommandOp : struct, Enum
 				}
 				var returnCount = _returnCounts[methodKey];
 
-				switch (call.FunctionName.Type)
+				switch (resolvedSymbol?.IdentifierType ?? call.FunctionName.Type)
 				{
 					case IdentifierType.Func:
 						Emit(CoreOpCode.Call, fid, expression.FileRange.Start.Line);
@@ -772,6 +784,62 @@ public sealed class BytecodeCompiler<TCommandOp> where TCommandOp : struct, Enum
 		}
 	}
 
+	/// <summary>
+	/// Resolves a call site to its method-index key and (when overload data is
+	/// available) the chosen overload's symbol. Throws only when the name exists
+	/// but is overloaded and no resolution data was provided.
+	/// </summary>
+	private bool TryResolveCall(CallExpressionNode call, out string key, out Symbols.SymbolInfo? resolved)
+	{
+		resolved = null;
+		_resolvedCalls?.TryGetValue(call, out resolved);
+		if (resolved != null)
+		{
+			key = resolved.MangledName;
+			return true;
+		}
+		if (_nameToKey.TryGetValue(call.FunctionName.Name, out var uniqueKey))
+		{
+			key = uniqueKey ??
+				throw new Exception($"Call to overloaded method '{call.FunctionName.Name}' requires overload resolution data (pass TypeAnalysisVisitor.ResolvedCalls to the compiler).");
+			return true;
+		}
+		key = string.Empty;
+		return false;
+	}
+
+	/// <summary>
+	/// Emits 'args… + TailCall' for a call in tail position when the callee is a
+	/// script func whose return arity matches the current method's. Returns false
+	/// (emitting nothing) when the pattern doesn't qualify — commands, arity
+	/// mismatches, and unknown targets compile as ordinary calls.
+	/// </summary>
+	private bool TryEmitTailCall(CallExpressionNode call)
+	{
+		if (!TryResolveCall(call, out var key, out var resolved))
+			return false;
+
+		var kind = resolved?.IdentifierType ?? call.FunctionName.Type;
+		if (kind is not (IdentifierType.Func or IdentifierType.Label))
+			return false;
+
+		if (!_methodIndex.TryGetValue(key, out var fid))
+			return false;
+
+		if (_returnCounts[key] != _currentReturnCount)
+			return false;
+
+		if (call.Arguments != null)
+		{
+			foreach (var arg in call.Arguments)
+			{
+				EmitExpression(arg);
+			}
+		}
+		Emit(CoreOpCode.TailCall, fid, call.FileRange.Start.Line);
+		return true;
+	}
+
 	private (IdentifierType Type, int Slot) ResolveTupleTarget(ExpressionNode element)
 	{
 		if (element is DeclarationExpressionNode decl)
@@ -803,6 +871,7 @@ public sealed class BytecodeCompiler<TCommandOp> where TCommandOp : struct, Enum
 			BinaryOperator.Subtract => CoreOpCode.Subtract,
 			BinaryOperator.Multiply => CoreOpCode.Multiply,
 			BinaryOperator.Divide => CoreOpCode.Divide,
+			BinaryOperator.Modulo => CoreOpCode.Modulo,
 			BinaryOperator.EqualTo => CoreOpCode.Equal,
 			BinaryOperator.NotEqualTo => CoreOpCode.NotEqual,
 			BinaryOperator.LessThan => CoreOpCode.LessThan,
@@ -821,6 +890,7 @@ public sealed class BytecodeCompiler<TCommandOp> where TCommandOp : struct, Enum
 			AssignmentOperator.Subtract => CoreOpCode.Subtract,
 			AssignmentOperator.Multiply => CoreOpCode.Multiply,
 			AssignmentOperator.Divide => CoreOpCode.Divide,
+			AssignmentOperator.Modulo => CoreOpCode.Modulo,
 			_ => throw new NotSupportedException($"Unsupported assignment operator {assOp}"),
 		};
 	}

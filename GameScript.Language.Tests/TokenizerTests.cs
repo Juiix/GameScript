@@ -57,7 +57,7 @@ public class TokenizerTests
 	[Fact]
 	public void Keywords_Are_Keyword_Tokens()
 	{
-		foreach (var kw in new[] { "func", "label", "command", "return", "returns", "if", "else", "while", "break", "continue", "and", "or" })
+		foreach (var kw in new[] { "func", "label", "command", "return", "returns", "if", "else", "while", "break", "continue", "and", "or", "not" })
 		{
 			var tokens = LexNoLayout(kw);
 			Assert.Equal(TokenType.Keyword, tokens[0].Type);
@@ -72,24 +72,39 @@ public class TokenizerTests
 	}
 
 	[Fact]
-	public void Sigiled_Identifiers_Are_Single_Tokens()
+	public void Marked_And_Bare_Identifiers_Are_Single_Tokens()
 	{
-		var tokens = LexNoLayout("$local ^const %ctx ~call @label");
+		var tokens = LexNoLayout("^const @ctx plain_name");
 		Assert.Equal(new[] {
-			(TokenType.Identifier, "$local"),
 			(TokenType.Identifier, "^const"),
-			(TokenType.Identifier, "%ctx"),
-			(TokenType.Identifier, "~call"),
-			(TokenType.Identifier, "@label") }, tokens);
+			(TokenType.Identifier, "@ctx"),
+			(TokenType.Identifier, "plain_name") }, tokens);
+	}
+
+	[Fact]
+	public void Removed_Sigils_Are_Error_Tokens()
+	{
+		Assert.Equal(TokenType.Error, LexNoLayout("$old")[0].Type);
+		Assert.Equal(TokenType.Error, LexNoLayout("~call")[0].Type);
+	}
+
+	[Fact]
+	public void Percent_Is_An_Operator()
+	{
+		var tokens = LexNoLayout("a % b %= c");
+		Assert.Equal(TokenType.Operator, tokens[1].Type);
+		Assert.Equal("%", tokens[1].Value);
+		Assert.Equal(TokenType.Operator, tokens[3].Type);
+		Assert.Equal("%=", tokens[3].Value);
 	}
 
 	[Fact]
 	public void Operators_Single_And_Multi_Char()
 	{
-		var tokens = LexNoLayout("+ - * / = == != <= >= ++ -- += -=");
+		var tokens = LexNoLayout("+ - * / % = == != <= >= ++ -- += -= %=");
 		foreach (var (type, _) in tokens)
 			Assert.Equal(TokenType.Operator, type);
-		Assert.Equal(13, tokens.Count);
+		Assert.Equal(15, tokens.Count);
 	}
 
 	[Fact]
@@ -98,6 +113,20 @@ public class TokenizerTests
 		var tokens = Lex("a\n    b\nc");
 		Assert.Contains((TokenType.Indent, ""), tokens);
 		Assert.Contains((TokenType.Dedent, ""), tokens);
+	}
+
+	[Fact]
+	public void Tab_Indentation_Is_An_Error()
+	{
+		var tokens = Lex("a\n\tb");
+		Assert.Contains(tokens, t => t.Type == TokenType.Error && t.Value == Tokenizer.TabIndentMessage);
+	}
+
+	[Fact]
+	public void Indent_Must_Be_Multiple_Of_Four()
+	{
+		var tokens = Lex("a\n   b");
+		Assert.Contains(tokens, t => t.Type == TokenType.Error && t.Value == Tokenizer.BadIndentMessage);
 	}
 
 	[Fact]
@@ -114,10 +143,10 @@ public class TokenizerTests
 	[Fact]
 	public void Dot_Prefixed_Identifiers()
 	{
-		var tokens = LexNoLayout(".cmd ..cmd .%ctx");
+		var tokens = LexNoLayout(".cmd ..cmd .@ctx");
 		Assert.Equal(new[] {
 			(TokenType.Identifier, ".cmd"),
 			(TokenType.Identifier, "..cmd"),
-			(TokenType.Identifier, ".%ctx") }, tokens);
+			(TokenType.Identifier, ".@ctx") }, tokens);
 	}
 }

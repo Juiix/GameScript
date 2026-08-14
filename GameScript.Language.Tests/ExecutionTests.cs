@@ -36,12 +36,26 @@ public class ExecutionTests
 	}
 
 	[Fact]
+	public void Modulo_Operator_And_Compound_Assign()
+	{
+		var (host, program) = Build("""
+			func main()
+			    int x = 17
+			    print(int_to_str(x % 5))
+			    x %= 5
+			    print(int_to_str(x))
+			""");
+		host.Start(program, "main");
+		Assert.Equal(new[] { "2", "2" }, host.Context.Printed);
+	}
+
+	[Fact]
 	public void String_Concatenation_Coerces()
 	{
 		var (host, program) = Build("""
 			func main()
-			    int $level = 42
-			    print("lvl " + $level + "!")
+			    int level = 42
+			    print("lvl " + level + "!")
 			""");
 		host.Start(program, "main");
 		Assert.Equal(new[] { "lvl 42!" }, host.Context.Printed);
@@ -51,11 +65,11 @@ public class ExecutionTests
 	public void Func_Call_With_Return()
 	{
 		var (host, program) = Build("""
-			func add(int $a, int $b) returns int
-			    return $a + $b
+			func add(int a, int b) returns int
+			    return a + b
 
 			func main()
-			    print(int_to_str(~add(2, 3)))
+			    print(int_to_str(add(2, 3)))
 			""");
 		host.Start(program, "main");
 		Assert.Equal(new[] { "5" }, host.Context.Printed);
@@ -65,13 +79,13 @@ public class ExecutionTests
 	public void Recursion()
 	{
 		var (host, program) = Build("""
-			func factorial(int $n) returns int
-			    if $n <= 1
+			func factorial(int n) returns int
+			    if n <= 1
 			        return 1
-			    return $n * ~factorial($n - 1)
+			    return n * factorial(n - 1)
 
 			func main()
-			    print(int_to_str(~factorial(5)))
+			    print(int_to_str(factorial(5)))
 			""");
 		host.Start(program, "main");
 		Assert.Equal(new[] { "120" }, host.Context.Printed);
@@ -86,7 +100,7 @@ public class ExecutionTests
 			    return true
 
 			func main()
-			    if false and ~side()
+			    if false and side()
 			        print("then")
 			    print("done")
 			""");
@@ -103,7 +117,7 @@ public class ExecutionTests
 			    return false
 
 			func main()
-			    if true or ~side()
+			    if true or side()
 			        print("then")
 			""");
 		host.Start(program, "main");
@@ -115,16 +129,16 @@ public class ExecutionTests
 	{
 		var (host, program) = Build("""
 			func main()
-			    int $i = 0
-			    int $sum = 0
-			    while $i < 10
-			        $i++
-			        if $i == 3
+			    int i = 0
+			    int sum = 0
+			    while i < 10
+			        i++
+			        if i == 3
 			            continue
-			        if $i == 6
+			        if i == 6
 			            break
-			        $sum += $i
-			    print(int_to_str($sum))
+			        sum += i
+			    print(int_to_str(sum))
 			""");
 		host.Start(program, "main");
 		// 1 + 2 + 4 + 5 = 12 (3 skipped, loop exits at 6)
@@ -135,17 +149,48 @@ public class ExecutionTests
 	public void Tuple_Return_And_Assignment()
 	{
 		var (host, program) = Build("""
-			func pair() returns (int $x, int $y)
+			func pair() returns (int x, int y)
 			    return (7, 9)
 
 			func main()
-			    int $a
-			    int $b
-			    ($a, $b) = ~pair()
-			    print(int_to_str($a * 10 + $b))
+			    int a
+			    int b
+			    (a, b) = pair()
+			    print(int_to_str(a * 10 + b))
 			""");
 		host.Start(program, "main");
 		Assert.Equal(new[] { "79" }, host.Context.Printed);
+	}
+
+	[Fact]
+	public void Declare_And_Destructure_In_One_Line()
+	{
+		var (host, program) = Build("""
+			func pair() returns (int x, string y)
+			    return (5, "ok")
+
+			func main()
+			    (int a, string b) = pair()
+			    print(b + int_to_str(a))
+			""");
+		host.Start(program, "main");
+		Assert.Equal(new[] { "ok5" }, host.Context.Printed);
+	}
+
+	[Fact]
+	public void Mixed_Destructure_With_Existing_Local()
+	{
+		var (host, program) = Build("""
+			func pair() returns (int x, int y)
+			    return (3, 4)
+
+			func main()
+			    int a
+			    (a, int b) = pair()
+			    print(int_to_str(a * 10 + b))
+			""");
+		host.Start(program, "main");
+		Assert.Equal(new[] { "34" }, host.Context.Printed);
 	}
 
 	[Fact]
@@ -167,21 +212,21 @@ public class ExecutionTests
 	}
 
 	[Fact]
-	public void Label_Jump_Transfers_Without_Stack_Growth()
+	public void Tail_Calls_Do_Not_Grow_The_Stack()
 	{
 		var (host, program) = Build("""
-			label ping(int $n)
-			    if $n == 0
+			func ping(int n)
+			    if n == 0
 			        print("done")
 			        return
-			    if $n == 100
+			    if n == 100
 			        wait()
-			    @pong($n - 1)
+			    pong(n - 1)
 
-			label pong(int $n)
-			    @ping($n)
+			func pong(int n)
+			    ping(n)
 			""");
-		// 200 mutual transfers would overflow the 64-frame stack if these were calls
+		// 200 mutual transfers would overflow the 64-frame stack as plain calls
 		var execution = host.Start(program, "ping", Value.FromInt(200));
 
 		// suspended mid-chain: the frame stack must still be flat
@@ -194,20 +239,38 @@ public class ExecutionTests
 	}
 
 	[Fact]
-	public void Queue_Passes_Label_Reference_As_Method_Index()
+	public void Return_Call_Is_A_Tail_Transfer()
 	{
 		var (host, program) = Build("""
-			label deferred(int $x)
-			    print(int_to_str($x))
+			func countdown(int n) returns int
+			    if n == 0
+			        return 99
+			    return countdown(n - 1)
 
 			func main()
-			    queue_strong(@deferred, 1)
-			    queue_strong_int(@deferred, 2, 42)
+			    print(int_to_str(countdown(500)))
+			""");
+		// 500 self-recursions with a 64-frame budget only work as tail transfers
+		host.Start(program, "main");
+		Assert.Equal(new[] { "99" }, host.Context.Printed);
+	}
+
+	[Fact]
+	public void Queue_Passes_Func_Reference_As_Method_Index()
+	{
+		var (host, program) = Build("""
+			func deferred(int x)
+			    print(int_to_str(x))
+
+			func main()
+			    queue_strong(deferred, 1)
+			    queue_strong(deferred, 2, 42)
 			""");
 		host.Start(program, "main");
 		Assert.Equal(2, host.Context.Queued.Count);
 
-		// the recorded index must point at the deferred method
+		// overloads routed to distinct engine ops by the '=' binding in core.gs
+		Assert.Empty(host.Context.Queued[0].Args);
 		var (methodIndex, delay, args) = host.Context.Queued[1];
 		Assert.Equal(2, delay);
 		Assert.Equal(42, args[0].Int);
@@ -235,10 +298,10 @@ public class ExecutionTests
 	{
 		var (host, program) = Build("""
 			func main()
-			    %hp = %hp + 5
-			    print(int_to_str(%hp))
+			    @hp = @hp + 5
+			    print(int_to_str(@hp))
 			""",
-			("player.context", "int %hp = 3"));
+			("player.context", "int @hp = 3"));
 		host.Start(program, "main");
 		// context slot 3 starts at default (0) in the test context; +5 = 5
 		Assert.Equal(new[] { "5" }, host.Context.Printed);
@@ -260,11 +323,11 @@ public class ExecutionTests
 	{
 		var (host, program) = Build("""
 			func main()
-			    int $x = 5
-			    int $a = $x++
-			    int $b = ++$x
-			    int $c = $x--
-			    print(int_to_str($a * 100 + $b * 10 + $x))
+			    int x = 5
+			    int a = x++
+			    int b = ++x
+			    int c = x--
+			    print(int_to_str(a * 100 + b * 10 + x))
 			""");
 		host.Start(program, "main");
 		// a=5 (post), x becomes 7 after ++, b=7, c=7 (post), x=6
@@ -272,53 +335,12 @@ public class ExecutionTests
 	}
 
 	[Fact]
-	public void Overloaded_Funcs_Dispatch_By_Argument_Type()
-	{
-		var (host, program) = Build("""
-			func pick(int $v) returns int
-			    return 1
-
-			func pick(string $v) returns int
-			    return 2
-
-			func main()
-			    print(int_to_str(~pick(0) * 10 + ~pick("x")))
-			""");
-		host.Start(program, "main");
-		Assert.Equal(new[] { "12" }, host.Context.Printed);
-	}
-
-	[Fact]
-	public void Command_Overloads_With_Op_Binding_Hit_Distinct_Engine_Ops()
-	{
-		var (host, program) = Build("""
-			label deferred(int $x)
-			    print(int_to_str($x))
-
-			func main()
-			    enqueue(@deferred, 1)
-			    enqueue(@deferred, 2, 42)
-			""",
-			("overloads.gs", """
-			// One script name, two engine ops selected by '=' binding
-			command enqueue(label $method, int $delay) = queue_strong
-			command enqueue(label $method, int $delay, int $arg0) = queue_strong_int
-			"""));
-		host.Start(program, "main");
-
-		Assert.Equal(2, host.Context.Queued.Count);
-		Assert.Empty(host.Context.Queued[0].Args);       // routed to TestOp.QueueStrong
-		Assert.Single(host.Context.Queued[1].Args);      // routed to TestOp.QueueStrongInt
-		Assert.Equal(42, host.Context.Queued[1].Args[0].Int);
-	}
-
-	[Fact]
 	public void Not_Keyword_Negates()
 	{
 		var (host, program) = Build("""
 			func main()
-			    bool $flag = false
-			    if not $flag
+			    bool flag = false
+			    if not flag
 			        print("negated")
 			    if not (1 == 2) and not false
 			        print("compound")
@@ -328,16 +350,57 @@ public class ExecutionTests
 	}
 
 	[Fact]
+	public void Overloaded_Funcs_Dispatch_By_Argument_Type()
+	{
+		var (host, program) = Build("""
+			func pick(int v) returns int
+			    return 1
+
+			func pick(string v) returns int
+			    return 2
+
+			func main()
+			    print(int_to_str(pick(0) * 10 + pick("x")))
+			""");
+		host.Start(program, "main");
+		Assert.Equal(new[] { "12" }, host.Context.Printed);
+	}
+
+	[Fact]
+	public void Command_Overloads_With_Op_Binding_Hit_Distinct_Engine_Ops()
+	{
+		var (host, program) = Build("""
+			func deferred(int x)
+			    print(int_to_str(x))
+
+			func main()
+			    enqueue(deferred, 1)
+			    enqueue(deferred, 2, 42)
+			""",
+			("overloads.gs", """
+			// One script name, two engine ops selected by '=' binding
+			command enqueue(func method, int delay) = queue_strong
+			command enqueue(func method, int delay, int arg0) = queue_strong_int
+			"""));
+		host.Start(program, "main");
+
+		Assert.Equal(2, host.Context.Queued.Count);
+		Assert.Empty(host.Context.Queued[0].Args);
+		Assert.Single(host.Context.Queued[1].Args);
+		Assert.Equal(42, host.Context.Queued[1].Args[0].Int);
+	}
+
+	[Fact]
 	public void String_Interpolation_Compiles_To_Concat()
 	{
 		var (host, program) = Build("""
-			func skill_name(int $skill) returns string
+			func skill_name(int skill) returns string
 			    return "attack"
 
 			func main()
-			    int $after = 50
-			    int $skill = 0
-			    print("Congratulations, your {~skill_name($skill)} level is now {$after}!")
+			    int after = 50
+			    int skill = 0
+			    print("Congratulations, your {skill_name(skill)} level is now {after}!")
 			""");
 		host.Start(program, "main");
 		Assert.Equal(new[] { "Congratulations, your attack level is now 50!" }, host.Context.Printed);
@@ -348,56 +411,12 @@ public class ExecutionTests
 	{
 		var (host, program) = Build("""
 			func main()
-			    int $x = 7
-			    print("{$x}")
-			    print("{{literal}} {$x + 1}")
-			    print("tail {$x}")
+			    int x = 7
+			    print("{x}")
+			    print("{{literal}} {x + 1}")
+			    print("tail {x}")
 			""");
 		host.Start(program, "main");
 		Assert.Equal(new[] { "7", "{literal} 8", "tail 7" }, host.Context.Printed);
-	}
-
-	[Fact]
-	public void Declare_And_Destructure_In_One_Line()
-	{
-		var (host, program) = Build("""
-			func pair() returns (int $x, string $y)
-			    return (5, "ok")
-
-			func main()
-			    (int $a, string $b) = ~pair()
-			    print($b + int_to_str($a))
-			""");
-		host.Start(program, "main");
-		Assert.Equal(new[] { "ok5" }, host.Context.Printed);
-	}
-
-	[Fact]
-	public void Mixed_Destructure_With_Existing_Local()
-	{
-		var (host, program) = Build("""
-			func pair() returns (int $x, int $y)
-			    return (3, 4)
-
-			func main()
-			    int $a
-			    ($a, int $b) = ~pair()
-			    print(int_to_str($a * 10 + $b))
-			""");
-		host.Start(program, "main");
-		Assert.Equal(new[] { "34" }, host.Context.Printed);
-	}
-
-	[Fact]
-	public void Negation_Operator()
-	{
-		var (host, program) = Build("""
-			func main()
-			    bool $flag = false
-			    if !$flag
-			        print("negated")
-			""");
-		host.Start(program, "main");
-		Assert.Equal(new[] { "negated" }, host.Context.Printed);
 	}
 }

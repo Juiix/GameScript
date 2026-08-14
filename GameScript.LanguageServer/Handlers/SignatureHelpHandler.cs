@@ -85,7 +85,7 @@ internal sealed class SignatureHelpHandler(
 				if (symbol.ParamNames != null && i < symbol.ParamNames.Count &&
 					!string.IsNullOrWhiteSpace(symbol.ParamNames[i]))
 				{
-					label += " $" + symbol.ParamNames[i];
+					label += " " + symbol.ParamNames[i];
 				}
 				paramInfos.Add(new ParameterInformation { Label = new ParameterInformationLabel(label) });
 				i++;

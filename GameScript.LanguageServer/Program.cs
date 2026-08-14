@@ -131,7 +131,7 @@ static void RegisterCapabilities(ServerCapabilities capabilities, ProgramFlags f
 		capabilities.CompletionProvider = new CompletionRegistrationOptions.StaticOptions()
 		{
 			ResolveProvider = false,
-			TriggerCharacters = new Container<string>("$", "^", "%", "~", "@")
+			TriggerCharacters = new Container<string>("^", "@")
 		};
 		capabilities.DefinitionProvider = new BooleanOr<DefinitionRegistrationOptions.StaticOptions>(new DefinitionRegistrationOptions.StaticOptions());
 		capabilities.DocumentHighlightProvider = new BooleanOr<DocumentHighlightRegistrationOptions.StaticOptions>(new DocumentHighlightRegistrationOptions.StaticOptions());

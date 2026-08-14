@@ -1,4 +1,4 @@
-﻿{
+{
   "name": "GameScript",
   "scopeName": "source.gamescript",
   "patterns": [
@@ -32,7 +32,23 @@
           "beginCaptures": { "0": { "name": "punctuation.definition.string.begin.gamescript" } },
           "end": "\"",
           "endCaptures": { "0": { "name": "punctuation.definition.string.end.gamescript" } },
-          "patterns": [ { "name": "constant.character.escape.gamescript", "match": "\\\\." } ]
+          "patterns": [
+            { "name": "constant.character.escape.gamescript", "match": "\\{\\{|\\}\\}" },
+            {
+              "name": "meta.interpolation.gamescript",
+              "begin": "\\{",
+              "beginCaptures": { "0": { "name": "punctuation.definition.interpolation.begin.gamescript" } },
+              "end": "\\}",
+              "endCaptures": { "0": { "name": "punctuation.definition.interpolation.end.gamescript" } },
+              "patterns": [
+                { "include": "#method-call" },
+                { "include": "#keywords" },
+                { "include": "#boolean-literals" },
+                { "include": "#numbers" },
+                { "include": "#variables" }
+              ]
+            }
+          ]
         }
       ]
     },
@@ -44,17 +60,17 @@
     },
     "keywords": {
       "patterns": [
-        { "name": "keyword.control.gamescript", "match": "\\b(?:if|else|return|while|break|continue|and|or)\\b" },
-        { "name": "keyword.declaration.gamescript", "match": "\\b(?:func|label|command)\\b" }
+        { "name": "keyword.control.gamescript", "match": "\\b(?:if|else|return|while|break|continue|and|or|not)\\b" },
+        { "name": "keyword.declaration.gamescript", "match": "\\b(?:func|command)\\b" },
+        { "name": "invalid.deprecated.gamescript", "match": "\\blabel\\b" }
       ]
     },
     "types": {
-      "patterns": [ { "name": "storage.type.gamescript", "match": "\\b(?:int|bool|string)\\b" } ]
+      "patterns": [ { "name": "storage.type.gamescript", "match": "\\b(?:int|bool|string|func)\\b" } ]
     },
     "variables": {
       "patterns": [
-        { "name": "variable.other.local.gamescript",    "match": "\\$[A-Za-z_][\\w]*" },
-        { "name": "variable.other.context.gamescript",  "match": "%[A-Za-z_][\\w]*" },
+        { "name": "variable.other.context.gamescript",  "match": "@[A-Za-z_][\\w]*" },
         { "name": "variable.other.constant.gamescript", "match": "\\^[A-Za-z_][\\w]*" }
       ]
     },
@@ -62,11 +78,11 @@
       "patterns": [
         {
           "name": "meta.function.declaration.gamescript",
-          "begin": "^(\\s*)(?:(func|label|command)|([A-Za-z_][\\w]*))\\s+([A-Za-z_][\\w]*(?::[A-Za-z_][\\w]*)?)\\s*\\(",
+          "begin": "^(\\s*)(?:(func|command)|([A-Za-z_][\\w]*))\\s+([A-Za-z_][\\w]*(?::[A-Za-z_][\\w]*)?)\\s*(?=\\(|$)",
           "beginCaptures": {
             "1": { "name": "punctuation.whitespace.leading.gamescript" },
-            "2": { "name": "keyword.declaration.gamescript" },               
-            "3": { "name": "keyword.declaration.trigger.gamescript" },       
+            "2": { "name": "keyword.declaration.gamescript" },
+            "3": { "name": "keyword.declaration.trigger.gamescript" },
             "4": { "name": "entity.name.function.gamescript" }
           },
           "end": "$",
@@ -84,7 +100,7 @@
       "patterns": [
         {
           "name": "meta.variable.declaration.gamescript",
-          "match": "^(\\s*)(int|bool|string)\\s+((?:\\$|%|\\^)[A-Za-z_][\\w]*)",
+          "match": "^(\\s*)(int|bool|string|func)\\s+([A-Za-z_][\\w]*)",
           "captures": {
             "2": { "name": "storage.type.gamescript" },
             "3": { "name": "variable.other.declared.gamescript" }
@@ -94,9 +110,7 @@
     },
     "method-call": {
       "patterns": [
-        { "name": "support.function.call.label.gamescript",    "match": "@[A-Za-z_][\\w]*(?::[A-Za-z_][\\w]*)?(?=\\()" },
-        { "name": "support.function.call.func.gamescript",     "match": "~[A-Za-z_][\\w]*(?::[A-Za-z_][\\w]*)?\\s*(?=\\()" },
-        { "name": "support.function.call.command.gamescript",  "match": "\\b[A-Za-z_][\\w]*(?::[A-Za-z_][\\w]*)?\\s*(?=\\()" }
+        { "name": "support.function.call.gamescript", "match": "\\.?[A-Za-z_][\\w]*(?::[A-Za-z_][\\w]*)?\\s*(?=\\()" }
       ]
     }
   },

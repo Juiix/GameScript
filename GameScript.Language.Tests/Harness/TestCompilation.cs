@@ -59,6 +59,7 @@ public sealed class TestCompilation
 		foreach (var (filePath, root, locals) in _files)
 		{
 			var context = new VisitorContext(_types, _symbols, filePath);
+			Run(new NameResolutionVisitor(locals, context));
 			Run(new SymbolAnalysisVisitor(locals, context));
 			Run(new SemanticAnalysisVisitor(locals, context));
 			var typeVisitor = new TypeAnalysisVisitor(locals, context);
