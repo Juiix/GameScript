@@ -875,6 +875,11 @@ public ref struct AstParser
 
 	// Parses a string literal, expanding "{expr}" interpolation into the equivalent
 	// '+' concatenation chain. "{{" and "}}" produce literal braces.
+	//
+	// Every synthesized part carries its REAL sub-range within the string token —
+	// semantic tokens are emitted per AST node, so a full-token range on the literal
+	// parts would paint 'string' over the embedded expressions and clobber the
+	// grammar's interpolation highlighting.
 	private ExpressionNode ParseStringLiteral(Token token, FilePosition start)
 	{
 		var raw = token.Value; // includes surrounding quotes
@@ -887,8 +892,26 @@ public ref struct AstParser
 		// inner text bounds (tolerate an unterminated string missing its closing quote)
 		int innerEnd = raw.Length >= 2 && raw[raw.Length - 1] == '"' ? raw.Length - 1 : raw.Length;
 
+		var tokenStart = token.Start;
+		var filePath = _filePath; // local copy: local functions in a struct can't touch 'this'
+		FilePosition PositionAt(int index) => new(
+			tokenStart.Position + index,
+			tokenStart.Line,
+			tokenStart.Column + index);
+
 		var parts = new List<ExpressionNode>();
 		var sb = new StringBuilder();
+		int segStart = 0; // source index of the pending literal segment (0 = opening quote)
+
+		void FlushLiteral(int endIndex)
+		{
+			// the first segment starts at the opening quote; later segments at their
+			// first character after the closing '}' of the previous interpolation
+			parts.Add(new LiteralNode(
+				LiteralType.String, $"\"{sb}\"", filePath,
+				new FileRange(PositionAt(segStart), PositionAt(endIndex))));
+			sb.Clear();
+		}
 
 		for (int i = 1; i < innerEnd; i++)
 		{
@@ -922,24 +945,20 @@ public ref struct AstParser
 
 				if (sb.Length > 0 || parts.Count == 0)
 				{
-					// pending literal text; an empty leading literal also anchors the
-					// chain so "{x}" still produces a string result
-					parts.Add(new LiteralNode(LiteralType.String, $"\"{sb}\"", _filePath, range));
-					sb.Clear();
+					// pending literal text (through the '{'); an empty leading literal
+					// also anchors the chain so "{x}" still produces a string result
+					FlushLiteral(i);
 				}
 
 				// parse the embedded expression at its true file position
 				var exprSpan = raw.Slice(i + 1, close - i - 1);
-				var origin = new FilePosition(
-					token.Start.Position + i + 1,
-					token.Start.Line,
-					token.Start.Column + i + 1);
-				var fragmentParser = new AstParser(_filePath, exprSpan, origin);
+				var fragmentParser = new AstParser(_filePath, exprSpan, PositionAt(i + 1));
 				parts.Add(fragmentParser.ParseExpressionFragment());
 				foreach (var fragmentError in fragmentParser.Errors)
 					_errors.Add(fragmentError);
 
 				i = close;
+				segStart = close + 1;
 			}
 			else if (c == '}')
 			{
@@ -959,15 +978,17 @@ public ref struct AstParser
 		}
 
 		if (sb.Length > 0 || parts.Count == 0)
-			parts.Add(new LiteralNode(LiteralType.String, $"\"{sb}\"", _filePath, range));
+			FlushLiteral(raw.Length); // include the closing quote
 
-		// left-associative '+' chain — identical shape (and bytecode) to manual concat
+		// left-associative '+' chain — identical shape (and bytecode) to manual concat.
+		// Operator nodes get zero-width ranges so they emit no visible semantic token.
 		var result = parts[0];
 		for (int i = 1; i < parts.Count; i++)
 		{
+			var opPosition = parts[i].FileRange.Start;
 			result = new BinaryExpressionNode(
 				result, BinaryOperator.Add,
-				new OperatorNode("+", _filePath, range),
+				new OperatorNode("+", _filePath, new FileRange(opPosition, opPosition)),
 				parts[i], _filePath, range);
 		}
 		return result;

@@ -2,6 +2,11 @@
 
 All notable changes to GameScript will be documented in this file.
 
+## [2.0.1]
+
+### Fixed
+- Interpolated strings no longer emit whole-string semantic tokens that override the grammar's interpolation highlighting: synthesized literal parts now carry their real sub-ranges, embedded expressions keep their own function/variable colors, and the `{` `}` braces fall through to TextMate scopes.
+
 ## [2.0.0]
 
 **Breaking release — the GameScript 2.0 syntax redesign.** Old-syntax content does not compile; convert with the content codemod (`tools/gs-migrate`).

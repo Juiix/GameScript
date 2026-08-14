@@ -258,6 +258,45 @@ public class ParserTests
 	}
 
 	[Fact]
+	public void Interpolation_Parts_Carry_Sub_Token_Ranges()
+	{
+		// semantic tokens are emitted per AST node: string parts must cover only
+		// their own text so embedded expressions keep their own highlighting
+		var (root, errors) = ParseProgram("""
+			func main(int x)
+			    return "lvl {x} up"
+			""");
+		Assert.Empty(errors);
+
+		//                   0123456789012345678
+		// line 1 source:    return "lvl {x} up"  (indent stripped: col 4 = 'r')
+		var body = root.Methods![0].Body!.Statements!;
+		var ret = Assert.IsType<ReturnStatementNode>(body[0]);
+
+		// chain: ("lvl " + x) + " up"
+		var outer = Assert.IsType<BinaryExpressionNode>(ret.Expression);
+		var inner = Assert.IsType<BinaryExpressionNode>(outer.Left);
+		var lead = Assert.IsType<LiteralNode>(inner.Left);
+		var expr = Assert.IsType<IdentifierNode>(inner.Right);
+		var tail = Assert.IsType<LiteralNode>(outer.Right);
+
+		// leading literal covers only '"lvl ' + the '{' boundary, not the whole string
+		Assert.Equal(11, lead.FileRange.Start.Column);            // opening quote
+		Assert.Equal(16, lead.FileRange.End.Column);              // stops at '{'
+
+		// embedded identifier sits exactly on its source character
+		Assert.Equal("x", expr.Name);
+		Assert.Equal(17, expr.FileRange.Start.Column);
+
+		// trailing literal starts after '}' and includes the closing quote
+		Assert.Equal(19, tail.FileRange.Start.Column);
+		Assert.Equal(23, tail.FileRange.End.Column);
+
+		// zero-width operators: no visible semantic token
+		Assert.Equal(inner.OperatorNode.FileRange.Start, inner.OperatorNode.FileRange.End);
+	}
+
+	[Fact]
 	public void Missing_Paren_Produces_Error()
 	{
 		var (_, errors) = ParseProgram("""
