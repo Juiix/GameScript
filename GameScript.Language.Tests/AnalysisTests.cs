@@ -5,7 +5,7 @@ using Xunit;
 namespace GameScript.Language.Tests;
 
 /// <summary>
-/// Diagnostics produced by the analysis visitors (symbol, semantic, type).
+/// Diagnostics produced by the analysis visitors (name resolution, symbol, semantic, type).
 /// </summary>
 public class AnalysisTests
 {
@@ -35,7 +35,7 @@ public class AnalysisTests
 	{
 		var errors = ErrorsFor("""
 			func main()
-			    print($undeclared)
+			    print(int_to_str(undeclared))
 			""");
 		Assert.Contains(errors, e => e.Contains("undeclared"));
 	}
@@ -85,45 +85,29 @@ public class AnalysisTests
 	}
 
 	[Fact]
-	public void Label_Jump_Inside_Func_Is_Reported()
-	{
-		var errors = ErrorsFor("""
-			label target()
-			    return
-
-			func main()
-			    @target()
-			""");
-		Assert.NotEmpty(errors);
-	}
-
-	[Fact]
 	public void Missing_Return_Path_With_Empty_Body_Is_Reported()
 	{
 		var errors = ErrorsFor("""
-			func maybe(int $x) returns int
+			func maybe(int x) returns int
 			    print("no return")
 			""");
 		Assert.NotEmpty(errors);
 	}
 
 	[Fact]
-	public void Missing_Return_Path_Behind_If_Without_Else()
+	public void Missing_Return_Path_Behind_If_Without_Else_Is_Reported()
 	{
-		// KNOWN GAP: MustReturn treats `if` without `else` as guaranteed to return
-		// when its then-block returns (SemanticAnalysisVisitor.MustReturn). This
-		// documents current behavior; the 2.0 grammar-tightening pass fixes it to
-		// report an error, at which point this assertion flips to NotEmpty.
+		// fixed in 2.0: an if without an else cannot guarantee a return
 		var errors = ErrorsFor("""
-			func maybe(int $x) returns int
-			    if $x > 0
+			func maybe(int x) returns int
+			    if x > 0
 			        return 1
 			""");
-		Assert.Empty(errors);
+		Assert.Contains(errors, e => e.Contains("not all paths return"));
 	}
 
 	// ---------------------------------------------------------------
-	// Overloading (2.0): same name, different parameter signatures
+	// Overloading: same name, different parameter signatures
 	// ---------------------------------------------------------------
 
 	[Fact]
@@ -133,12 +117,12 @@ public class AnalysisTests
 			func greet()
 			    print("hi")
 
-			func greet(string $name)
-			    print("hi " + $name)
+			func greet(string who)
+			    print("hi " + who)
 
 			func main()
-			    ~greet()
-			    ~greet("bob")
+			    greet()
+			    greet("bob")
 			""");
 		Assert.Empty(errors);
 	}
@@ -147,15 +131,15 @@ public class AnalysisTests
 	public void Func_Overloads_By_Type_Are_Allowed()
 	{
 		var errors = ErrorsFor("""
-			func show(int $value)
-			    print(int_to_str($value))
+			func show(int value)
+			    print(int_to_str(value))
 
-			func show(string $value)
-			    print($value)
+			func show(string value)
+			    print(value)
 
 			func main()
-			    ~show(5)
-			    ~show("five")
+			    show(5)
+			    show("five")
 			""");
 		Assert.Empty(errors);
 	}
@@ -168,8 +152,8 @@ public class AnalysisTests
 			    return
 			""",
 			("extra.gs", """
-			command overloaded(int $a)
-			command overloaded(int $a, int $b)
+			command overloaded(int a)
+			command overloaded(int a, int b)
 			"""));
 		Assert.Empty(errors);
 	}
@@ -178,10 +162,10 @@ public class AnalysisTests
 	public void Duplicate_Signature_Differing_Only_By_Return_Is_Reported()
 	{
 		var errors = ErrorsFor("""
-			func same(int $a) returns int
-			    return $a
+			func same(int a) returns int
+			    return a
 
-			func same(int $a) returns string
+			func same(int a) returns string
 			    return "x"
 			""");
 		Assert.Contains(errors, e => e.Contains("already defined"));
@@ -191,7 +175,7 @@ public class AnalysisTests
 	public void Func_Duplicating_Command_Signature_Is_Reported()
 	{
 		var errors = ErrorsFor("""
-			func print(string $text)
+			func print(string text)
 			    return
 			""");
 		Assert.Contains(errors, e => e.Contains("already defined"));
@@ -201,16 +185,65 @@ public class AnalysisTests
 	public void Call_Matching_No_Overload_Is_Reported()
 	{
 		var errors = ErrorsFor("""
-			func show(int $value)
-			    print(int_to_str($value))
+			func show(int value)
+			    print(int_to_str(value))
 
-			func show(string $value)
-			    print($value)
+			func show(string value)
+			    print(value)
 
 			func main()
-			    ~show(true)
+			    show(true)
 			""");
 		Assert.Contains(errors, e => e.Contains("No overload"));
+	}
+
+	// ---------------------------------------------------------------
+	// 2.0 collision and mark rules
+	// ---------------------------------------------------------------
+
+	[Fact]
+	public void Local_Colliding_With_Command_Is_Reported()
+	{
+		var errors = ErrorsFor("""
+			func show_alert(string print)
+			    return
+			""");
+		Assert.Contains(errors, e => e.Contains("conflicts with"));
+	}
+
+	[Fact]
+	public void Local_Colliding_With_Func_Is_Reported()
+	{
+		var errors = ErrorsFor("""
+			func helper()
+			    return
+
+			func main()
+			    int helper = 1
+			""");
+		Assert.Contains(errors, e => e.Contains("conflicts with"));
+	}
+
+	[Fact]
+	public void Context_Var_Without_At_Mark_Is_Reported()
+	{
+		var errors = ErrorsFor("""
+			func main()
+			    print(int_to_str(hp))
+			""",
+			("player.context", "int @hp = 3"));
+		Assert.Contains(errors, e => e.Contains("'@' mark"));
+	}
+
+	[Fact]
+	public void Constant_With_At_Mark_Is_Reported()
+	{
+		var errors = ErrorsFor("""
+			func main()
+			    print(int_to_str(@max_level))
+			""",
+			("skills.const", "int ^max_level = 99"));
+		Assert.Contains(errors, e => e.Contains("'^' mark"));
 	}
 
 	[Fact]
@@ -218,8 +251,8 @@ public class AnalysisTests
 	{
 		var errors = ErrorsFor("""
 			func main()
-			    print(int_to_str($late))
-			    int $late = 1
+			    print(int_to_str(late))
+			    int late = 1
 			""");
 		Assert.NotEmpty(errors);
 	}

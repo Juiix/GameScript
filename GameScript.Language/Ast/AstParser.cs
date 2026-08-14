@@ -145,10 +145,13 @@ public ref struct AstParser
 	// Parses definition
 	private MethodDefinitionNode ParseDefinition()
 	{
+		if (CurrentIsKeyword("label"))
+			Error("'label' declarations are removed; declare a 'func' instead (calls tail-transfer automatically)", CurrentRange);
+
 		var method = _current switch
 		{
 			{ Type: TokenType.Keyword } when CurrentIsKeyword("func") => ParseMethodDefinition(IdentifierType.Func),
-			{ Type: TokenType.Keyword } when CurrentIsKeyword("label") => ParseMethodDefinition(IdentifierType.Label),
+			{ Type: TokenType.Keyword } when CurrentIsKeyword("label") => ParseMethodDefinition(IdentifierType.Func),
 			{ Type: TokenType.Keyword } when CurrentIsKeyword("command") => ParseMethodDefinition(IdentifierType.Command),
 			{ Type: TokenType.Identifier } => ParseMethodDefinition(IdentifierType.Trigger),
 			_ => null
@@ -174,7 +177,7 @@ public ref struct AstParser
 				"return" => ParseReturnStatement(),
 				"break" => ParseBreakStatement(),
 				"continue" => ParseContinueStatement(),
-				"label" when PeekIsIdentifier() => ParseVariableDefinition(),
+				"func" when PeekIsIdentifier() => ParseVariableDefinition(),
 				_ => ParseExpression()
 			},
 			TokenType.Identifier when PeekIsIdentifier() => ParseVariableDefinition(),
@@ -217,6 +220,10 @@ public ref struct AstParser
 		{
 			parameters = ParseParameterList();
 			Expect(TokenType.CloseParen, "Expected ')' after parameters", ")".AsSpan());
+
+			// trigger headers must omit '()' entirely when there are no parameters
+			if (idType == IdentifierType.Trigger && parameters == null)
+				Error("Trigger handlers with no parameters must omit the '()'", PreviousRange);
 		}
 		else if (Match(TokenType.CloseParen))                    // stray ')'
 			Error("Expected '(' before parameters", PreviousRange);
@@ -303,9 +310,9 @@ public ref struct AstParser
 		var typeTok = ExpectTypeIdentifier("Expected a type for context variable declaration");
 		var typeNode = new TypeNode(typeTok.Value.ToString(), _filePath, PreviousRange);
 
-		// constant name (must start with '%')
-		var nameTok = ExpectStartsWith(TokenType.Identifier, "%", "Expected context variable name (must start with '%')", "%?".AsSpan());
-		var nameNode = new IdentifierDeclarationNode(nameTok.Value.TrimStart('%').ToString(),
+		// context variable name (must start with '@')
+		var nameTok = ExpectStartsWith(TokenType.Identifier, "@", "Expected context variable name (must start with '@')", "@?".AsSpan());
+		var nameNode = new IdentifierDeclarationNode(nameTok.Value.TrimStart('@').ToString(),
 													 IdentifierType.Context, summary, _filePath, PreviousRange);
 
 		// '=' operator
@@ -335,7 +342,7 @@ public ref struct AstParser
 		var ifKeyword = new KeywordNode(ifTok.Value.ToString(), _filePath, PreviousRange);
 
 		// condition and main block
-		var condition = ParseExpression();
+		var condition = ParseConditionExpression();
 		var ifBlock = ParseBlock();
 
 		// optional else-if / else chains
@@ -357,7 +364,7 @@ public ref struct AstParser
 				var elseIfTok = Expect(TokenType.Keyword, "Expected 'if' after 'else'");
 				var elseIfKey = new KeywordNode(elseIfTok.Value.ToString(), _filePath, PreviousRange);
 
-				var elseIfCond = ParseExpression();
+				var elseIfCond = ParseConditionExpression();
 				var elseIfBlock = ParseBlock();
 
 				(elseIfs ??= []).Add(
@@ -391,12 +398,23 @@ public ref struct AstParser
 		var kwNode = new KeywordNode(kwTok.Value.ToString(), _filePath, PreviousRange);
 
 		// Condition and body
-		var condition = ParseExpression();
+		var condition = ParseConditionExpression();
 		var body = ParseBlock();   // may be null if no nested block
 
 		return new WhileStatementNode(
 			kwNode, condition, body, _filePath,
 			new FileRange(start, _previous.End));
+	}
+
+	// Parses an if/while condition, rejecting full-wrap parentheses ('if (x)').
+	// Inner grouping ('if (a or b) and c') is untouched — only a condition that IS
+	// a grouping expression is flagged.
+	private ExpressionNode ParseConditionExpression()
+	{
+		var condition = ParseExpression();
+		if (condition is ParenthesizedExpressionNode)
+			Error("Remove the parentheses around the condition", condition.FileRange);
+		return condition;
 	}
 
 	private ReturnStatementNode ParseReturnStatement()
@@ -450,9 +468,8 @@ public ref struct AstParser
 		// <name> [ '=' <expr> ] (',' <name> [ '=' <expr> ])*
 		do
 		{
-			// name must start with '$'
-			var nameTok = ExpectStartsWith(TokenType.Identifier, "$", "Expected variable name (must start with '$')", "$?".AsSpan());
-			var nameNode = new IdentifierDeclarationNode(nameTok.Value.TrimStart('$').ToString(),
+			var nameTok = Expect(TokenType.Identifier, "Expected variable name", "?".AsSpan());
+			var nameNode = new IdentifierDeclarationNode(nameTok.Value.ToString(),
 														 IdentifierType.Local, summary, _filePath, PreviousRange);
 
 			// optional initializer
@@ -494,8 +511,8 @@ public ref struct AstParser
 			var typeTok = ExpectTypeIdentifier("Expected parameter type");
 			var typeNode = new TypeNode(typeTok.Value.ToString(), _filePath, PreviousRange);
 
-			var nameTok = ExpectStartsWith(TokenType.Identifier, "$", "Expected parameter name", "$?".AsSpan());
-			var nameNode = new IdentifierDeclarationNode(nameTok.Value.TrimStart('$').ToString(),
+			var nameTok = Expect(TokenType.Identifier, "Expected parameter name", "?".AsSpan());
+			var nameNode = new IdentifierDeclarationNode(nameTok.Value.ToString(),
 														 IdentifierType.Local, summary, _filePath, PreviousRange);
 
 			parameters.Add(new ParameterNode(typeNode, nameNode, _filePath,
@@ -536,11 +553,8 @@ public ref struct AstParser
 		IdentifierDeclarationNode? nameNode = null;
 		if (Match(TokenType.Identifier))
 		{
-			nameNode = new IdentifierDeclarationNode(_previous.Value.TrimStart('$').ToString(),
+			nameNode = new IdentifierDeclarationNode(_previous.Value.ToString(),
 													 IdentifierType.Local, null, _filePath, PreviousRange);
-
-			if (_previous.Value[0] != '$')
-				Error($"Return name must start with '$'", PreviousRange);
 		}
 
 		return new ReturnTypeNode(typeNode, nameNode, _filePath,
@@ -745,6 +759,17 @@ public ref struct AstParser
 	{
 		var start = _current.Start;
 
+		// '!' prefix is removed — recover as Not with a targeted error
+		if (_current.Type == TokenType.Operator && _current.Value.SequenceEqual("!".AsSpan()))
+		{
+			Error("Use 'not' instead of '!'", CurrentRange);
+			var bangNode = new OperatorNode(_current.Value.ToString(), _filePath, CurrentRange);
+			Advance();
+			return new UnaryExpressionNode(
+				UnaryOperator.Not, bangNode, ParseUnaryExpression(), _filePath,
+				new FileRange(start, _previous.End));
+		}
+
 		// 'not' keyword — word form of logical negation
 		if (CurrentIsKeyword("not"))
 		{
@@ -813,28 +838,24 @@ public ref struct AstParser
 								   _filePath, new FileRange(start, _previous.End));
 		}
 
-		// ── 2. Identifiers (var ref or call) ───────────────────────────
+		// ── 2. Identifiers (var ref, func ref, or call) ────────────────
 		if (_current.Type == TokenType.Identifier)
 		{
 			var ident = _current;
 			var idType = ParseIdentifierType(ident.Value);
 			Advance();
 
-			if (idType is IdentifierType.Func or IdentifierType.Command or IdentifierType.Label)
+			// bare or dot-prefixed name followed by '(' is a call; the callee kind
+			// (func vs command) is resolved during analysis
+			if (idType is IdentifierType.Unknown or IdentifierType.Command &&
+				_current.Type == TokenType.OpenParen)
 			{
-				// Func and Command always require call syntax.
-				// Label: if followed by '(' it's a call; otherwise a bare label reference.
-				if (idType != IdentifierType.Label || _current.Type == TokenType.OpenParen)
-					return ParseCallExpression(ident, idType, start);
-
-				var bareName = ident.Value.TrimStart("@".AsSpan()).ToString();
-				return new IdentifierNode(bareName, idType, 0,
-										  _filePath, new FileRange(start, _previous.End));
+				return ParseCallExpression(ident, idType, start);
 			}
 
 			var raw = ident.Value.TrimStart(".".AsSpan());
 			int dotPrefix = ident.Value.Length - raw.Length;
-			var name = raw.TrimStart("^$%".AsSpan()).ToString();
+			var name = raw.TrimStart("^@".AsSpan()).ToString();
 			return new IdentifierNode(name, idType, dotPrefix,
 									  _filePath, new FileRange(start, _previous.End));
 		}
@@ -955,7 +976,7 @@ public ref struct AstParser
 	// Parses a call expression when an identifier is followed by an argument list.
 	private CallExpressionNode ParseCallExpression(Token ident, IdentifierType identifierType, FilePosition funcStart)
 	{
-		var raw = ident.Value.TrimStart("~@".AsSpan());
+		var raw = ident.Value;
 		int dotPrefix = 0;
 		while (dotPrefix < raw.Length && raw[dotPrefix] == '.')
 			dotPrefix++;
@@ -998,13 +1019,15 @@ public ref struct AstParser
 		{
 			Expect(TokenType.CloseParen, "Expected ')' after expression", ")".AsSpan());
 
-			// a lone declaration '(bool $ok)' is a 1-element destructure target
+			// a lone declaration '(bool ok)' is a 1-element destructure target
 			if (first is DeclarationExpressionNode)
 			{
 				var declRange = new FileRange(start, _previous.End);
 				return new TupleExpressionNode([first], _filePath, in declRange);
 			}
-			return first;
+
+			var groupRange = new FileRange(start, _previous.End);
+			return new ParenthesizedExpressionNode(first, _filePath, in groupRange);
 		}
 
 		// Comma found → parse tuple elements
@@ -1021,12 +1044,12 @@ public ref struct AstParser
 		return new TupleExpressionNode(elements, _filePath, in fileRange);
 	}
 
-	// A tuple element is either an inline declaration ('bool $ok') for destructuring,
+	// A tuple element is either an inline declaration ('bool ok') for destructuring,
 	// or an ordinary expression.
 	private ExpressionNode ParseTupleElement()
 	{
 		var isDeclaration =
-			(_current.Type == TokenType.Identifier || CurrentIsKeyword("label")) &&
+			(_current.Type == TokenType.Identifier || CurrentIsKeyword("func")) &&
 			PeekIsIdentifier();
 
 		if (!isDeclaration)
@@ -1036,8 +1059,8 @@ public ref struct AstParser
 		var typeTok = ExpectTypeIdentifier("Expected a type for inline declaration");
 		var typeNode = new TypeNode(typeTok.Value.ToString(), _filePath, PreviousRange);
 
-		var nameTok = ExpectStartsWith(TokenType.Identifier, "$", "Expected variable name (must start with '$')", "$?".AsSpan());
-		var nameNode = new IdentifierDeclarationNode(nameTok.Value.TrimStart('$').ToString(),
+		var nameTok = Expect(TokenType.Identifier, "Expected variable name", "?".AsSpan());
+		var nameNode = new IdentifierDeclarationNode(nameTok.Value.ToString(),
 													 IdentifierType.Local, null, _filePath, PreviousRange);
 
 		return new DeclarationExpressionNode(typeNode, nameNode, _filePath,
@@ -1065,7 +1088,11 @@ public ref struct AstParser
 			var token = _tokenizer.NextToken();
 			if (token.Type == TokenType.Error)
 			{
-				Error($"Unexpected character '{token.Value.ToString()}'", token.Range);
+				// single-char Error tokens carry the offending character;
+				// longer values are complete messages (indentation errors)
+				Error(token.Value.Length == 1
+					? $"Unexpected character '{token.Value.ToString()}'"
+					: token.Value.ToString(), token.Range);
 				continue;
 			}
 			if (token.Type != TokenType.Comment)
@@ -1154,13 +1181,20 @@ public ref struct AstParser
 		return token;
 	}
 
-	// Expects a type identifier. Accepts a plain Identifier token, or the 'label' keyword
-	// (which is a keyword in the lexer but a valid type name in type positions).
+	// Expects a type identifier. Accepts a plain Identifier token, or the 'func' keyword
+	// (a keyword in the lexer but a valid type name in type positions).
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
 	private Token ExpectTypeIdentifier(string errorMessage)
 	{
+		if (_current.Type == TokenType.Keyword && _current.Value.SequenceEqual("func".AsSpan()))
+		{
+			Token tok = _current;
+			Advance();
+			return tok;
+		}
 		if (_current.Type == TokenType.Keyword && _current.Value.SequenceEqual("label".AsSpan()))
 		{
+			Error("The 'label' type is removed; use 'func'", CurrentRange);
 			Token tok = _current;
 			Advance();
 			return tok;
@@ -1262,6 +1296,7 @@ public ref struct AstParser
 		{
 			"*" => BinaryOperator.Multiply,
 			"/" => BinaryOperator.Divide,
+			"%" => BinaryOperator.Modulo,
 			_ => BinaryOperator.Unknown
 		};
 		return op != BinaryOperator.Unknown;
@@ -1271,7 +1306,6 @@ public ref struct AstParser
 	{
 		op = token.Value.ToString() switch
 		{
-			"!" => UnaryOperator.Not,
 			"-" => UnaryOperator.Negate,
 			"++" => UnaryOperator.Increment,
 			"--" => UnaryOperator.Decrement,
@@ -1289,6 +1323,7 @@ public ref struct AstParser
 			"-=" => AssignmentOperator.Subtract,
 			"*=" => AssignmentOperator.Multiply,
 			"/=" => AssignmentOperator.Divide,
+			"%=" => AssignmentOperator.Modulo,
 			_ => AssignmentOperator.Unknown
 		};
 		return op != AssignmentOperator.Unknown;
@@ -1320,22 +1355,21 @@ public ref struct AstParser
 	private static IdentifierType ParseIdentifierType(ReadOnlySpan<char> name)
 	{
 		if (name.IsEmpty) return IdentifierType.Unknown;
-		// dot-prefixed context variable (e.g. .%foo)
+		// dot-prefixed context variable (e.g. .@foo)
 		if (name[0] == '.')
 		{
 			int i = 0;
 			while (i < name.Length && name[i] == '.') i++;
-			if (i < name.Length && name[i] == '%') return IdentifierType.Context;
+			if (i < name.Length && name[i] == '@') return IdentifierType.Context;
+			// dot-prefixed bare name is necessarily a command
+			return IdentifierType.Command;
 		}
 		return name[0] switch
 		{
-			'$' => IdentifierType.Local,
 			'^' => IdentifierType.Constant,
-			'%' => IdentifierType.Context,
-			'~' => IdentifierType.Func,
-			'@' => IdentifierType.Label,
-			'.' => IdentifierType.Command,
-			_ => char.IsLetter(name[0]) ? IdentifierType.Command : IdentifierType.Unknown
+			'@' => IdentifierType.Context,
+			// bare names resolve to Local/Func/Command during analysis
+			_ => IdentifierType.Unknown
 		};
 	}
 }

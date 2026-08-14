@@ -44,6 +44,7 @@ namespace GameScript.Language.Visitors
 		void Visit(OperatorNode node);
 		void Visit(CallExpressionNode node);
 		void Visit(DeclarationExpressionNode node);
+		void Visit(ParenthesizedExpressionNode node);
 		void Visit(UnparsableExpressionNode node);
 
 		// Other nodes

@@ -30,11 +30,10 @@ namespace GameScript.Language.Visitors
 		// For Identifier nodes, look up the symbol for the identifier.
 		public override void Visit(IdentifierNode node)
 		{
-			// A bare @label identifier is a method reference, not a call.
-			// Any label (with or without params) can be used as a label reference.
-			if (node.Type == IdentifierType.Label)
+			// A bare func name in expression position is a method reference, not a call.
+			if (node.Type is IdentifierType.Func or IdentifierType.Label)
 			{
-				InferredType = _context.Types.GetType("label");
+				InferredType = _context.Types.GetType("func");
 				return;
 			}
 
@@ -87,11 +86,25 @@ namespace GameScript.Language.Visitors
 		}
 
 		// For call expressions, look up the function symbol for the function name,
-		// then assign the return type from the function signature.
+		// then assign the return type from the function signature. The name is NOT
+		// visited as an identifier — that would infer 'func' (a method reference).
 		public override void Visit(CallExpressionNode node)
 		{
-			// First, visit the function name and all arguments.
-			node.FunctionName.Accept(this);
+			foreach (var symbol in _context.Symbols.GetSymbols(node.FunctionName.Name))
+			{
+				if (symbol.IsCallable())
+				{
+					InferredType = symbol.Type;
+					return;
+				}
+			}
+			InferredType = null;
+		}
+
+		// Grouping is transparent.
+		public override void Visit(ParenthesizedExpressionNode node)
+		{
+			node.Inner.Accept(this);
 		}
 
 		// An inline declaration's type is its declared type.

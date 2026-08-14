@@ -18,8 +18,9 @@ namespace GameScript.Language.Ast
 		LessThanOrEqual = 1 << 9,
 		And = 1 << 10,
 		Or = 1 << 11,
+		Modulo = 1 << 12,
 
-		Operational = Add | Subtract | Multiply | Divide,
+		Operational = Add | Subtract | Multiply | Divide | Modulo,
 		Relational = EqualTo | NotEqualTo | GreaterThan | LessThan | GreaterThanOrEqual | LessThanOrEqual,
 		Logical = And | Or
 	}
@@ -42,7 +43,8 @@ namespace GameScript.Language.Ast
 		Add,        // +=
 		Subtract,   // -=
 		Multiply,   // *=
-		Divide      // /=
+		Divide,     // /=
+		Modulo      // %=
 	}
 
 	public enum LiteralType

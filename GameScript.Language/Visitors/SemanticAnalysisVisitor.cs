@@ -20,20 +20,9 @@ namespace GameScript.Language.Visitors
 
 			// check if can have return types
 			if (node.ReturnTypes != null &&
-				(node.Name.Type == IdentifierType.Label || node.Name.Type == IdentifierType.Trigger))
+				node.Name.Type == IdentifierType.Trigger)
 			{
 				Error($"{node.Name.Type} cannot have return values", node.ReturnTypes);
-			}
-
-			if (node.Parameters != null)
-			{
-				foreach (var param in node.Parameters)
-				{
-					if (param.Name.Type != IdentifierType.Local)
-					{
-						Error($"Parameter '{param.Name.Name}' must start with a '$'", param.FileRange);
-					}
-				}
 			}
 
 
@@ -154,51 +143,31 @@ namespace GameScript.Language.Visitors
 			base.Visit(node);
 		}
 
-		public override void Visit(CallExpressionNode node)
-		{
-			base.Visit(node);
-
-			if (node.FunctionName.Type == IdentifierType.Label &&
-				Method?.Name.Type == IdentifierType.Func)
-			{
-				Error("Cannot goto a label inside of a Func, expecting a return value.", node);
-			}
-		}
-
 		public override void Visit(IdentifierNode node)
 		{
-			// check if called identifier type matches symbol type '~', '@', etc.
+			// check that the written mark ('^'/'@'/bare) agrees with the symbol's kind
 			var symbol = LocalIndex?.GetSymbol(node.Name) ??
 				_context.Symbols.GetSymbol(node.Name);
 
 			if (symbol == null)
 			{
-				Error($"{node.Type} '{node.Name}' is not declared.", node);
+				Error($"'{node.Name}' is not declared.", node);
 			}
 			else if (symbol.IdentifierType != node.Type)
 			{
 				switch (symbol.IdentifierType)
 				{
-					case IdentifierType.Func:
-						Error($"{symbol.IdentifierType} '{symbol.Name}' must be called with a '~' prefix.", node);
-						break;
-					case IdentifierType.Label:
-						Error($"{symbol.IdentifierType} '{symbol.Name}' must be called with a '@' prefix.", node);
-						break;
-					case IdentifierType.Command:
-						Error($"{symbol.IdentifierType} '{symbol.Name}' must be called without a prefix.", node);
-						break;
 					case IdentifierType.Trigger:
-						Error($"{symbol.IdentifierType} '{symbol.Name}' cannot be called.", node);
-						break;
-					case IdentifierType.Local:
-						Error($"{symbol.IdentifierType} '{symbol.Name}' must be referenced with a '$' prefix", node);
+						Error($"{symbol.IdentifierType} '{symbol.Name}' cannot be referenced.", node);
 						break;
 					case IdentifierType.Context:
-						Error($"{symbol.IdentifierType} '{symbol.Name}' must be referenced with a '%' prefix", node);
+						Error($"{symbol.IdentifierType} '{symbol.Name}' must be referenced with an '@' mark", node);
 						break;
 					case IdentifierType.Constant:
-						Error($"{symbol.IdentifierType} '{symbol.Name}' must be referenced with a '^' prefix", node);
+						Error($"{symbol.IdentifierType} '{symbol.Name}' must be referenced with a '^' mark", node);
+						break;
+					default:
+						Error($"{symbol.IdentifierType} '{symbol.Name}' must be referenced without a mark", node);
 						break;
 				}
 			}
@@ -266,8 +235,11 @@ namespace GameScript.Language.Visitors
 					return true;  // A direct return means we definitely returned
 
 				case IfStatementNode ifNode:
-					// MustReturn if both if-block and else-block definitely return 
-					// and there's an else. If there's no else, some path won't return.
+					// MustReturn only when every branch returns AND a final else exists —
+					// without an else, the fall-through path skips the chain entirely.
+					if (ifNode.ElseBlock == null)
+						return false;
+
 					bool ifPath = MustReturn(ifNode.IfBlock);
 					if (ifNode.ElseIfNodes != null)
 					{
@@ -276,10 +248,7 @@ namespace GameScript.Language.Visitors
 							ifPath &= MustReturn(elseIf.Block);
 						}
 					}
-					if (ifNode.ElseBlock != null)
-					{
-						ifPath &= MustReturn(ifNode.ElseBlock);
-					}
+					ifPath &= MustReturn(ifNode.ElseBlock);
 					return ifPath;
 
 				case WhileStatementNode whileNode:

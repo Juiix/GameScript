@@ -83,6 +83,7 @@ namespace GameScript.Language.Visitors
 			foreach (var (varName, _) in node.Vars)
 			{
 				CheckSymbol(LocalIndex, varName.Name, varName);
+				CheckLocalCollision(varName.Name, varName);
 			}
 			base.Visit(node);
 		}
@@ -90,13 +91,29 @@ namespace GameScript.Language.Visitors
 		public override void Visit(ParameterNode node)
 		{
 			CheckSymbol(LocalIndex, node.Name.Name, node.Name);
+			CheckLocalCollision(node.Name.Name, node.Name);
 			base.Visit(node);
 		}
 
 		public override void Visit(DeclarationExpressionNode node)
 		{
 			CheckSymbol(LocalIndex, node.Name.Name, node.Name);
+			CheckLocalCollision(node.Name.Name, node.Name);
 			base.Visit(node);
+		}
+
+		// Bare locals share the namespace with funcs/commands, so shadowing a global
+		// callable is banned outright (calls and func refs would be ambiguous).
+		private void CheckLocalCollision(string name, AstNode node)
+		{
+			foreach (var symbol in _context.Symbols.GetSymbols(name))
+			{
+				if (symbol.IsCallable())
+				{
+					Error($"Local '{name}' conflicts with {symbol.IdentifierType} '{name}'; rename the local.", node);
+					return;
+				}
+			}
 		}
 
 		private void CheckSymbol(ISymbolIndex? index, string symbolName, AstNode node)
