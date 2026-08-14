@@ -44,6 +44,9 @@ jobs:
           dotnet build GameScript.Bytecode/GameScript.Bytecode.csproj --configuration Release --no-restore
           dotnet build GameScript.DebugAdapter/GameScript.DebugAdapter.csproj --configuration Release --no-restore
 
+      - name: 🧪 Test
+        run: dotnet test GameScript.Language.Tests/GameScript.Language.Tests.csproj --configuration Release
+
       - name: 📦 Pack NuGet packages
         run: |
           dotnet pack GameScript.Language/GameScript.Language.csproj --configuration Release --no-build --output ./nupkgs
