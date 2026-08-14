@@ -2,6 +2,30 @@
 
 All notable changes to GameScript will be documented in this file.
 
+## [2.0.0]
+
+**Breaking release — the GameScript 2.0 syntax redesign.** Old-syntax content does not compile; convert with the content codemod (`tools/gs-migrate`).
+
+### Language (breaking)
+- Locals, params, func calls, and func references are **bare identifiers**: `int count`, `skill_name(skill)` (the `$` and `~` sigils are removed).
+- Context variables use `@name` (was `%name`), in both `.gs` and `.context` files. `.context` declarations are `int @name = N` with no semicolon.
+- `%` is now the **modulo operator** (with `%=` compound assignment).
+- **`label` is removed** — everything is a `func`. The `@name()` jump form is gone; a call in tail position (`return f(...)`, or a call as the final statement of a void func with matching return arity) compiles to a **tail transfer** that replaces the current frame, preserving the old zero-stack-growth behavior. The `label` parameter type becomes `func`; any func is queueable/suspendable.
+- **Overloading**: funcs/commands may share a name when parameter signatures differ; call sites resolve by argument count and types. Return types don't participate. Command overloads bind to engine ops with `= internal_name`.
+- **String interpolation**: `"lvl {x}!"` compiles to the same concatenation bytecode as `+` chains; `{{`/`}}` are literal braces.
+- **Declare + destructure**: `(bool ok, string err) = send_login(...)`, including mixed forms with existing locals.
+- Grammar tightening (now errors): semicolons; parentheses wrapping a whole `if`/`while` condition; the `!` prefix (use `not`); tabs and non-multiple-of-4 indentation; empty `()` on trigger headers; a local sharing a name with any func/command.
+- The all-paths-return check now correctly rejects an `if` without `else` as a guaranteed return.
+
+### Runtime
+- New core opcodes: `Modulo` and `TailCall` (top-frame replacement). `Goto` is deprecated — the compiler no longer emits it; its handler remains for one release.
+
+### Tooling
+- New `NameResolutionVisitor` analysis pass (must run before the other passes) classifies bare identifiers.
+- `BytecodeCompiler` accepts the resolved-overload map from `TypeAnalysisVisitor.ResolvedCalls`.
+- LSP and both editor grammars updated for the new marks, `not`, `func` type, and interpolation.
+- New `GameScript.Language.Tests` suite; CI runs `dotnet test`.
+
 ## [1.5.3]
 
 ### Added

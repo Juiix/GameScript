@@ -86,8 +86,21 @@ public enum ServerOpCode : ushort
     Int2Str       = 1100,
     SuspendForInt = 1200,
     Queue         = 1300,
+    QueueInt      = 1301,
     // …
 }
+```
+
+### Overloads and `=` op bindings
+
+Script-side command **overloads** (same name, different parameter signatures) each
+bind to their own enum case via the `= internal_name` clause; the bound name goes
+through the same enum-name mapping. No engine changes are needed — one script name
+simply fans out to several ops:
+
+```gamescript
+command queue(func method, int delay) = queue
+command queue(func method, int delay, int arg0) = queue_int
 ```
 
 ---
@@ -97,7 +110,10 @@ public enum ServerOpCode : ushort
 Collect the parsed nodes from **all** files, then compile them together in one call:
 
 ```csharp
-var compiler = new BytecodeCompiler<ServerOpCode>();
+// resolvedCalls comes from the TypeAnalysisVisitor pass (see §9.3) — it maps each
+// call site to the overload chosen during analysis. Required whenever any name
+// is overloaded; merge the per-file dictionaries into one.
+var compiler = new BytecodeCompiler<ServerOpCode>(resolvedCalls);
 var result   = compiler.Compile(constantNodes, contextNodes, methodNodes);
 
 BytecodeProgram         prog = result.Program;   // methods + constant pool
@@ -105,7 +121,8 @@ BytecodeProgramMetadata meta = result.Metadata;  // per-method line/file maps, l
 ```
 
 - Constant declarations are folded into the constant pool at compile time — there is no init step to run.
-- `func`, `label`, and `trigger` methods compile to bytecode; `command` declarations resolve to your opcode enum.
+- `func` and `trigger` methods compile to bytecode; `command` declarations resolve to your opcode enum.
+- A call in tail position (`return f(...)`, or a call as the final statement of a void func) compiles to the `TailCall` opcode — the VM replaces the current frame instead of pushing one, so state-machine chains never grow the stack.
 - Keep `meta` if you want stack traces or debugging — it maps every instruction back to a file and line, and names every local and context slot.
 
 ---
@@ -198,7 +215,7 @@ runner.Run(state);   // resumes right after the suspending command
 
 ## 7 Context Variables (`IScriptContext`)
 
-`%context` variables are backed by host storage, keyed by the slot ID from the `.context` declaration:
+`@context` variables are backed by host storage, keyed by the slot ID from the `.context` declaration:
 
 ```csharp
 public sealed class MyCtx : IScriptContext
@@ -219,8 +236,8 @@ public sealed class MyCtx : IScriptContext
 }
 ```
 
-- **Dot prefix:** script can read/write `.%var` (one dot max). The dot flag arrives in the high 16 bits of `id` — conventionally it selects the *other* party's context in an interaction. Mask with `& 0xFFFF` if you don't use it.
-- **Coercion:** the VM is forgiving about bool/int mismatches — `Value.Bool` treats any non-zero int as `true`, `Value.Int` reads `true` as `1`, and `Null` reads as `0`/`false`. Returning `Value.FromInt(1)` for a `bool %flag` works.
+- **Dot prefix:** script can read/write `.@var` (one dot max). The dot flag arrives in the high 16 bits of `id` — conventionally it selects the *other* party's context in an interaction. Mask with `& 0xFFFF` if you don't use it.
+- **Coercion:** the VM is forgiving about bool/int mismatches — `Value.Bool` treats any non-zero int as `true`, `Value.Int` reads `true` as `1`, and `Null` reads as `0`/`false`. Returning `Value.FromInt(1)` for a `bool @flag` works.
 
 ---
 
@@ -271,9 +288,18 @@ symbols.AddFile(filePath,    fileIndex.FileSymbols);
 ### 9.3 Analysis passes
 
 ```csharp
+// NameResolutionVisitor MUST run first — it classifies bare identifiers
+// (local vs func vs command) that every later pass and the compiler rely on.
+VisitAst(rootNode, new NameResolutionVisitor(indexer.LocalIndexes, context),   errors);
 VisitAst(rootNode, new SymbolAnalysisVisitor(indexer.LocalIndexes, context),   errors);
 VisitAst(rootNode, new SemanticAnalysisVisitor(indexer.LocalIndexes, context), errors);
-VisitAst(rootNode, new TypeAnalysisVisitor(indexer.LocalIndexes, context),     errors);
+
+var typeVisitor = new TypeAnalysisVisitor(indexer.LocalIndexes, context);
+VisitAst(rootNode, typeVisitor, errors);
+
+// merge per-file resolved-overload maps for the compiler (see §4)
+foreach (var (call, symbol) in typeVisitor.ResolvedCalls)
+    resolvedCalls[call] = symbol;
 
 static void VisitAst<T>(AstNode n, T v, List<FileError> errs) where T : IAstVisitor
 {
@@ -284,9 +310,10 @@ static void VisitAst<T>(AstNode n, T v, List<FileError> errs) where T : IAstVisi
 
 | Visitor                    | Checks                                               |
 | -------------------------- | ---------------------------------------------------- |
-| `SymbolAnalysisVisitor`    | Duplicate and undefined symbol declarations          |
-| `SemanticAnalysisVisitor`  | Control flow, prefix rules, break/continue scope     |
-| `TypeAnalysisVisitor`      | Type inference and assignment compatibility          |
+| `NameResolutionVisitor`    | Classifies bare identifiers against symbol tables    |
+| `SymbolAnalysisVisitor`    | Duplicate declarations, local/global name collisions |
+| `SemanticAnalysisVisitor`  | Control flow, mark rules, break/continue scope       |
+| `TypeAnalysisVisitor`      | Type inference, overload resolution, assignments     |
 
 All visitors collect `FileError` instances for easy aggregation and reporting.
 
