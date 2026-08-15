@@ -117,9 +117,15 @@ public sealed class ProjectRegistryTests : IDisposable
 	[Fact]
 	public void Marker_File_Detection()
 	{
-		Assert.True(ProjectRegistry.IsMarkerFile(@"c:\content\server\gamescript.json"));
-		Assert.True(ProjectRegistry.IsMarkerFile(@"c:\content\server\GameScript.Json"));
-		Assert.False(ProjectRegistry.IsMarkerFile(@"c:\content\server\core.gs"));
-		Assert.False(ProjectRegistry.IsMarkerFile(@"c:\content\gamescript.json.bak"));
+		// build paths with the platform separator — CI runs on Linux too
+		Assert.True(ProjectRegistry.IsMarkerFile(Path.Combine(_root, "server", "gamescript.json")));
+		Assert.False(ProjectRegistry.IsMarkerFile(Path.Combine(_root, "server", "core.gs")));
+		Assert.False(ProjectRegistry.IsMarkerFile(Path.Combine(_root, "gamescript.json.bak")));
+
+		// marker-name casing follows the platform's path case-sensitivity
+		if (OperatingSystem.IsWindows() || OperatingSystem.IsMacOS())
+		{
+			Assert.True(ProjectRegistry.IsMarkerFile(Path.Combine(_root, "server", "GameScript.Json")));
+		}
 	}
 }
