@@ -12,11 +12,11 @@ namespace GameScript.LanguageServer.Handlers;
 internal sealed class SignatureHelpHandler(
 	OpenDocumentCache openDocumentCache,
 	AstCache astCache,
-	ISymbolIndex symbols) : ISignatureHelpHandler
+	Services.ProjectRegistry projects) : ISignatureHelpHandler
 {
 	private readonly OpenDocumentCache _openDocumentCache = openDocumentCache;
 	private readonly AstCache _astCache = astCache;
-	private readonly ISymbolIndex _symbols = symbols;
+	private readonly Services.ProjectRegistry _projects = projects;
 
 	public SignatureHelpRegistrationOptions GetRegistrationOptions(SignatureHelpCapability capability, ClientCapabilities clientCapabilities)
 	{
@@ -47,7 +47,7 @@ internal sealed class SignatureHelpHandler(
 		if (callExpr == null)
 			return null;
 
-		var symbol = _symbols.GetSymbol(callExpr.FunctionName.Name);
+		var symbol = _projects.GetProject(filePath).Symbols.GetSymbol(callExpr.FunctionName.Name);
 		if (symbol == null)
 			return null;
 

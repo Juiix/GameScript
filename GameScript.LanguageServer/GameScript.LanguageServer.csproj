@@ -24,4 +24,8 @@
       <ProjectReference Include="..\GameScript.Language\GameScript.Language.csproj" />
     </ItemGroup>
 
+    <ItemGroup>
+      <InternalsVisibleTo Include="GameScript.Language.Tests" />
+    </ItemGroup>
+
 </Project>

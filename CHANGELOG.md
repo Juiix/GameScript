@@ -2,6 +2,11 @@
 
 All notable changes to GameScript will be documented in this file.
 
+## [2.2.0]
+
+### Added
+- **Sub-project support in the language server.** A `gamescript.json` marker file makes its folder an isolated project root: each project gets its own symbol/reference tables, so a workspace like `content/` holding `server/` and `client/` script projects (each with its own core.gs commands and triggers) no longer produces cross-project name conflicts. Files resolve to the nearest ancestor marker; files outside every marker belong to the workspace-root default project. Completion, hover, go-to-definition, references, rename, diagnostics, and dependency re-analysis are all scoped per project; workspace-symbol search spans all projects. Adding/removing/renaming a marker re-scopes and re-indexes the workspace live.
+
 ## [2.1.1]
 
 ### Added

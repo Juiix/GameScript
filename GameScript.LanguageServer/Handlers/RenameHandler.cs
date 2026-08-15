@@ -14,13 +14,11 @@ namespace GameScript.LanguageServer.Handlers;
 internal sealed class RenameHandler(
 	OpenDocumentCache openDocumentCache,
 	AstCache astCache,
-	ISymbolIndex symbols,
-	IReferenceIndex references) : IRenameHandler
+	Services.ProjectRegistry projects) : IRenameHandler
 {
 	private readonly OpenDocumentCache _openDocumentCache = openDocumentCache;
 	private readonly AstCache _astCache = astCache;
-	private readonly ISymbolIndex _symbols = symbols;
-	private readonly IReferenceIndex _references = references;
+	private readonly Services.ProjectRegistry _projects = projects;
 
 	public async Task<WorkspaceEdit?> Handle(RenameParams request, CancellationToken cancellationToken)
 	{
@@ -46,9 +44,10 @@ internal sealed class RenameHandler(
 			return null;
 		}
 
+		var project = _projects.GetProject(filePath);
 		var localIndex = rootData.GetLocalIndex(request.Position.Line, request.Position.Character);
 		var localSymbol = localIndex?.GetSymbol(symbolName);
-		var symbol = localSymbol ?? _symbols.GetSymbol(symbolName);
+		var symbol = localSymbol ?? project.Symbols.GetSymbol(symbolName);
 		if (symbol == null)
 		{
 			return null;
@@ -70,7 +69,7 @@ internal sealed class RenameHandler(
 
 		var references = localSymbol != null ?
 			localIndex?.GetReferences(symbolName) :
-			_references.GetReferences(symbolName);
+			project.References.GetReferences(symbolName);
 		if (references != null)
 		{
 			foreach (var reference in references)
@@ -131,9 +130,9 @@ internal sealed class RenameHandler(
 
 	/// <summary>
 	/// Returns <c>true</c> when <paramref name="name"/>
-	/// • is non-empty  
-	/// • begins with a letter (A–Z / a–z) or '_'  
-	/// • thereafter contains only letters, digits, or '_'  
+	/// ï¿½ is non-empty  
+	/// ï¿½ begins with a letter (Aï¿½Z / aï¿½z) or '_'  
+	/// ï¿½ thereafter contains only letters, digits, or '_'  
 	/// </summary>
 	private static bool IsValidIdentifier(string? name)
 	{

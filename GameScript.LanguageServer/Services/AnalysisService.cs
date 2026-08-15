@@ -13,22 +13,22 @@ namespace GameScript.LanguageServer.Services
 	/// </summary>
 	internal sealed class AnalysisService
 	{
-		private readonly GlobalSymbolTable _symbols;
+		private readonly ProjectRegistry _projects;
 		private readonly GlobalTypeIndex _types;
 		private readonly ILogger<ParsingService> _logger;
 
 		/// <summary>
 		/// Initializes a new instance of <see cref="AnalysisService"/>.
 		/// </summary>
-		/// <param name="symbols">The shared global symbol table.</param>
+		/// <param name="projects">Registry mapping files to their sub-project's tables.</param>
 		/// <param name="types">The shared global type index.</param>
 		/// <param name="logger">Logger used to record unexpected failures.</param>
 		public AnalysisService(
-			GlobalSymbolTable symbols,
+			ProjectRegistry projects,
 			GlobalTypeIndex types,
 			ILogger<ParsingService> logger)
 		{
-			_symbols = symbols;
+			_projects = projects;
 			_types = types;
 			_logger = logger;
 		}
@@ -50,7 +50,8 @@ namespace GameScript.LanguageServer.Services
 		{
 			try
 			{
-				var context = new VisitorContext(_types, _symbols, rootNode.FilePath);
+				var project = _projects.GetProject(rootNode.FilePath);
+				var context = new VisitorContext(_types, project.Symbols, rootNode.FilePath);
 				var errors = new List<FileError>();
 
 				// Run each analysis pass. Name resolution must come first — it

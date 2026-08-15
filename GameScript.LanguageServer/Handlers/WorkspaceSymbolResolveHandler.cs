@@ -6,13 +6,15 @@ using OmniSharp.Extensions.LanguageServer.Protocol.Workspace;
 namespace GameScript.LanguageServer.Handlers
 {
 	internal sealed class WorkspaceSymbolResolveHandler(
-		ISymbolIndex symbols) : IWorkspaceSymbolResolveHandler
+		Services.ProjectRegistry projects) : IWorkspaceSymbolResolveHandler
 	{
-		private readonly ISymbolIndex _symbols = symbols;
+		private readonly Services.ProjectRegistry _projects = projects;
 
 		public async Task<WorkspaceSymbol> Handle(WorkspaceSymbol request, CancellationToken cancellationToken)
 		{
-			var symbol = _symbols.GetSymbol(request.Name);
+			var symbol = _projects.Projects
+				.Select(p => p.Symbols.GetSymbol(request.Name))
+				.FirstOrDefault(x => x != null);
 			if (symbol == null)
 			{
 				return request;

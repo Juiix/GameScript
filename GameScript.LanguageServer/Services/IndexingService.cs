@@ -8,32 +8,28 @@ using Microsoft.Extensions.Logging;
 namespace GameScript.LanguageServer.Services
 {
 	/// <summary>
-	/// Produces a <see cref="FileIndex"/> for a single AST, updates the global
-	/// symbol/reference tables, and returns per-method local indexes plus any
-	/// diagnostics encountered while traversing the tree.
+	/// Produces a <see cref="FileIndex"/> for a single AST, updates the owning
+	/// project's symbol/reference tables, and returns per-method local indexes
+	/// plus any diagnostics encountered while traversing the tree.
 	/// </summary>
 	internal sealed class IndexingService
 	{
-		private readonly GlobalSymbolTable _symbols;
-		private readonly GlobalReferenceTable _references;
+		private readonly ProjectRegistry _projects;
 		private readonly GlobalTypeIndex _types;
 		private readonly ILogger<ParsingService> _logger;
 
 		/// <summary>
 		/// Creates a new <see cref="IndexingService"/>.
 		/// </summary>
-		/// <param name="symbols">Global table of declared symbols.</param>
-		/// <param name="references">Global table of symbol references.</param>
-		/// <param name="types">Global index of known types.</param>
+		/// <param name="projects">Registry mapping files to their sub-project's tables.</param>
+		/// <param name="types">Global index of known types (shared across projects).</param>
 		/// <param name="logger">Logger for unexpected errors.</param>
 		public IndexingService(
-			GlobalSymbolTable symbols,
-			GlobalReferenceTable references,
+			ProjectRegistry projects,
 			GlobalTypeIndex types,
 			ILogger<ParsingService> logger)
 		{
-			_symbols = symbols;
-			_references = references;
+			_projects = projects;
 			_types = types;
 			_logger = logger;
 		}
@@ -53,17 +49,18 @@ namespace GameScript.LanguageServer.Services
 			var filePath = rootNode.FilePath;
 			try
 			{
+				var project = _projects.GetProject(filePath);
 				var fileIndex = new FileIndex();
 				var errors = new List<FileError>();
-				var context = new VisitorContext(_types, _symbols, filePath);
+				var context = new VisitorContext(_types, project.Symbols, filePath);
 				var visitor = new IndexVisitor(fileIndex, context);
 
 				rootNode.Accept(visitor);
 				errors.AddRange(visitor.Errors);
 
-				// Merge results into global caches.
-				_references.AddFile(filePath, fileIndex.FileReferences);
-				_symbols.AddFile(filePath, fileIndex.FileSymbols);
+				// Merge results into the owning project's tables.
+				project.References.AddFile(filePath, fileIndex.FileReferences);
+				project.Symbols.AddFile(filePath, fileIndex.FileSymbols);
 
 				return new IndexResult(fileIndex, visitor.LocalIndexes, errors);
 			}
@@ -99,15 +96,17 @@ namespace GameScript.LanguageServer.Services
 		/// </returns>
 		public IEnumerable<string> GetDependencies(RootFileData rootData, HashSet<string> visited)
 		{
+			// dependents never cross a project boundary — dirtying stays scoped
+			var project = _projects.GetProject(rootData.Root.FilePath);
 			foreach (var symbol in rootData.Index.FileIndex.Symbols)
 			{
-				foreach (var reference in _references.GetReferences(symbol.Name))
+				foreach (var reference in project.References.GetReferences(symbol.Name))
 				{
 					if (visited.Add(reference.FilePath))
 						yield return reference.FilePath;
 				}
 
-				foreach (var duplicate in _symbols.GetSymbols(symbol.Name))
+				foreach (var duplicate in project.Symbols.GetSymbols(symbol.Name))
 				{
 					if (duplicate != symbol &&
 						visited.Add(duplicate.FilePath))
@@ -125,8 +124,13 @@ namespace GameScript.LanguageServer.Services
 		/// </param>
 		public void RemoveFile(string filePath)
 		{
-			_references.RemoveFile(filePath);
-			_symbols.RemoveFile(filePath);
+			// remove from every project: after a marker rebuild the file's entries
+			// may live in a different project's tables than GetProject now returns
+			foreach (var project in _projects.Projects)
+			{
+				project.References.RemoveFile(filePath);
+				project.Symbols.RemoveFile(filePath);
+			}
 		}
 	}
 }

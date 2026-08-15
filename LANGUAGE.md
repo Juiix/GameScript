@@ -34,6 +34,8 @@ Mixing categories in the same file is a parser error.
 
 **There are no imports.** All files in a project share one global namespace: any `func`, `^constant`, or `@context` variable is visible from every script. Projects typically organize by feature folder and generate `.const` files as symbol tables for game data (item IDs, menu IDs, sounds, …).
 
+**Sub-projects**: a workspace may hold several independent script projects (e.g. `content/server/` and `content/client/`, each with its own core.gs). Place a `gamescript.json` marker file in each project's root folder — the editor tooling then treats each subtree as its own namespace, so identically-named commands/funcs across projects don't conflict. Files outside every marker belong to the workspace root's default project.
+
 The editor tooling also recognizes **object definition** data files (`.varp`, `.varn`, `.item`, `.npc`, `.menu`, `.obj`, `.tile`, `.inv`, `.anim`, `.param`, `.tex`, `.rig`, `.fx`, `.option`) — these hold game data referenced from scripts via `^constants`, not GameScript code.
 
 ### Indentation

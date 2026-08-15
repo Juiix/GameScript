@@ -12,11 +12,11 @@ namespace GameScript.LanguageServer.Handlers
 	internal sealed class DocumentHighlightHandler(
 		OpenDocumentCache openDocumentCache,
 		AstCache astCache,
-		ISymbolIndex symbols) : IDocumentHighlightHandler
+		Services.ProjectRegistry projects) : IDocumentHighlightHandler
 	{
 		private readonly OpenDocumentCache _openDocumentCache = openDocumentCache;
 		private readonly AstCache _astCache = astCache;
-		private readonly ISymbolIndex _symbols = symbols;
+		private readonly Services.ProjectRegistry _projects = projects;
 
 		public DocumentHighlightRegistrationOptions GetRegistrationOptions(DocumentHighlightCapability capability, ClientCapabilities clientCapabilities)
 		{
@@ -54,9 +54,9 @@ namespace GameScript.LanguageServer.Handlers
 			{
 				references = localIndex?.GetReferences(symbolName);
 			}
-			else // is global symbol
+			else // is a project-level symbol
 			{
-				symbol = _symbols.GetSymbol(symbolName);
+				symbol = _projects.GetProject(filePath).Symbols.GetSymbol(symbolName);
 				references = rootData.Index.FileIndex.GetReferences(symbolName);
 			}
 

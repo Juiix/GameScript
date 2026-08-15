@@ -24,6 +24,7 @@ internal sealed class WorkspaceService : IAsyncDisposable
 	private readonly IndexingService _indexingService;
 	private readonly AnalysisService _analysisService;
 	private readonly DiagnosticsService _diagnosticsService;
+	private readonly ProjectRegistry _projectRegistry;
 	private readonly ILogger<WorkspaceService> _logger;
 
 	private CancellationTokenSource? _watchCts;
@@ -38,6 +39,7 @@ internal sealed class WorkspaceService : IAsyncDisposable
 		IndexingService indexingService,
 		AnalysisService analysisService,
 		DiagnosticsService diagnosticsService,
+		ProjectRegistry projectRegistry,
 		ILogger<WorkspaceService> logger)
 	{
 		_astCache = astCache;
@@ -47,6 +49,7 @@ internal sealed class WorkspaceService : IAsyncDisposable
 		_indexingService = indexingService;
 		_analysisService = analysisService;
 		_diagnosticsService = diagnosticsService;
+		_projectRegistry = projectRegistry;
 		_logger = logger;
 	}
 
@@ -57,6 +60,7 @@ internal sealed class WorkspaceService : IAsyncDisposable
 	public void SetRoot(string rootUri)
 	{
 		_rootPath = CanonicaliseRoot(new Uri(rootUri).LocalPath);
+		_projectRegistry.SetRoot(_rootPath);
 		RestartWatcher();
 		_logger.LogInformation("Starting with workspace: {path}", _rootPath);
 	}
@@ -117,6 +121,10 @@ internal sealed class WorkspaceService : IAsyncDisposable
 			// new folder or a write-time change to folder attributes
 			_ = ScanFolderAsync(e.FullPath, true, default);
 		}
+		else if (ProjectRegistry.IsMarkerFile(e.FullPath))
+		{
+			OnProjectMarkersChanged();
+		}
 		else
 		{
 			OnDiskChanged(e.FullPath);
@@ -132,6 +140,14 @@ internal sealed class WorkspaceService : IAsyncDisposable
 			var path = CanonicaliseRoot(e.FullPath);
 			var files = _astCache.FilePaths.Where(p => IsContainedInDirectory(p, path));
 			toReanalyze = OnRemovedFolder(files.ToArray());
+
+			// the folder may have contained a project marker
+			OnProjectMarkersChanged();
+		}
+		else if (ProjectRegistry.IsMarkerFile(e.FullPath))
+		{
+			OnProjectMarkersChanged();
+			return;
 		}
 		else
 		{
@@ -147,6 +163,13 @@ internal sealed class WorkspaceService : IAsyncDisposable
 
 	private void OnRenamed(object? s, RenamedEventArgs e)
 	{
+		// a marker renamed away from (or to) gamescript.json changes project roots
+		if (ProjectRegistry.IsMarkerFile(e.OldFullPath) ||
+			ProjectRegistry.IsMarkerFile(e.FullPath))
+		{
+			OnProjectMarkersChanged();
+		}
+
 		FileSystemEventArgs args;
 
 		// check if file is still in root
@@ -254,6 +277,23 @@ internal sealed class WorkspaceService : IAsyncDisposable
 	}
 
 	/// <summary>
+	/// Re-discovers project markers; when the set of project roots changed, every
+	/// project gets fresh symbol tables, so all cached files are re-queued for a
+	/// full re-index into their (possibly new) projects.
+	/// </summary>
+	private void OnProjectMarkersChanged()
+	{
+		if (!_projectRegistry.Rebuild())
+			return;    // marker content edit — roots unchanged, nothing to do
+
+		_logger.LogInformation("Project roots changed; re-indexing workspace");
+		foreach (var filePath in _astCache.FilePaths)
+		{
+			_fileProcessingService.Queue(filePath);
+		}
+	}
+
+	/// <summary>
 	/// Handles file edits/creations by flushing the text cache and forwarding the
 	/// path to the <see cref="FileProcessingService"/> pipeline.
 	/// </summary>
@@ -324,6 +364,12 @@ internal sealed class WorkspaceService : IAsyncDisposable
 
 	private async Task ScanFolderAsync(string folderPath, bool reanalyzeDependents, CancellationToken ct)
 	{
+		// a newly appearing folder may bring a gamescript.json project marker with it
+		if (reanalyzeDependents)
+		{
+			OnProjectMarkersChanged();
+		}
+
 		var files = Directory.EnumerateFiles(folderPath, "*.*", SearchOption.AllDirectories)
 					.Where(ExtensionFilter.IsGameScript)
 					.Select(x => x.NormalizePath());

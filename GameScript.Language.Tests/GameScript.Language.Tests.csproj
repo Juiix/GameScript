@@ -16,6 +16,7 @@
   <ItemGroup>
     <ProjectReference Include="..\GameScript.Language\GameScript.Language.csproj" />
     <ProjectReference Include="..\GameScript.Bytecode\GameScript.Bytecode.csproj" />
+    <ProjectReference Include="..\GameScript.LanguageServer\GameScript.LanguageServer.csproj" />
   </ItemGroup>
 
 </Project>

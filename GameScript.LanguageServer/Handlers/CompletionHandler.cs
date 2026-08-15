@@ -14,11 +14,11 @@ namespace GameScript.LanguageServer.Handlers;
 internal sealed class CompletionHandler(
 	OpenDocumentCache openDocumentCache,
 	AstCache astCache,
-	ISymbolIndex symbols) : ICompletionHandler
+	Services.ProjectRegistry projects) : ICompletionHandler
 {
 	private readonly OpenDocumentCache _openDocumentCache = openDocumentCache;
 	private readonly AstCache _astCache = astCache;
-	private readonly ISymbolIndex _symbols = symbols;
+	private readonly Services.ProjectRegistry _projects = projects;
 
 	public CompletionRegistrationOptions GetRegistrationOptions(CompletionCapability capability,
 		ClientCapabilities clientCapabilities)
@@ -64,8 +64,8 @@ internal sealed class CompletionHandler(
 				AddIfMatch(x, prefix, targetType, startsWithSymbols, containsSymbols);
 		}
 
-		// add global symbols
-		foreach (var x in _symbols.Symbols)
+		// add the file's project symbols
+		foreach (var x in _projects.GetProject(filePath).Symbols.Symbols)
 		{
 			if (x.IdentifierType is not (IdentifierType.Trigger or IdentifierType.TriggerDeclaration))
 				AddIfMatch(x, prefix, targetType, startsWithSymbols, containsSymbols);
@@ -131,7 +131,7 @@ internal sealed class CompletionHandler(
 
 		var startsWithSymbols = new List<SymbolInfo>();
 		var containsSymbols = new List<SymbolInfo>();
-		foreach (var symbol in _symbols.Symbols)
+		foreach (var symbol in _projects.GetProject(filePath).Symbols.Symbols)
 		{
 			if (symbol.IdentifierType != IdentifierType.Constant)
 				continue;

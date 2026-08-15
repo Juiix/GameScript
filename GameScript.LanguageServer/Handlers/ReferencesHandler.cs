@@ -12,11 +12,11 @@ namespace GameScript.LanguageServer.Handlers;
 internal sealed class ReferencesHandler(
 	OpenDocumentCache openDocumentCache,
 	AstCache astCache,
-	IReferenceIndex references) : IReferencesHandler
+	Services.ProjectRegistry projects) : IReferencesHandler
 {
 	private readonly OpenDocumentCache _openDocumentCache = openDocumentCache;
 	private readonly AstCache _astCache = astCache;
-	private readonly IReferenceIndex _references = references;
+	private readonly Services.ProjectRegistry _projects = projects;
 
 	public async Task<LocationContainer?> Handle(ReferenceParams request, CancellationToken cancellationToken)
 	{
@@ -47,7 +47,7 @@ internal sealed class ReferencesHandler(
 		var localSymbol = localIndex?.GetSymbol(symbolName);
 		var references = localSymbol != null ?
 			localIndex?.GetReferences(symbolName) ?? [] :
-			_references.GetReferences(symbolName);
+			_projects.GetProject(filePath).References.GetReferences(symbolName);
 
 		return new LocationContainer(
 			references.Select(x => new Location

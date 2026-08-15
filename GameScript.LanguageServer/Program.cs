@@ -49,14 +49,12 @@ var server = await LanguageServer.From(options =>
 		services.AddSingleton<FileProcessingService>();
 		services.AddSingleton<IndexingService>();
 		services.AddSingleton<ParsingService>();
+		services.AddSingleton<ProjectRegistry>();
 		services.AddSingleton<WorkspaceService>();
 
-		// index
-		services.AddSingleton<GlobalReferenceTable>();
-		services.AddSingleton<GlobalSymbolTable>();
+		// index — symbol/reference tables live per sub-project inside ProjectRegistry;
+		// only the (immutable) type index is process-wide
 		services.AddSingleton<GlobalTypeIndex>();
-		services.AddSingleton<IReferenceIndex, GlobalReferenceTable>(x => x.GetRequiredService<GlobalReferenceTable>());
-		services.AddSingleton<ISymbolIndex, GlobalSymbolTable>(x => x.GetRequiredService<GlobalSymbolTable>());
 		services.AddSingleton<ITypeIndex, GlobalTypeIndex>(x => x.GetRequiredService<GlobalTypeIndex>());
 
 		// handlers

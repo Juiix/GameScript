@@ -10,9 +10,9 @@ using OmniSharp.Extensions.LanguageServer.Protocol.Workspace;
 namespace GameScript.LanguageServer.Handlers;
 
 internal sealed class WorkspaceSymbolsHandler(
-	ISymbolIndex globalSymbolTable) : IWorkspaceSymbolsHandler
+	Services.ProjectRegistry projects) : IWorkspaceSymbolsHandler
 {
-	private readonly ISymbolIndex _globalSymbolTable = globalSymbolTable;
+	private readonly Services.ProjectRegistry _projects = projects;
 
 	public async Task<Container<WorkspaceSymbol>?> Handle(WorkspaceSymbolParams request, CancellationToken cancellationToken)
 	{
@@ -22,8 +22,10 @@ internal sealed class WorkspaceSymbolsHandler(
 			return null;
 		}
 
+		// workspace-wide query: union across every project
+		var allSymbols = _projects.Projects.SelectMany(p => p.Symbols.Symbols);
 		var querySymbol = new SymbolInfo(default, query, null, null, null, null, null, null, string.Empty, default);
-		var results = Process.ExtractSorted(querySymbol, _globalSymbolTable.Symbols, x => x.Name);
+		var results = Process.ExtractSorted(querySymbol, allSymbols, x => x.Name);
 
 		var flat = results.Take(100).Select(x => new WorkspaceSymbol
 		{

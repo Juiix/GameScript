@@ -13,11 +13,11 @@ namespace GameScript.LanguageServer.Handlers;
 internal sealed class HoverHandler(
 	OpenDocumentCache openDocumentCache,
 	AstCache astCache,
-	ISymbolIndex symbols) : IHoverHandler
+	Services.ProjectRegistry projects) : IHoverHandler
 {
 	private readonly OpenDocumentCache _openDocumentCache = openDocumentCache;
 	private readonly AstCache _astCache = astCache;
-	private readonly ISymbolIndex _symbols = symbols;
+	private readonly Services.ProjectRegistry _projects = projects;
 
 #pragma warning disable CS1998 // Async method lacks 'await' operators and will run synchronously
 	public async Task<Hover?> Handle(HoverParams request, CancellationToken cancellationToken)
@@ -40,7 +40,8 @@ internal sealed class HoverHandler(
 		}
 
 		var localIndex = rootData.GetLocalIndex(request.Position.Line, request.Position.Character);
-		return GetHover(astNode, parent, localIndex);
+		var symbols = _projects.GetProject(filePath).Symbols;
+		return GetHover(astNode, parent, localIndex, symbols);
 	}
 
 	public HoverRegistrationOptions GetRegistrationOptions(HoverCapability capability, ClientCapabilities clientCapabilities)
@@ -51,36 +52,36 @@ internal sealed class HoverHandler(
 		};
 	}
 
-	private Hover? GetHover(AstNode astNode, AstNode? parent, LocalIndex? localIndex)
+	private static Hover? GetHover(AstNode astNode, AstNode? parent, LocalIndex? localIndex, ISymbolIndex symbols)
 	{
 		return astNode switch
 		{
-			MethodDefinitionNode methodDefinitionNode => CreateMethodHover(methodDefinitionNode.SymbolName),
-			IdentifierNode identifierNode => GetHover(identifierNode.Type, identifierNode.Name, localIndex),
+			MethodDefinitionNode methodDefinitionNode => CreateMethodHover(methodDefinitionNode.SymbolName, symbols),
+			IdentifierNode identifierNode => GetHover(identifierNode.Type, identifierNode.Name, localIndex, symbols),
 			IdentifierDeclarationNode identifierDeclarationNode => parent is MethodDefinitionNode parentMethod
-						? CreateMethodHover(parentMethod.SymbolName)
-						: GetHover(identifierDeclarationNode.Type, identifierDeclarationNode.Name, localIndex),
+						? CreateMethodHover(parentMethod.SymbolName, symbols)
+						: GetHover(identifierDeclarationNode.Type, identifierDeclarationNode.Name, localIndex, symbols),
 			_ => null
 		};
 	}
 
-	private Hover? GetHover(IdentifierType identifierType, string name, LocalIndex? localIndex)
+	private static Hover? GetHover(IdentifierType identifierType, string name, LocalIndex? localIndex, ISymbolIndex symbols)
 	{
 		if ((identifierType & IdentifierType.Method) != IdentifierType.Unknown)
 		{
-			return CreateMethodHover(name);
+			return CreateMethodHover(name, symbols);
 		}
 		else if ((identifierType & IdentifierType.Variable) != IdentifierType.Unknown)
 		{
-			return CreateVariableHover(name, localIndex);
+			return CreateVariableHover(name, localIndex, symbols);
 		}
 
 		return null;
 	}
 
-	private Hover? CreateMethodHover(string symbolName)
+	private static Hover? CreateMethodHover(string symbolName, ISymbolIndex symbols)
 	{
-		var symbol = _symbols.GetSymbol(symbolName);
+		var symbol = symbols.GetSymbol(symbolName);
 		if (symbol == null)
 			return null;
 
@@ -92,9 +93,9 @@ internal sealed class HoverHandler(
 		};
 	}
 
-	private Hover? CreateVariableHover(string symbolName, LocalIndex? localIndex)
+	private static Hover? CreateVariableHover(string symbolName, LocalIndex? localIndex, ISymbolIndex symbols)
 	{
-		var symbol = localIndex?.GetSymbol(symbolName) ?? _symbols.GetSymbol(symbolName);
+		var symbol = localIndex?.GetSymbol(symbolName) ?? symbols.GetSymbol(symbolName);
 		if (symbol == null)
 			return null;
 

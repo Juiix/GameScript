@@ -12,11 +12,11 @@ namespace GameScript.LanguageServer.Handlers;
 internal sealed class DefinitionHandler(
 	OpenDocumentCache openDocumentCache,
 	AstCache astCache,
-	ISymbolIndex symbols) : IDefinitionHandler
+	Services.ProjectRegistry projects) : IDefinitionHandler
 {
 	private readonly OpenDocumentCache _openDocumentCache = openDocumentCache;
 	private readonly AstCache _astCache = astCache;
-	private readonly ISymbolIndex _symbols = symbols;
+	private readonly Services.ProjectRegistry _projects = projects;
 
 	public async Task<LocationOrLocationLinks?> Handle(DefinitionParams request, CancellationToken cancellationToken)
 	{
@@ -45,8 +45,8 @@ internal sealed class DefinitionHandler(
 			symbol = localIndex.GetSymbol(identifierNode.Name);
 		}
 
-		// 4. Lookup global symbol
-		symbol ??= _symbols.GetSymbol(identifierNode.Name);
+		// 4. Lookup the file's project symbols
+		symbol ??= _projects.GetProject(filePath).Symbols.GetSymbol(identifierNode.Name);
 		if (symbol == null)
 		{
 			return null;

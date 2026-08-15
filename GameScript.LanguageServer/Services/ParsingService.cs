@@ -14,23 +14,13 @@ namespace GameScript.LanguageServer.Services;
 /// </summary>
 internal sealed class ParsingService
 {
-	private readonly GlobalSymbolTable _symbols;
-	private readonly GlobalReferenceTable _references;
-	private readonly GlobalTypeIndex _types;
 	private readonly ILogger<ParsingService> _logger;
 
 	/// <summary>
 	/// Creates a new <see cref="ParsingService"/>.
 	/// </summary>
-	public ParsingService(
-		GlobalSymbolTable symbols,
-		GlobalReferenceTable references,
-		GlobalTypeIndex types,
-		ILogger<ParsingService> logger)
+	public ParsingService(ILogger<ParsingService> logger)
 	{
-		_symbols = symbols;
-		_references = references;
-		_types = types;
 		_logger = logger;
 	}
 
@@ -123,7 +113,7 @@ internal sealed class ParsingService
 	/// </param>
 	/// <param name="chars">
 	/// When the call succeeds, a rented array from <see cref="ArrayPool{T}.Shared"/>
-	/// containing the file’s text. On failure this is set to <c>null</c>.
+	/// containing the fileï¿½s text. On failure this is set to <c>null</c>.
 	/// The caller <b>must</b> return the array with
 	/// <c>ArrayPool&lt;char&gt;.Shared.Return(chars)</c> when finished.
 	/// </param>

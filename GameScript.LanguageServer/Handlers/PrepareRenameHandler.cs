@@ -11,11 +11,11 @@ namespace GameScript.LanguageServer.Handlers
 	internal sealed class PrepareRenameHandler(
 		OpenDocumentCache openDocumentCache,
 		AstCache astCache,
-		ISymbolIndex symbols) : IPrepareRenameHandler
+		Services.ProjectRegistry projects) : IPrepareRenameHandler
 	{
 		private readonly OpenDocumentCache _openDocumentCache = openDocumentCache;
 		private readonly AstCache _astCache = astCache;
-		private readonly ISymbolIndex _symbols = symbols;
+		private readonly Services.ProjectRegistry _projects = projects;
 
 		public async Task<RangeOrPlaceholderRange?> Handle(PrepareRenameParams request, CancellationToken cancellationToken)
 		{
@@ -42,7 +42,7 @@ namespace GameScript.LanguageServer.Handlers
 			}
 
 			var localIndex = rootData.GetLocalIndex(request.Position.Line, request.Position.Character);
-			var symbol = localIndex?.GetSymbol(symbolName) ?? _symbols.GetSymbol(symbolName);
+			var symbol = localIndex?.GetSymbol(symbolName) ?? _projects.GetProject(filePath).Symbols.GetSymbol(symbolName);
 			if (symbol == null)
 			{
 				return null;

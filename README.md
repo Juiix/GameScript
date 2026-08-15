@@ -77,6 +77,7 @@ The **VS Code extension** (`GameScript.Vscode`) bundles the language server and 
 
 - Semantic syntax highlighting for `.gs`, `.const`, and `.context` files
 - Completions, hover tooltips, and real-time diagnostics
+- Sub-projects: a `gamescript.json` marker scopes its folder as an isolated project (e.g. `content/server` and `content/client` with separate core.gs command sets)
 - Go to Definition, Find All References, Document Highlights
 - Rename Symbol, Document Symbols, Workspace Symbols
 - Script debugging — attach to a running game, set breakpoints, step, and inspect variables (see [EMBEDDING.md](EMBEDDING.md#10-debugging-dap))

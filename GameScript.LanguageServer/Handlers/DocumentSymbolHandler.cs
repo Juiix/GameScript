@@ -10,11 +10,11 @@ namespace GameScript.LanguageServer.Handlers;
 internal sealed class DocumentSymbolHandler(
 	OpenDocumentCache openDocumentCache,
 	AstCache astCache,
-	GlobalSymbolTable globalSymbolTable) : IDocumentSymbolHandler
+	Services.ProjectRegistry projects) : IDocumentSymbolHandler
 {
 	private readonly OpenDocumentCache _openDocumentCache = openDocumentCache;
 	private readonly AstCache _astCache = astCache;
-	private readonly GlobalSymbolTable _globalSymbolTable = globalSymbolTable;
+	private readonly Services.ProjectRegistry _projects = projects;
 
 	public Task<SymbolInformationOrDocumentSymbolContainer?> Handle(DocumentSymbolParams request, CancellationToken cancellationToken)
     {
@@ -27,7 +27,7 @@ internal sealed class DocumentSymbolHandler(
 			return Task.FromResult<SymbolInformationOrDocumentSymbolContainer?>(null);
 		}
 
-		var fileSymbols = _globalSymbolTable.GetSymbolsForFile(filePath);
+		var fileSymbols = _projects.GetProject(filePath).Symbols.GetSymbolsForFile(filePath);
         var flat = fileSymbols.Select(x => new SymbolInformationOrDocumentSymbol(new SymbolInformation
         {
             Name = x.Name,
