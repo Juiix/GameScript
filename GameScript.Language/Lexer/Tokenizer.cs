@@ -216,7 +216,21 @@ namespace GameScript.Language.Lexer
 			}
 
 			/*──────────────────────────────────────────────────────────────
-			 * 7b. Dot-prefixed command identifier (e.g. .test, ..test)
+			 * 7a. '..' range operator (for loops). Checked before dot-prefixed
+			 *     identifiers: a '..name' identifier (2+ dots) was never valid
+			 *     downstream, so '..' always wins here.
+			 *──────────────────────────────────────────────────────────────*/
+			if (ch == '.' && _column + 1 < _text.Length && _text[_column + 1] == '.')
+			{
+				int start = _column;
+				_column += 2;
+				return new Token(TokenType.Range,
+								 _text.Slice(start, 2),
+								 CurrentRange(pos));
+			}
+
+			/*──────────────────────────────────────────────────────────────
+			 * 7b. Dot-prefixed command identifier (e.g. .test)
 			 *──────────────────────────────────────────────────────────────*/
 			if (ch == '.' && HasLetterOrAccessorAfterDots(_column))
 			{

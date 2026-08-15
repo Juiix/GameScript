@@ -69,6 +69,21 @@ namespace GameScript.Language.Visitors
 			Visit((AstNode)node);
 		}
 
+		public virtual void Visit(ForStatementNode node)
+		{
+			Visit((AstNode)node);
+		}
+
+		public virtual void Visit(SwitchStatementNode node)
+		{
+			Visit((AstNode)node);
+		}
+
+		public virtual void Visit(SwitchCaseNode node)
+		{
+			Visit((AstNode)node);
+		}
+
 		public virtual void Visit(VariableDefinitionNode node)
 		{
 			Visit((AstNode)node);

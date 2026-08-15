@@ -155,13 +155,13 @@
             <key>name</key>
             <string>keyword.control.gamescript</string>
             <key>match</key>
-            <string>\b(?:if|else|return|while|break|continue|and|or|not)\b</string>
+            <string>\b(?:if|else|return|while|switch|case|default|for|in|break|continue|and|or|not)\b</string>
           </dict>
           <dict>
             <key>name</key>
             <string>keyword.declaration.gamescript</string>
             <key>match</key>
-            <string>\b(?:func|command)\b</string>
+            <string>\b(?:func|command|trigger)\b</string>
           </dict>
           <dict>
             <key>name</key>
@@ -215,7 +215,7 @@
             <key>name</key>
             <string>meta.function.declaration.gamescript</string>
             <key>begin</key>
-            <string>^(\\s*)(?:(func|command)|([A-Za-z_][\\w]*))\\s+([A-Za-z_][\\w]*(?::[A-Za-z_][\\w]*)?)\\s*(?=\\(|$)</string>
+            <string>^(\\s*)(?:(func|command|trigger)|([A-Za-z_][\\w]*))\\s+([A-Za-z_][\\w]*(?::[A-Za-z_][\\w]*)?)\\s*(?=\\(|$)</string>
             <key>beginCaptures</key>
             <dict>
               <key>1</key>

@@ -121,7 +121,7 @@ BytecodeProgramMetadata meta = result.Metadata;  // per-method line/file maps, l
 ```
 
 - Constant declarations are folded into the constant pool at compile time — there is no init step to run.
-- `func` and `trigger` methods compile to bytecode; `command` declarations resolve to your opcode enum.
+- `func` and trigger-handler methods compile to bytecode; `command` declarations resolve to your opcode enum, and `trigger` declarations produce no bytecode (they only validate handler headers).
 - A call in tail position (`return f(...)`, or a call as the final statement of a void func) compiles to the `TailCall` opcode — the VM replaces the current frame instead of pushing one, so state-machine chains never grow the stack.
 - Keep `meta` if you want stack traces or debugging — it maps every instruction back to a file and line, and names every local and context slot.
 

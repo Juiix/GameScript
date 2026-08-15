@@ -12,6 +12,7 @@ public sealed class BytecodeCompiler<TCommandOp> where TCommandOp : struct, Enum
 	private readonly List<BytecodeMethod> _methods = [];
 	private readonly List<BytecodeMethodMetadata> _methodMetadata = [];
 	private readonly Dictionary<string, int> _methodIndex = [];
+	private readonly Dictionary<string, MethodDefinitionNode> _methodNodes = [];
 	private readonly Dictionary<string, int> _returnCounts = [];
 	private readonly Dictionary<string, string?> _nameToKey = [];
 	private readonly IReadOnlyDictionary<CallExpressionNode, Symbols.SymbolInfo>? _resolvedCalls;
@@ -50,6 +51,7 @@ public sealed class BytecodeCompiler<TCommandOp> where TCommandOp : struct, Enum
 		_methods.Clear();
 		_methodMetadata.Clear();
 		_methodIndex.Clear();
+		_methodNodes.Clear();
 		_returnCounts.Clear();
 		_globals.Clear();
 		_constMap.Clear();
@@ -65,6 +67,7 @@ public sealed class BytecodeCompiler<TCommandOp> where TCommandOp : struct, Enum
 			var key = MangledKey(method);
 			var compiled = IsCompilable(method);
 			_methodIndex[key] = compiled ? index++ : 0;
+			_methodNodes[key] = method;      // kept for call-site default-argument baking
 			_returnCounts[key] = method.ReturnTypes?.Count ?? 0;
 			// plain-name shortcut for non-overloaded methods; null marks an overloaded name
 			_nameToKey[method.SymbolName] = _nameToKey.ContainsKey(method.SymbolName) ? null : key;
@@ -403,7 +406,8 @@ public sealed class BytecodeCompiler<TCommandOp> where TCommandOp : struct, Enum
 					var ctx = new LoopContext
 					{
 						ConditionIp = conditionIp,
-						ExitPlaceholder = exitPlaceholder
+						ExitPlaceholder = exitPlaceholder,
+						ContinueTargetIp = conditionIp
 					};
 					_loopStack.Push(ctx);
 
@@ -435,10 +439,138 @@ public sealed class BytecodeCompiler<TCommandOp> where TCommandOp : struct, Enum
 					// 10) Patch all `continue` placeholders to re‐evaluate condition
 					foreach (var contPos in ctx.ContinuePlaceholders)
 					{
-						Patch(contPos, ctx.ConditionIp - contPos);
+						Patch(contPos, ctx.ContinueTargetIp - contPos);
 					}
 				}
 				break;
+
+			// ----------------------------------------
+			// for VAR in START..END { ... }  — half-open [START, END)
+			// ----------------------------------------
+			case ForStatementNode forStmt:
+				{
+					int line = statement.FileRange.Start.Line;
+
+					// loop variable slot; a later same-name 'for' reuses it
+					if (!_localSlots.TryGetValue(forStmt.Variable.Name, out int varSlot))
+					{
+						varSlot = _nextSlot++;
+						_localSlots[forStmt.Variable.Name] = varSlot;
+					}
+
+					// 1) i = START; END hoisted to a hidden temp — both evaluated once
+					EmitExpression(forStmt.Start);
+					Emit(CoreOpCode.StoreLocal, varSlot, line);
+					int endSlot = _nextSlot++;      // hidden, unnamed slot
+					EmitExpression(forStmt.End);
+					Emit(CoreOpCode.StoreLocal, endSlot, line);
+
+					// 2) condition: i < END
+					int conditionIp = _ops.Count;
+					Emit(CoreOpCode.LoadLocal, varSlot, line);
+					Emit(CoreOpCode.LoadLocal, endSlot, line);
+					Emit(CoreOpCode.LessThan, 0, line);
+					int exitPlaceholder = EmitPlaceholder(CoreOpCode.JumpIfFalse, line);
+
+					var ctx = new LoopContext
+					{
+						ConditionIp = conditionIp,
+						ExitPlaceholder = exitPlaceholder
+					};
+					_loopStack.Push(ctx);
+
+					// 3) body
+					EmitBlock(forStmt.Body);
+
+					// 4) increment ('continue' target): i = i + 1
+					ctx.ContinueTargetIp = _ops.Count;
+					Emit(CoreOpCode.LoadLocal, varSlot, line);
+					Emit(CoreOpCode.LoadConstInt, 1, line);
+					Emit(CoreOpCode.Add, 0, line);
+					Emit(CoreOpCode.StoreLocal, varSlot, line);
+					Emit(CoreOpCode.Jump, conditionIp - _ops.Count, line);
+
+					// 5) patch exits
+					_loopStack.Pop();
+					int loopEndIp = _ops.Count;
+					Patch(exitPlaceholder, loopEndIp - exitPlaceholder);
+					foreach (var brPos in ctx.BreakPlaceholders)
+					{
+						Patch(brPos, loopEndIp - brPos);
+					}
+					foreach (var contPos in ctx.ContinuePlaceholders)
+					{
+						Patch(contPos, ctx.ContinueTargetIp - contPos);
+					}
+				}
+				break;
+
+			// ----------------------------------------
+			// switch subject / case v1, v2: ... / default: ...
+			// Compiles as the equivalent if/else-if chain over a hidden temp
+			// holding the subject (evaluated once). No fallthrough.
+			// ----------------------------------------
+			case SwitchStatementNode switchStmt:
+				{
+					int line = statement.FileRange.Start.Line;
+
+					// subject evaluated once into a hidden temp local
+					EmitExpression(switchStmt.Subject);
+					int subjectSlot = _nextSlot++;   // hidden, unnamed slot
+					Emit(CoreOpCode.StoreLocal, subjectSlot, line);
+
+					if (switchStmt.Cases == null)
+					{
+						break;
+					}
+
+					var endJumps = new List<int>();
+					foreach (var caseNode in switchStmt.Cases)
+					{
+						if (caseNode.IsDefault)
+						{
+							continue;    // emitted after all value cases
+						}
+
+						int caseLine = caseNode.FileRange.Start.Line;
+						var values = caseNode.Values!;
+
+						// condition: (subj == v1) or (subj == v2) or … (short-circuit)
+						List<int>? orJumps = null;
+						for (int k = 0; k < values.Count; k++)
+						{
+							Emit(CoreOpCode.LoadLocal, subjectSlot, caseLine);
+							EmitExpression(values[k]);
+							Emit(CoreOpCode.Equal, 0, caseLine);
+							if (k < values.Count - 1)
+							{
+								(orJumps ??= []).Add(EmitPlaceholder(CoreOpCode.JumpIfTrueKeep, caseLine));
+								Emit(CoreOpCode.Pop, 0, caseLine);
+							}
+						}
+						if (orJumps != null)
+						{
+							foreach (var orJump in orJumps)
+							{
+								Patch(orJump, _ops.Count - orJump);
+							}
+						}
+
+						int jumpNext = EmitPlaceholder(CoreOpCode.JumpIfFalse, caseLine);
+						EmitBlock(caseNode.Body);
+						endJumps.Add(EmitPlaceholder(CoreOpCode.Jump, caseNode.FileRange.End.Line));
+						Patch(jumpNext, _ops.Count - jumpNext);
+					}
+
+					EmitBlock(switchStmt.DefaultCase?.Body);
+
+					foreach (var endJump in endJumps)
+					{
+						Patch(endJump, _ops.Count - endJump);
+					}
+				}
+				break;
+
 			default:
 				throw new NotSupportedException($"Statement not handled: {statement.GetType().Name}");
 		}
@@ -564,16 +696,7 @@ public sealed class BytecodeCompiler<TCommandOp> where TCommandOp : struct, Enum
 			// Function call: push args then Call
 			// ----------------------------------------
 			case CallExpressionNode call:
-				// 1) arguments
-				if (call.Arguments != null)
-				{
-					foreach (var arg in call.Arguments)
-					{
-						EmitExpression(arg);
-					}
-				}
-
-				// 2) call — resolve the target overload
+				// 1) resolve the target overload
 				var callName = call.FunctionName.Name;
 				if (!TryResolveCall(call, out var methodKey, out var resolvedSymbol))
 				{
@@ -585,6 +708,9 @@ public sealed class BytecodeCompiler<TCommandOp> where TCommandOp : struct, Enum
 					throw new Exception($"Unknown method '{methodKey}'");
 				}
 				var returnCount = _returnCounts[methodKey];
+
+				// 2) arguments (omitted trailing defaults baked as constants)
+				EmitCallArguments(call, methodKey, expression.FileRange.Start.Line);
 
 				switch (resolvedSymbol?.IdentifierType ?? call.FunctionName.Type)
 				{
@@ -829,6 +955,18 @@ public sealed class BytecodeCompiler<TCommandOp> where TCommandOp : struct, Enum
 		if (_returnCounts[key] != _currentReturnCount)
 			return false;
 
+		EmitCallArguments(call, key, call.FileRange.Start.Line);
+		Emit(CoreOpCode.TailCall, fid, call.FileRange.Start.Line);
+		return true;
+	}
+
+	/// <summary>
+	/// Emits a call site's arguments: the provided expressions, then a constant
+	/// for each omitted trailing parameter that declares a default value.
+	/// </summary>
+	private void EmitCallArguments(CallExpressionNode call, string methodKey, int lineNumber)
+	{
+		int provided = call.Arguments?.Count ?? 0;
 		if (call.Arguments != null)
 		{
 			foreach (var arg in call.Arguments)
@@ -836,8 +974,49 @@ public sealed class BytecodeCompiler<TCommandOp> where TCommandOp : struct, Enum
 				EmitExpression(arg);
 			}
 		}
-		Emit(CoreOpCode.TailCall, fid, call.FileRange.Start.Line);
-		return true;
+
+		if (!_methodNodes.TryGetValue(methodKey, out var target) ||
+			target.Parameters == null ||
+			target.Parameters.Count <= provided)
+		{
+			return;
+		}
+
+		for (int i = provided; i < target.Parameters.Count; i++)
+		{
+			var parameter = target.Parameters[i];
+			var defaultValue = parameter.Default
+				?? throw new InvalidOperationException(
+					$"Missing argument for parameter '{parameter.Name.Name}' in call to '{call.FunctionName.Name}'");
+			EmitLoadConstant(EvaluateConstantExpression(defaultValue), lineNumber);
+		}
+	}
+
+	// Compile-time evaluation of a parameter default: literal, negated number
+	// literal, or a '^' constant (resolved via the globals compiled in step 2).
+	private Value EvaluateConstantExpression(ExpressionNode node)
+	{
+		return node switch
+		{
+			LiteralNode literal => ParseLiteral(literal),
+			UnaryExpressionNode { Operator: UnaryOperator.Negate, Operand: LiteralNode negLiteral } =>
+				Value.FromInt(-ParseLiteral(negLiteral).Int),
+			IdentifierNode { Type: IdentifierType.Constant } id when _globals.TryGetValue(id.Name, out var constValue) =>
+				constValue,
+			_ => throw new InvalidOperationException("Parameter default must be a literal or a '^' constant"),
+		};
+	}
+
+	private void EmitBlock(BlockNode? block)
+	{
+		if (block?.Statements == null)
+		{
+			return;
+		}
+		foreach (var s in block.Statements)
+		{
+			EmitStatement(s);
+		}
 	}
 
 	private (IdentifierType Type, int Slot) ResolveTupleTarget(ExpressionNode element)

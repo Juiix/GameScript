@@ -406,6 +406,303 @@ public class ExecutionTests
 		Assert.Equal(new[] { "Congratulations, your attack level is now 50!" }, host.Context.Printed);
 	}
 
+	// ---------------------------------------------------------------
+	// 2.1: for loops
+	// ---------------------------------------------------------------
+
+	[Fact]
+	public void For_Sums_A_Half_Open_Range()
+	{
+		var (host, program) = Build("""
+			func main()
+			    int sum = 0
+			    for i in 0..5
+			        sum += i
+			    print(int_to_str(sum))
+			""");
+		host.Start(program, "main");
+		// 0+1+2+3+4 = 10 (END is exclusive)
+		Assert.Equal(new[] { "10" }, host.Context.Printed);
+	}
+
+	[Fact]
+	public void For_Empty_Range_Never_Runs()
+	{
+		var (host, program) = Build("""
+			func main()
+			    for i in 5..5
+			        print("never")
+			    print("done")
+			""");
+		host.Start(program, "main");
+		Assert.Equal(new[] { "done" }, host.Context.Printed);
+	}
+
+	[Fact]
+	public void For_Continue_Still_Increments()
+	{
+		var (host, program) = Build("""
+			func main()
+			    int sum = 0
+			    for i in 0..6
+			        if i == 2
+			            continue
+			        if i == 4
+			            break
+			        sum += i
+			    print(int_to_str(sum))
+			""");
+		host.Start(program, "main");
+		// 0 + 1 + 3 = 4 (2 skipped, loop exits at 4)
+		Assert.Equal(new[] { "4" }, host.Context.Printed);
+	}
+
+	[Fact]
+	public void For_Bounds_Are_Evaluated_Once()
+	{
+		var (host, program) = Build("""
+			func limit() returns int
+			    print("eval")
+			    return 3
+
+			func main()
+			    for i in 0..limit()
+			        print(int_to_str(i))
+			""");
+		host.Start(program, "main");
+		Assert.Equal(new[] { "eval", "0", "1", "2" }, host.Context.Printed);
+	}
+
+	[Fact]
+	public void For_Variable_Stays_Visible_After_The_Loop()
+	{
+		var (host, program) = Build("""
+			func main()
+			    int last = 0
+			    for i in 0..3
+			        last = i
+			    print(int_to_str(i * 10 + last))
+			""");
+		host.Start(program, "main");
+		// function-flat scoping: i == 3 after the loop, last == 2
+		Assert.Equal(new[] { "32" }, host.Context.Printed);
+	}
+
+	[Fact]
+	public void Nested_And_Sequential_For_Loops()
+	{
+		var (host, program) = Build("""
+			func main()
+			    int sum = 0
+			    for i in 0..3
+			        for j in 0..3
+			            sum += i * 3 + j
+			    for i in 0..2
+			        sum += 100
+			    print(int_to_str(sum))
+			""");
+		host.Start(program, "main");
+		// 0..8 sums to 36, plus 200
+		Assert.Equal(new[] { "236" }, host.Context.Printed);
+	}
+
+	// ---------------------------------------------------------------
+	// 2.1: switch statements
+	// ---------------------------------------------------------------
+
+	[Fact]
+	public void Switch_On_Int_With_Multi_Value_And_Default()
+	{
+		var (host, program) = Build("""
+			func name(int skill) returns string
+			    switch skill
+			        case 0: return "Attack"
+			        case 3, 4:
+			            return "Gathering"
+			        default: return "Unknown"
+
+			func main()
+			    print(name(0))
+			    print(name(3))
+			    print(name(4))
+			    print(name(9))
+			""");
+		host.Start(program, "main");
+		Assert.Equal(new[] { "Attack", "Gathering", "Gathering", "Unknown" }, host.Context.Printed);
+	}
+
+	[Fact]
+	public void Switch_On_String()
+	{
+		var (host, program) = Build("""
+			func id(string name) returns int
+			    switch name
+			        case "attack": return 0
+			        case "mining", "fishing": return 1
+			        default: return -1
+
+			func main()
+			    print(int_to_str(id("attack")))
+			    print(int_to_str(id("fishing")))
+			    print(int_to_str(id("nope")))
+			""");
+		host.Start(program, "main");
+		Assert.Equal(new[] { "0", "1", "-1" }, host.Context.Printed);
+	}
+
+	[Fact]
+	public void Switch_No_Match_Without_Default_Skips()
+	{
+		var (host, program) = Build("""
+			func main()
+			    int x = 9
+			    switch x
+			        case 1: print("one")
+			    print("after")
+			""");
+		host.Start(program, "main");
+		Assert.Equal(new[] { "after" }, host.Context.Printed);
+	}
+
+	[Fact]
+	public void Switch_Subject_Is_Evaluated_Once()
+	{
+		var (host, program) = Build("""
+			func subject() returns int
+			    print("eval")
+			    return 2
+
+			func main()
+			    switch subject()
+			        case 1: print("one")
+			        case 2: print("two")
+			        case 3: print("three")
+			""");
+		host.Start(program, "main");
+		Assert.Equal(new[] { "eval", "two" }, host.Context.Printed);
+	}
+
+	[Fact]
+	public void Switch_On_Constants_Compiles_Cases()
+	{
+		var (host, program) = Build("""
+			func main()
+			    int skill = 1
+			    switch skill
+			        case ^skill_attack: print("attack")
+			        case ^skill_mining: print("mining")
+			""",
+			("skills.const", "int ^skill_attack = 0\nint ^skill_mining = 1"));
+		host.Start(program, "main");
+		Assert.Equal(new[] { "mining" }, host.Context.Printed);
+	}
+
+	[Fact]
+	public void Break_In_Switch_Case_Exits_The_Enclosing_Loop()
+	{
+		var (host, program) = Build("""
+			func main()
+			    int i = 0
+			    while i < 10
+			        i++
+			        switch i
+			            case 3: break
+			        print(int_to_str(i))
+			""");
+		host.Start(program, "main");
+		Assert.Equal(new[] { "1", "2" }, host.Context.Printed);
+	}
+
+	// ---------------------------------------------------------------
+	// 2.1: inline if/else bodies
+	// ---------------------------------------------------------------
+
+	[Fact]
+	public void Inline_If_And_Else_Bodies_Run()
+	{
+		var (host, program) = Build("""
+			func pick(bool flag) returns int
+			    if flag: return 1
+			    else: return 2
+
+			func main()
+			    print(int_to_str(pick(true) * 10 + pick(false)))
+			""");
+		host.Start(program, "main");
+		Assert.Equal(new[] { "12" }, host.Context.Printed);
+	}
+
+	// ---------------------------------------------------------------
+	// 2.1: default parameter values
+	// ---------------------------------------------------------------
+
+	[Fact]
+	public void Func_Defaults_Are_Baked_At_The_Call_Site()
+	{
+		var (host, program) = Build("""
+			func greet(string who, string suffix = "!", int reps = 1)
+			    for i in 0..reps
+			        print(who + suffix)
+
+			func main()
+			    greet("a")
+			    greet("b", "?")
+			    greet("c", ".", 2)
+			""");
+		host.Start(program, "main");
+		Assert.Equal(new[] { "a!", "b?", "c.", "c." }, host.Context.Printed);
+	}
+
+	[Fact]
+	public void Constant_And_Negated_Defaults_Resolve()
+	{
+		var (host, program) = Build("""
+			func report(int anim = ^anim_still, int off = -1)
+			    print(int_to_str(anim * 100 + off))
+
+			func main()
+			    report()
+			""",
+			("anims.const", "int ^anim_still = 7"));
+		host.Start(program, "main");
+		Assert.Equal(new[] { "699" }, host.Context.Printed);
+	}
+
+	[Fact]
+	public void Command_Defaults_Reach_The_Host()
+	{
+		var (host, program) = Build("""
+			func deferred(int x)
+			    print(int_to_str(x))
+
+			func main()
+			    enqueue(deferred)
+			""",
+			("overloads.gs", "command enqueue(func method, int delay = 9, int arg0 = 42) = queue_strong_int"));
+		host.Start(program, "main");
+
+		var (_, delay, args) = Assert.Single(host.Context.Queued);
+		Assert.Equal(9, delay);
+		Assert.Equal(42, args[0].Int);
+	}
+
+	[Fact]
+	public void Tail_Call_With_Omitted_Defaults()
+	{
+		var (host, program) = Build("""
+			func fallback(int n, int bonus = 7) returns int
+			    return n + bonus
+
+			func compute(int n) returns int
+			    return fallback(n)
+
+			func main()
+			    print(int_to_str(compute(10)))
+			""");
+		host.Start(program, "main");
+		Assert.Equal(new[] { "17" }, host.Context.Printed);
+	}
+
 	[Fact]
 	public void String_Interpolation_Edge_Shapes()
 	{

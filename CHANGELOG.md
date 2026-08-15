@@ -2,6 +2,26 @@
 
 All notable changes to GameScript will be documented in this file.
 
+## [2.1.0]
+
+**Feature release — declared triggers, `switch`, `for`, and default parameter values.** All four features are additive parser/compiler work: no new opcodes, no VM changes, and existing 2.0 bytecode is unaffected.
+
+### Language
+- **Declared triggers**: trigger kinds are declared like commands (`trigger obj_op_1`, `trigger mn_text(string text)`), one per engine dispatch point, conventionally in `core.gs`. Handler headers are unchanged, but the compiler now validates them: an undeclared kind is a compile error (typos no longer produce silently dead handlers), and handler parameters must be a prefix of the declaration's. Subjects are not validated. Trigger names share the global namespace with funcs/commands but are never callable.
+- **`switch` / `case` / `default`**: constant cases (`^const` or literals), multiple values per case, inline (`case x: stmt`) or indented-block bodies, no fallthrough, optional trailing `default`. Duplicate case values are a compile error. Subjects may be `int`, `string`, or `bool`. Compiles to the same if-chain bytecode as the equivalent ladder, with the subject evaluated once.
+- **`for VAR in START..END`**: iterates ints over the half-open range `[START, END)`; both bounds evaluated once before the first iteration. The header declares the loop variable (always `int`, function-flat scope; a later `for` may reuse the name). `break`/`continue` work in both `for` and `while` — `continue` in a `for` still increments.
+- **Default parameter values**: trailing func/command parameters may declare `= literal` or `= ^const` defaults, baked into the call site by the compiler. Call sites omit arguments only from the end; an omission that makes multiple overloads match is an ambiguity error.
+- **Inline `if`/`else` bodies**: `if cond: stmt` and `else: stmt` — the same single-statement-after-colon rule as `case`. An inline statement and an indented block cannot be combined.
+
+### Language (breaking)
+- New reserved words: `trigger`, `switch`, `case`, `default`, `for`, `in` — content using them as identifiers must rename.
+- Every trigger handler's kind must now be declared; add the `trigger` declaration block to your game's `core.gs` (the "Unknown trigger kind" error names the missing declaration).
+- Multi-dot identifiers (`..name`, previously always a downstream error) now lex as the `..` range token followed by a name.
+
+### Tooling
+- Hover, completion, and signature help render default parameter values (`func f(string a, int anim = ^anim_still)`); trigger declarations render with the `trigger` keyword and surface their doc comments.
+- Both editor grammars highlight the new keywords and the `trigger` declaration form.
+
 ## [2.0.3]
 
 ### Fixed

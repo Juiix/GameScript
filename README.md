@@ -6,41 +6,40 @@
 
 ## Language at a Glance
 
-GameScript has three scalar types (`bool`, `int`, `string`), four method kinds, and a prefix-based identifier system that makes every symbol's role visible at a glance:
+GameScript has three scalar types (`bool`, `int`, `string`), a `func` reference type, and a mark-based identifier system that makes every symbol's role visible at a glance:
 
 ```gamescript
 // constants (.const)
 int ^npc_knight = 2
 
 // context variables (.context) — backed by a host-provided slot
-bool %logged_in = 0
+bool @logged_in = 0
 
 // methods (.gs)
-command print(string $value)          // host-implemented opcode, no body
+command print(string value)           // host-implemented opcode, no body
 
-func greet(string $name)             // regular function, returns to caller
-    string $msg = "Hello, " + $name
-    print($msg)
+// trigger kinds — one per engine dispatch point (core.gs)
+trigger mn_button_1
 
-label do_login()                     // one-way jump (GOTO), never returns
-    ~greet("adventurer")
+func greet(string name, string suffix = "!")   // trailing params may default
+    print("Hello, {name}{suffix}")
 
-mn_button_1 login:submit()            // trigger — UI event entry point
-    @do_login()
+mn_button_1 login:submit              // trigger handler — UI event entry point
+    greet("adventurer")               // final statement → tail transfer
 ```
 
-| Kind        | Prefix | Returns? | Notes                                              |
-| ----------- | ------ | -------- | -------------------------------------------------- |
-| `func`      | `~`    | ✅        | Standard function; returns to caller               |
-| `label`     | `@`    | ❌        | One-way jump; never returns                        |
-| `command`   | —      | ✅        | Declares a host opcode; no body allowed            |
-| `trigger`   | —      | ❌        | Event entry point; cannot be called from script    |
+| Kind        | Keyword    | Returns? | Notes                                              |
+| ----------- | ---------- | -------- | -------------------------------------------------- |
+| `func`      | `func`     | ✅        | Script routine; tail-position calls tail-transfer  |
+| `command`   | `command`  | ✅        | Declares a host opcode; no body allowed            |
+| `trigger`   | `trigger`  | ❌        | Declares an event dispatch point                   |
+| handler     | *(kind)*   | ❌        | Event entry point; cannot be called from script    |
 
-| Symbol       | Prefix | Declared in   |
+| Symbol       | Mark   | Declared in   |
 | ------------ | ------ | ------------- |
-| Local var    | `$`    | `.gs`         |
+| Local var    | —      | `.gs`         |
 | Constant     | `^`    | `.const`      |
-| Context var  | `%`    | `.context`    |
+| Context var  | `@`    | `.context`    |
 
 **Learn more:**
 

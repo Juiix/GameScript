@@ -107,6 +107,7 @@ namespace GameScript.LanguageServer.Extensions
 				IdentifierType.Func or
 				IdentifierType.Label or
 				IdentifierType.Trigger or
+				IdentifierType.TriggerDeclaration or
 				IdentifierType.Command => SymbolKind.Function,
 
 				_ => default

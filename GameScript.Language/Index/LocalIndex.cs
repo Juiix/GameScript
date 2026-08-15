@@ -9,6 +9,7 @@ namespace GameScript.Language.Index
 	{
 		private readonly Dictionary<string, List<SymbolInfo>> _symbols = [];
 		private readonly Dictionary<string, List<ReferenceInfo>> _references = [];
+		private HashSet<string>? _loopVariables;
 
 		public string FilePath { get; } = filePath;
 		public FileRange FileRange { get; } = fileRange;
@@ -50,6 +51,18 @@ namespace GameScript.Language.Index
 		public IEnumerable<SymbolInfo> GetSymbols(string name)
 		{
 			return _symbols.TryGetValue(name, out var symbols) ? symbols : [];
+		}
+
+		/// <summary>Marks a name as declared by a 'for' loop header; later 'for'
+		/// loops in the same method may reuse it.</summary>
+		public void MarkLoopVariable(string name)
+		{
+			(_loopVariables ??= []).Add(name);
+		}
+
+		public bool IsLoopVariable(string name)
+		{
+			return _loopVariables?.Contains(name) ?? false;
 		}
 	}
 }

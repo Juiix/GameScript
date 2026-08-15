@@ -28,7 +28,7 @@ Bring the full power of the **GameScript** language into Visual Studio Code. The
 
 | Extension           | Content                    |
 | ------------------- | -------------------------- |
-| `.gs`               | Method definitions (funcs, labels, commands, triggers) |
+| `.gs`               | Method definitions (funcs, commands, triggers, handlers) |
 | `.const`            | Constant declarations      |
 | `.context`          | Context variable declarations |
 | `.varp` `.item` `.npc` `.menu` `.obj` `.tile` | Object Definition files (syntax highlighting only) |

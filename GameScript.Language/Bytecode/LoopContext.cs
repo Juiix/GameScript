@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 
 namespace GameScript.Language.Bytecode
 {
@@ -6,6 +6,8 @@ namespace GameScript.Language.Bytecode
 	{
 		public int ConditionIp;
 		public int ExitPlaceholder;
+		/// <summary>Where 'continue' jumps: the condition for 'while', the increment for 'for'.</summary>
+		public int ContinueTargetIp;
 		public List<int> BreakPlaceholders = [];
 		public List<int> ContinuePlaceholders = [];
 	}

@@ -18,6 +18,7 @@
 		Dedent,
 		Comment,
 		Colon,
-		Error
+		Error,
+		Range
 	}
 }

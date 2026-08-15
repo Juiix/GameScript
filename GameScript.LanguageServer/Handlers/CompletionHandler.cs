@@ -67,7 +67,7 @@ internal sealed class CompletionHandler(
 		// add global symbols
 		foreach (var x in _symbols.Symbols)
 		{
-			if (x.IdentifierType != IdentifierType.Trigger)
+			if (x.IdentifierType is not (IdentifierType.Trigger or IdentifierType.TriggerDeclaration))
 				AddIfMatch(x, prefix, targetType, startsWithSymbols, containsSymbols);
 		}
 

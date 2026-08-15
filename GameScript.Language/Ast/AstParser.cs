@@ -153,6 +153,7 @@ public ref struct AstParser
 			{ Type: TokenType.Keyword } when CurrentIsKeyword("func") => ParseMethodDefinition(IdentifierType.Func),
 			{ Type: TokenType.Keyword } when CurrentIsKeyword("label") => ParseMethodDefinition(IdentifierType.Func),
 			{ Type: TokenType.Keyword } when CurrentIsKeyword("command") => ParseMethodDefinition(IdentifierType.Command),
+			{ Type: TokenType.Keyword } when CurrentIsKeyword("trigger") => ParseMethodDefinition(IdentifierType.TriggerDeclaration),
 			{ Type: TokenType.Identifier } => ParseMethodDefinition(IdentifierType.Trigger),
 			_ => null
 		};
@@ -174,6 +175,8 @@ public ref struct AstParser
 			{
 				"if" => ParseIfStatement(),
 				"while" => ParseWhileStatement(),
+				"for" => ParseForStatement(),
+				"switch" => ParseSwitchStatement(),
 				"return" => ParseReturnStatement(),
 				"break" => ParseBreakStatement(),
 				"continue" => ParseContinueStatement(),
@@ -212,6 +215,14 @@ public ref struct AstParser
 			nameNode = new IdentifierDeclarationNode(
 							   nameTok.Value.ToString(),
 							   idType, summary, _filePath, PreviousRange);
+
+			// trigger declarations name the trigger kind only — no ':component' subjects
+			if (idType == IdentifierType.TriggerDeclaration && _current.Type == TokenType.Colon)
+			{
+				Error("Trigger declarations name the trigger kind only; subjects belong on handlers", CurrentRange);
+				Advance();                       // ':'
+				Match(TokenType.Identifier);     // skip the component name, if present
+			}
 		}
 
 		/* ───── parameters ───── */
@@ -343,7 +354,7 @@ public ref struct AstParser
 
 		// condition and main block
 		var condition = ParseConditionExpression();
-		var ifBlock = ParseBlock();
+		var ifBlock = ParseIfBody();
 
 		// optional else-if / else chains
 		List<ElseIfStatementNode>? elseIfs = null;
@@ -365,7 +376,7 @@ public ref struct AstParser
 				var elseIfKey = new KeywordNode(elseIfTok.Value.ToString(), _filePath, PreviousRange);
 
 				var elseIfCond = ParseConditionExpression();
-				var elseIfBlock = ParseBlock();
+				var elseIfBlock = ParseIfBody();
 
 				(elseIfs ??= []).Add(
 					new ElseIfStatementNode(elseKeyword, elseIfKey, elseIfCond, elseIfBlock,
@@ -373,7 +384,7 @@ public ref struct AstParser
 			}
 			else                                                       // plain else
 			{
-				elseBlk = ParseBlock();
+				elseBlk = ParseIfBody();
 				elseKey = elseKeyword;
 				break;                                                 // only one final else allowed
 			}
@@ -404,6 +415,178 @@ public ref struct AstParser
 		return new WhileStatementNode(
 			kwNode, condition, body, _filePath,
 			new FileRange(start, _previous.End));
+	}
+
+	private ForStatementNode ParseForStatement()
+	{
+		var start = _current.Start;
+
+		// 'for' keyword
+		var kwTok = Expect(TokenType.Keyword, "Expected 'for' keyword");
+		var kwNode = new KeywordNode(kwTok.Value.ToString(), _filePath, PreviousRange);
+
+		// loop variable — always a plain int local
+		var nameTok = Expect(TokenType.Identifier, "Expected a loop variable name after 'for'", "?".AsSpan());
+		var varName = nameTok.Value.ToString();
+		var varNode = new IdentifierDeclarationNode(varName, IdentifierType.Local, null,
+													_filePath, PreviousRange);
+		if (varName.Length > 0 && !char.IsLetter(varName[0]) && varName[0] != '_')
+			Error("Loop variable must be a plain local name", varNode.FileRange);
+
+		// 'in' keyword
+		var inTok = Expect(TokenType.Keyword, "Expected 'in' after the loop variable", "in".AsSpan());
+		if (!inTok.Value.SequenceEqual("in".AsSpan()))
+			Error("Expected 'in' after the loop variable", inTok.Range);
+		var inNode = new KeywordNode(inTok.Value.ToString(), _filePath, inTok.Range);
+
+		// START .. END (half-open range)
+		var startExpr = ParseExpression();
+		var rangeTok = Expect(TokenType.Range, "Expected '..' between the range start and end", "..".AsSpan());
+		var rangeNode = new OperatorNode(rangeTok.Value.ToString(), _filePath, rangeTok.Range);
+		var endExpr = ParseExpression();
+
+		var body = ParseBlock();
+
+		return new ForStatementNode(
+			kwNode, varNode, inNode, startExpr, rangeNode, endExpr, body,
+			_filePath, new FileRange(start, _previous.End));
+	}
+
+	private SwitchStatementNode ParseSwitchStatement()
+	{
+		var start = _current.Start;
+
+		// 'switch' keyword
+		var kwTok = Expect(TokenType.Keyword, "Expected 'switch' keyword");
+		var kwNode = new KeywordNode(kwTok.Value.ToString(), _filePath, PreviousRange);
+
+		var subject = ParseConditionExpression();
+
+		SkipEndOfLineTokens();
+		if (!Match(TokenType.Indent))
+		{
+			Error("A switch requires at least one 'case' or 'default'", new FileRange(start, _previous.End));
+			return new SwitchStatementNode(kwNode, subject, null, _filePath,
+										   new FileRange(start, _previous.End));
+		}
+
+		SkipEndOfLineTokens();
+
+		List<SwitchCaseNode>? cases = null;
+		SwitchCaseNode? defaultCase = null;
+		var defaultNotLastReported = false;
+
+		while (_current.Type is not (TokenType.Dedent or TokenType.EndOfFile))
+		{
+			if (CurrentIsKeyword("case") || CurrentIsKeyword("default"))
+			{
+				var isDefault = CurrentIsKeyword("default");
+				var caseNode = ParseSwitchCase(isDefault);
+				(cases ??= []).Add(caseNode);
+
+				if (isDefault)
+				{
+					if (defaultCase != null)
+						Error("Only one 'default' case is allowed", caseNode.Keyword.FileRange);
+					else
+						defaultCase = caseNode;
+				}
+				else if (defaultCase != null && !defaultNotLastReported)
+				{
+					Error("'default' must be the last case in a switch", defaultCase.Keyword.FileRange);
+					defaultNotLastReported = true;
+				}
+			}
+			else
+			{
+				Error("Expected 'case' or 'default' inside switch", _current.Range);
+				while (_current.Type is not (TokenType.EndOfLine or TokenType.Dedent or TokenType.EndOfFile))
+					Advance();
+			}
+
+			SkipEndOfLineTokens();
+		}
+
+		Match(TokenType.Dedent);     // consume the dedent, if present
+
+		return new SwitchStatementNode(
+			kwNode, subject, cases, _filePath,
+			new FileRange(start, _previous.End));
+	}
+
+	private SwitchCaseNode ParseSwitchCase(bool isDefault)
+	{
+		var start = _current.Start;
+
+		// 'case' / 'default' keyword
+		var kwTok = Expect(TokenType.Keyword, isDefault ? "Expected 'default' keyword" : "Expected 'case' keyword");
+		var kwNode = new KeywordNode(kwTok.Value.ToString(), _filePath, PreviousRange);
+
+		// case values: <expr> (',' <expr>)*
+		List<ExpressionNode>? values = null;
+		if (!isDefault)
+		{
+			values = [];
+			do
+			{
+				values.Add(ParseExpression());
+			}
+			while (Match(TokenType.Comma));
+		}
+
+		Expect(TokenType.Colon,
+			   isDefault ? "Expected ':' after 'default'" : "Expected ':' after the case value(s)",
+			   ":".AsSpan());
+
+		var (body, isInline) = ParseColonBody();
+
+		return new SwitchCaseNode(
+			kwNode, values, body, isInline, _filePath,
+			new FileRange(start, _previous.End));
+	}
+
+	// Parses the body following a block-opening ':' — either a single inline
+	// statement on the same line, or an indented block on the following lines.
+	// Declaring both is an error (inline XOR block).
+	private (BlockNode? body, bool isInline) ParseColonBody()
+	{
+		if (_current.Type is not (TokenType.EndOfLine or TokenType.Dedent or TokenType.EndOfFile))
+		{
+			// inline form: a single statement on the same line
+			var lineStart = _current.Start;
+			var stmt = ParseStatement();
+
+			if (_current.Type is not (TokenType.EndOfLine or TokenType.Dedent or TokenType.EndOfFile) &&
+				_current.Start.Line == lineStart.Line)
+			{
+				Error("Only one statement per line is allowed.", _current.Range);
+			}
+
+			var inlineBlock = new BlockNode([stmt], _filePath, stmt.FileRange);
+
+			// a stray indented block after an inline statement is an error
+			var stray = ParseBlock();
+			if (stray != null)
+				Error("Cannot combine an inline statement with an indented block", stray.FileRange);
+
+			return (inlineBlock, true);
+		}
+
+		// block form: indented statements on the following lines
+		return (ParseBlock(), false);
+	}
+
+	// Parses an if/else body: an indented block, or ': stmt' inline form.
+	private BlockNode? ParseIfBody()
+	{
+		if (!Match(TokenType.Colon))
+			return ParseBlock();
+
+		var colonRange = PreviousRange;
+		var (body, isInline) = ParseColonBody();
+		if (!isInline)
+			Error("Expected a statement after ':' (omit the ':' to open an indented block)", colonRange);
+		return body;
 	}
 
 	// Parses an if/while condition, rejecting full-wrap parentheses ('if (x)').
@@ -515,7 +698,12 @@ public ref struct AstParser
 			var nameNode = new IdentifierDeclarationNode(nameTok.Value.ToString(),
 														 IdentifierType.Local, summary, _filePath, PreviousRange);
 
-			parameters.Add(new ParameterNode(typeNode, nameNode, _filePath,
+			// optional default value: <type> <name> = <expr>
+			ExpressionNode? defaultValue = null;
+			if (Match(TokenType.Operator, "="))
+				defaultValue = ParseExpression();
+
+			parameters.Add(new ParameterNode(typeNode, nameNode, defaultValue, _filePath,
 											 new FileRange(start, _previous.End)));
 		}
 		while (Match(TokenType.Comma));

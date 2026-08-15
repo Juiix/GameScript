@@ -21,7 +21,8 @@ namespace GameScript.Language.Index
 	{
 		public static bool IsCallable(this SymbolInfo symbol) =>
 			(symbol.IdentifierType & IdentifierType.Method) != IdentifierType.Unknown &&
-			symbol.IdentifierType != IdentifierType.Trigger;
+			symbol.IdentifierType != IdentifierType.Trigger &&
+			symbol.IdentifierType != IdentifierType.TriggerDeclaration;
 
 		/// <summary>
 		/// Resolves a call to <paramref name="name"/> against all callable overloads.
@@ -76,7 +77,8 @@ namespace GameScript.Language.Index
 
 		private static bool Matches(SymbolInfo symbol, IReadOnlyList<TypeInfo?> argTypes)
 		{
-			if (symbol.Arity != argTypes.Count)
+			// trailing parameters with default values may be omitted at the call site
+			if (argTypes.Count < symbol.RequiredArity || argTypes.Count > symbol.Arity)
 				return false;
 
 			int i = 0;
@@ -84,6 +86,8 @@ namespace GameScript.Language.Index
 			{
 				foreach (var paramType in symbol.ParamTypes.AllTypes)
 				{
+					if (i >= argTypes.Count)
+						break;                      // omitted defaulted parameters
 					var argType = argTypes[i++];
 					if (argType != null && !argType.Equals(paramType))
 						return false;

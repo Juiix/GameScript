@@ -305,4 +305,241 @@ public class ParserTests
 			""");
 		Assert.NotEmpty(errors);
 	}
+
+	// ---------------------------------------------------------------
+	// 2.1: trigger declarations
+	// ---------------------------------------------------------------
+
+	[Fact]
+	public void Parses_Trigger_Declaration()
+	{
+		var (root, errors) = ParseProgram("trigger obj_op_1");
+		Assert.Empty(errors);
+		var method = Assert.Single(root.Methods!);
+		Assert.Equal(IdentifierType.TriggerDeclaration, method.Name.Type);
+		Assert.Equal("obj_op_1", method.SymbolName);
+		Assert.Null(method.Parameters);
+	}
+
+	[Fact]
+	public void Parses_Trigger_Declaration_With_Params()
+	{
+		var (root, errors) = ParseProgram("trigger mn_text(string text)");
+		Assert.Empty(errors);
+		var method = Assert.Single(root.Methods!);
+		Assert.Equal(IdentifierType.TriggerDeclaration, method.Name.Type);
+		Assert.Single(method.Parameters!);
+	}
+
+	[Fact]
+	public void Trigger_Declaration_With_Component_Is_An_Error()
+	{
+		var (_, errors) = ParseProgram("trigger mn_button:google");
+		Assert.Contains(errors, e => e.Message.Contains("subjects belong on handlers"));
+	}
+
+	// ---------------------------------------------------------------
+	// 2.1: default parameter values
+	// ---------------------------------------------------------------
+
+	[Fact]
+	public void Parses_Parameter_Defaults()
+	{
+		var (root, errors) = ParseProgram("""
+			func choice(string text, string c3 = "", int anim = ^anim_still, int off = -1) returns int
+			    return 0
+			""");
+		Assert.Empty(errors);
+		var method = Assert.Single(root.Methods!);
+		Assert.Null(method.Parameters![0].Default);
+		Assert.IsType<LiteralNode>(method.Parameters[1].Default);
+		Assert.IsType<IdentifierNode>(method.Parameters[2].Default);
+		Assert.IsType<UnaryExpressionNode>(method.Parameters[3].Default);
+	}
+
+	[Fact]
+	public void Command_Default_Params_Coexist_With_Op_Binding()
+	{
+		var (root, errors) = ParseProgram("command enqueue(func method, int delay = 5) = queue_strong");
+		Assert.Empty(errors);
+		var method = Assert.Single(root.Methods!);
+		Assert.Equal("queue_strong", method.InternalName);
+		Assert.NotNull(method.Parameters![1].Default);
+	}
+
+	// ---------------------------------------------------------------
+	// 2.1: for loops
+	// ---------------------------------------------------------------
+
+	[Fact]
+	public void Parses_For_Statement()
+	{
+		var (root, errors) = ParseProgram("""
+			func main(int size)
+			    for i in 0..size
+			        return
+			""");
+		Assert.Empty(errors);
+		var method = Assert.Single(root.Methods!);
+		var forNode = Assert.IsType<ForStatementNode>(method.Body!.Statements![0]);
+		Assert.Equal("i", forNode.Variable.Name);
+		Assert.Equal(IdentifierType.Local, forNode.Variable.Type);
+		Assert.NotNull(forNode.Body);
+	}
+
+	[Fact]
+	public void For_Without_In_Is_An_Error()
+	{
+		var (_, errors) = ParseProgram("""
+			func main()
+			    for i 0..5
+			        return
+			""");
+		Assert.Contains(errors, e => e.Message.Contains("Expected 'in'"));
+	}
+
+	[Fact]
+	public void For_Without_Range_Is_An_Error()
+	{
+		var (_, errors) = ParseProgram("""
+			func main()
+			    for i in 5
+			        return
+			""");
+		Assert.Contains(errors, e => e.Message.Contains("Expected '..'"));
+	}
+
+	// ---------------------------------------------------------------
+	// 2.1: switch statements
+	// ---------------------------------------------------------------
+
+	[Fact]
+	public void Parses_Switch_With_Inline_Block_And_Default_Cases()
+	{
+		var (root, errors) = ParseProgram("""
+			func skill_name(int skill) returns string
+			    switch skill
+			        case 0: return "Attack"
+			        case 1, 2:
+			            print("gathering")
+			            return "Gathering"
+			        default: return "Unknown"
+			""");
+		Assert.Empty(errors);
+		var method = Assert.Single(root.Methods!);
+		var switchNode = Assert.IsType<SwitchStatementNode>(method.Body!.Statements![0]);
+		Assert.Equal(3, switchNode.Cases!.Count);
+
+		var inline = switchNode.Cases[0];
+		Assert.True(inline.IsInline);
+		Assert.Single(inline.Values!);
+		Assert.Single(inline.Body!.Statements!);
+
+		var block = switchNode.Cases[1];
+		Assert.False(block.IsInline);
+		Assert.Equal(2, block.Values!.Count);
+		Assert.Equal(2, block.Body!.Statements!.Count);
+
+		Assert.True(switchNode.Cases[2].IsDefault);
+		Assert.NotNull(switchNode.DefaultCase);
+	}
+
+	[Fact]
+	public void Case_With_Inline_Statement_And_Block_Is_An_Error()
+	{
+		var (_, errors) = ParseProgram("""
+			func main(int x)
+			    switch x
+			        case 1: return
+			            return
+			""");
+		Assert.Contains(errors, e => e.Message.Contains("Cannot combine an inline statement with an indented block"));
+	}
+
+	[Fact]
+	public void Duplicate_Default_Is_An_Error()
+	{
+		var (_, errors) = ParseProgram("""
+			func main(int x)
+			    switch x
+			        default: return
+			        default: return
+			""");
+		Assert.Contains(errors, e => e.Message.Contains("Only one 'default' case"));
+	}
+
+	[Fact]
+	public void Default_Not_Last_Is_An_Error()
+	{
+		var (_, errors) = ParseProgram("""
+			func main(int x)
+			    switch x
+			        default: return
+			        case 1: return
+			""");
+		Assert.Contains(errors, e => e.Message.Contains("'default' must be the last case"));
+	}
+
+	[Fact]
+	public void Statement_Inside_Switch_Body_Is_An_Error()
+	{
+		var (_, errors) = ParseProgram("""
+			func main(int x)
+			    switch x
+			        print("nope")
+			""");
+		Assert.Contains(errors, e => e.Message.Contains("Expected 'case' or 'default'"));
+	}
+
+	[Fact]
+	public void Switch_Without_Body_Is_An_Error()
+	{
+		var (_, errors) = ParseProgram("""
+			func main(int x)
+			    switch x
+			    return
+			""");
+		Assert.Contains(errors, e => e.Message.Contains("at least one 'case' or 'default'"));
+	}
+
+	// ---------------------------------------------------------------
+	// 2.1: inline if/else bodies
+	// ---------------------------------------------------------------
+
+	[Fact]
+	public void Parses_Inline_If_And_Else_Bodies()
+	{
+		var (root, errors) = ParseProgram("""
+			func pick(bool flag) returns int
+			    if flag: return 1
+			    else: return 2
+			""");
+		Assert.Empty(errors);
+		var method = Assert.Single(root.Methods!);
+		var ifNode = Assert.IsType<IfStatementNode>(method.Body!.Statements![0]);
+		Assert.Single(ifNode.IfBlock!.Statements!);
+		Assert.Single(ifNode.ElseBlock!.Statements!);
+	}
+
+	[Fact]
+	public void Inline_If_With_Indented_Block_Is_An_Error()
+	{
+		var (_, errors) = ParseProgram("""
+			func main(bool flag)
+			    if flag: return
+			        return
+			""");
+		Assert.Contains(errors, e => e.Message.Contains("Cannot combine an inline statement with an indented block"));
+	}
+
+	[Fact]
+	public void If_Colon_Without_Statement_Is_An_Error()
+	{
+		var (_, errors) = ParseProgram("""
+			func main(bool flag)
+			    if flag:
+			        return
+			""");
+		Assert.Contains(errors, e => e.Message.Contains("Expected a statement after ':'"));
+	}
 }

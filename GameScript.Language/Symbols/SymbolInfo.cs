@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using GameScript.Language.Ast;
 using GameScript.Language.File;
@@ -16,7 +16,9 @@ namespace GameScript.Language.Symbols
 		object? literalValue,
 		string filePath,
 		FileRange fileRange,
-		string? internalName = null)
+		string? internalName = null,
+		int defaultCount = 0,
+		List<string?>? paramDefaultLabels = null)
 	{
 		public IdentifierType IdentifierType { get; } = identifierType;
 		public string Name { get; } = name;
@@ -35,11 +37,24 @@ namespace GameScript.Language.Symbols
 		/// the declaration binds by its own name (the default).
 		/// </summary>
 		public string? InternalName { get; } = internalName;
-		public string Signature { get; } = CreateSignature(identifierType, name, type, typeNames, paramTypes, paramNames);
+
+		/// <summary>Number of trailing parameters that declare a default value.</summary>
+		public int DefaultCount { get; } = defaultCount;
+
+		/// <summary>
+		/// Display text of each parameter's default value ('""', '-1', '^anim_still'),
+		/// positionally aligned with ParamNames; null entries have no default.
+		/// </summary>
+		public List<string?>? ParamDefaultLabels { get; } = paramDefaultLabels;
+
+		public string Signature { get; } = CreateSignature(identifierType, name, type, typeNames, paramTypes, paramNames, paramDefaultLabels);
 
 		/// <summary>Number of declared parameters (methods only; 0 otherwise).</summary>
 		public int Arity => ParamTypes == null ? 0 :
 			ParamTypes.Kind == TypeKind.Tuple ? ParamTypes.TypeParameters!.Count : 1;
+
+		/// <summary>Minimum number of call-site arguments (Arity minus defaulted parameters).</summary>
+		public int RequiredArity => Arity - DefaultCount;
 
 		/// <summary>
 		/// Canonical parameter-type signature, e.g. "()", "(int)", "(int,string)".
@@ -54,6 +69,7 @@ namespace GameScript.Language.Symbols
 		public bool IsGlobalSymbol => IdentifierType == IdentifierType.Func ||
 			IdentifierType == IdentifierType.Label ||
 			IdentifierType == IdentifierType.Command ||
+			IdentifierType == IdentifierType.TriggerDeclaration ||
 			IdentifierType == IdentifierType.Constant ||
 			IdentifierType == IdentifierType.Context;
 		public string PrefixedName => $"{GetPrefix(IdentifierType)}{Name}";
@@ -64,7 +80,8 @@ namespace GameScript.Language.Symbols
 			TypeInfo? type,
 			List<string>? typeNames,
 			TypeInfo? paramTypes,
-			List<string>? paramNames)
+			List<string>? paramNames,
+			List<string?>? paramDefaultLabels)
 		{
 			Span<char> buffer = stackalloc char[64];
 			var vsb = new ValueStringBuilder(buffer);
@@ -80,7 +97,7 @@ namespace GameScript.Language.Symbols
 				vsb.Append('(');
 				if (paramTypes != null)
 				{
-					AppendTypes(ref vsb, paramTypes, paramNames);
+					AppendTypes(ref vsb, paramTypes, paramNames, paramDefaultLabels);
 				}
 				vsb.Append(')');
 
@@ -126,6 +143,7 @@ namespace GameScript.Language.Symbols
 				IdentifierType.Func => "func",
 				IdentifierType.Command => "command",
 				IdentifierType.Label => "label",
+				IdentifierType.TriggerDeclaration => "trigger",
 				IdentifierType.Local => "local",
 				IdentifierType.Context => "context",
 				IdentifierType.Constant => "constant",
@@ -133,7 +151,7 @@ namespace GameScript.Language.Symbols
 			};
 		}
 
-		private static void AppendTypes(ref ValueStringBuilder vsb, TypeInfo types, List<string>? names)
+		private static void AppendTypes(ref ValueStringBuilder vsb, TypeInfo types, List<string>? names, List<string?>? defaultLabels = null)
 		{
 			int paramCount = 0;
 			foreach (var type in types.AllTypes)
@@ -148,6 +166,13 @@ namespace GameScript.Language.Symbols
 				{
 					vsb.Append(' ');
 					vsb.Append(names[paramCount - 1]);
+				}
+				if (defaultLabels != null &&
+					paramCount - 1 < defaultLabels.Count &&
+					defaultLabels[paramCount - 1] != null)
+				{
+					vsb.Append(" = ");
+					vsb.Append(defaultLabels[paramCount - 1]!);
 				}
 			}
 		}

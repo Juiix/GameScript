@@ -41,6 +41,25 @@ namespace GameScript.Language.Visitors
 			}
 		}
 
+		public override void Visit(ParameterNode node)
+		{
+			base.Visit(node);
+
+			if (node.Default == null)
+			{
+				return;
+			}
+
+			var paramType = _context.Types.GetType(node.Type.Name);
+			var defaultType = GetInferredType(node.Default);
+			if (paramType != null &&
+				defaultType != null &&
+				!defaultType.Equals(paramType))
+			{
+				Error($"Type mismatch, cannot assign '{defaultType}' default to '{paramType}' parameter '{node.Name.Name}'", node.Default);
+			}
+		}
+
 		public override void Visit(ConstantDefinitionNode node)
 		{
 			base.Visit(node);
@@ -111,6 +130,102 @@ namespace GameScript.Language.Visitors
 
 			ConditionExpressionCheck(node.Condition);
 		}
+
+		public override void Visit(ForStatementNode node)
+		{
+			base.Visit(node);
+
+			var startType = GetInferredType(node.Start);
+			if (startType != null && startType.Kind != TypeKind.Int)
+			{
+				Error("For-loop range bounds must be 'int'", node.Start);
+			}
+
+			var endType = GetInferredType(node.End);
+			if (endType != null && endType.Kind != TypeKind.Int)
+			{
+				Error("For-loop range bounds must be 'int'", node.End);
+			}
+		}
+
+		public override void Visit(SwitchStatementNode node)
+		{
+			base.Visit(node);
+
+			var subjectType = GetInferredType(node.Subject);
+			if (subjectType != null &&
+				subjectType.Kind is not (TypeKind.Int or TypeKind.String or TypeKind.Bool))
+			{
+				Error("Switch subject must be an 'int', 'string' or 'bool' expression", node.Subject);
+				subjectType = null;    // suppress per-case mismatch noise
+			}
+
+			if (node.Cases == null)
+				return;
+
+			HashSet<object>? seenValues = null;
+			foreach (var caseNode in node.Cases)
+			{
+				if (caseNode.Values == null)
+					continue;
+
+				foreach (var value in caseNode.Values)
+				{
+					var valueType = GetInferredType(value);
+					if (subjectType != null &&
+						valueType != null &&
+						!valueType.Equals(subjectType))
+					{
+						Error($"Case value type '{valueType}' does not match the switch subject type '{subjectType}'", value);
+						continue;
+					}
+
+					// duplicate detection over compile-time values; values that
+					// failed the constness check simply don't extract
+					var constant = ExtractConstantValue(value);
+					if (constant == null)
+						continue;
+					if (!(seenValues ??= []).Add(constant))
+					{
+						Error($"Duplicate case value '{DisplayConstant(constant)}'", value);
+					}
+				}
+			}
+		}
+
+		// Compile-time value of a case expression: literal, negated number literal,
+		// or a '^' constant's indexed literal value. Null when not extractable.
+		private object? ExtractConstantValue(ExpressionNode node)
+		{
+			switch (node)
+			{
+				case LiteralNode literal:
+					return ParseLiteralValue(literal);
+
+				case UnaryExpressionNode { Operator: UnaryOperator.Negate, Operand: LiteralNode operand }:
+					return ParseLiteralValue(operand) is int number ? -number : null;
+
+				case IdentifierNode { Type: IdentifierType.Constant } identifier:
+					return _context.Symbols.GetSymbol(identifier.Name)?.LiteralValue;
+
+				default:
+					return null;
+			}
+		}
+
+		private static object? ParseLiteralValue(LiteralNode literal)
+		{
+			return literal.Type switch
+			{
+				LiteralType.Number => LiteralNode.TryParseNumber(literal.Value, out var i) ? i : null,
+				LiteralType.Boolean => bool.TryParse(literal.Value, out var b) ? b : null,
+				LiteralType.String => literal.Value.Length >= 2 ? literal.Value.Substring(1, literal.Value.Length - 2) : null,
+				_ => null,
+			};
+		}
+
+		private static string DisplayConstant(object value) =>
+			value is bool b ? (b ? "true" : "false") : value.ToString() ?? "?";
 
 		public override void Visit(BinaryExpressionNode node)
 		{
@@ -214,7 +329,12 @@ namespace GameScript.Language.Visitors
 					break;
 
 				case CallableResolutionStatus.Ambiguous:
-					Error($"Ambiguous call to '{name}': multiple overloads match.", node);
+					var viaDefaults = _context.Symbols.GetSymbols(name).Any(x =>
+						x.IsCallable() && x.DefaultCount > 0 &&
+						argTypes.Count >= x.RequiredArity && argTypes.Count < x.Arity);
+					Error(viaDefaults
+						? $"Ambiguous call to '{name}': omitted defaulted parameters make more than one overload applicable. Pass the arguments explicitly."
+						: $"Ambiguous call to '{name}': multiple overloads match.", node);
 					break;
 
 				case CallableResolutionStatus.NoOverloadMatches:

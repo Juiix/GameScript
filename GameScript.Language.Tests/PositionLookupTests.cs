@@ -153,6 +153,40 @@ public class PositionLookupTests
 	}
 
 	[Fact]
+	public void Lookup_Resolves_Loop_Variables_And_Case_Values()
+	{
+		const string source = """
+			func main(int skill)
+			    for i in 0..5
+			        print("{i}")
+			    switch skill
+			        case ^max_level: print("max")
+			""";
+
+		var symbols = new GlobalSymbolTable();
+		var types = new GlobalTypeIndex();
+		var parser = new AstParser("test.gs", source);
+		var root = parser.ParseProgram();
+		Assert.Empty(parser.Errors ?? []);
+		var fileIndex = new FileIndex();
+		var indexVisitor = new IndexVisitor(fileIndex, new VisitorContext(types, symbols, "test.gs"));
+		root.Accept(indexVisitor);
+		symbols.AddFile("test.gs", fileIndex.FileSymbols);
+
+		// cursor on the loop-variable use inside the interpolated body
+		var loopVar = root.FindNodeAtPosition<IdentifierNode>(2, 16);
+		Assert.NotNull(loopVar);
+		Assert.Equal("i", loopVar!.Name);
+		var localIndex = indexVisitor.LocalIndexes.Values.First();
+		Assert.NotNull(localIndex.GetSymbol("i"));
+
+		// cursor on the constant inside a case value
+		var caseValue = root.FindNodeAtPosition<IdentifierNode>(4, 16);
+		Assert.NotNull(caseValue);
+		Assert.Equal("max_level", caseValue!.Name);
+	}
+
+	[Fact]
 	public void Local_References_Include_Interpolated_Usages()
 	{
 		var (_, _, locals) = Setup();

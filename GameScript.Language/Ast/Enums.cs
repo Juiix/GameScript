@@ -67,9 +67,10 @@ namespace GameScript.Language.Ast
 		Label = 1 << 6,
 		Command = 1 << 7,
 		Trigger = 1 << 8,
+		TriggerDeclaration = 1 << 9,
 
 		Variable = Local | Context | Constant,
-		Method = Func | Label | Command | Trigger,
+		Method = Func | Label | Command | Trigger | TriggerDeclaration,
 
 		Assignable = Local | Context
 	}

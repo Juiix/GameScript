@@ -57,7 +57,7 @@ public class TokenizerTests
 	[Fact]
 	public void Keywords_Are_Keyword_Tokens()
 	{
-		foreach (var kw in new[] { "func", "label", "command", "return", "returns", "if", "else", "while", "break", "continue", "and", "or", "not" })
+		foreach (var kw in new[] { "func", "label", "command", "return", "returns", "if", "else", "while", "break", "continue", "and", "or", "not", "trigger", "switch", "case", "default", "for", "in" })
 		{
 			var tokens = LexNoLayout(kw);
 			Assert.Equal(TokenType.Keyword, tokens[0].Type);
@@ -143,10 +143,49 @@ public class TokenizerTests
 	[Fact]
 	public void Dot_Prefixed_Identifiers()
 	{
-		var tokens = LexNoLayout(".cmd ..cmd .@ctx");
+		var tokens = LexNoLayout(".cmd .@ctx");
 		Assert.Equal(new[] {
 			(TokenType.Identifier, ".cmd"),
-			(TokenType.Identifier, "..cmd"),
 			(TokenType.Identifier, ".@ctx") }, tokens);
+	}
+
+	[Fact]
+	public void Range_Token_Between_Numbers()
+	{
+		var tokens = LexNoLayout("0..10");
+		Assert.Equal(new[] {
+			(TokenType.Number, "0"),
+			(TokenType.Range, ".."),
+			(TokenType.Number, "10") }, tokens);
+	}
+
+	[Fact]
+	public void Range_Token_Between_Identifiers()
+	{
+		var tokens = LexNoLayout("x..y");
+		Assert.Equal(new[] {
+			(TokenType.Identifier, "x"),
+			(TokenType.Range, ".."),
+			(TokenType.Identifier, "y") }, tokens);
+	}
+
+	[Fact]
+	public void Range_Before_Call_Does_Not_Capture_A_Dot_Identifier()
+	{
+		// regression: '..inv_size' previously lexed as one multi-dot identifier
+		var tokens = LexNoLayout("0..inv_size(^inv)");
+		Assert.Equal((TokenType.Number, "0"), tokens[0]);
+		Assert.Equal((TokenType.Range, ".."), tokens[1]);
+		Assert.Equal((TokenType.Identifier, "inv_size"), tokens[2]);
+	}
+
+	[Fact]
+	public void Multi_Dot_Prefix_Now_Lexes_As_Range()
+	{
+		// '..cmd' (2+ dots) was never a valid identifier form; it now lexes as Range + name
+		var tokens = LexNoLayout("..cmd");
+		Assert.Equal(new[] {
+			(TokenType.Range, ".."),
+			(TokenType.Identifier, "cmd") }, tokens);
 	}
 }

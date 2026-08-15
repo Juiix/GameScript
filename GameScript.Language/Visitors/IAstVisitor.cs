@@ -26,6 +26,9 @@ namespace GameScript.Language.Visitors
 		void Visit(IfStatementNode node);
 		void Visit(ElseIfStatementNode node);
 		void Visit(WhileStatementNode node);
+		void Visit(ForStatementNode node);
+		void Visit(SwitchStatementNode node);
+		void Visit(SwitchCaseNode node);
 		void Visit(ParameterNode node);
 		void Visit(BlockNode node);
 		void Visit(VariableDefinitionNode node);

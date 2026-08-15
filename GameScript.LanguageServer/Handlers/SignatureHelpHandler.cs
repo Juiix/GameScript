@@ -87,6 +87,11 @@ internal sealed class SignatureHelpHandler(
 				{
 					label += " " + symbol.ParamNames[i];
 				}
+				if (symbol.ParamDefaultLabels != null && i < symbol.ParamDefaultLabels.Count &&
+					symbol.ParamDefaultLabels[i] != null)
+				{
+					label += " = " + symbol.ParamDefaultLabels[i];
+				}
 				paramInfos.Add(new ParameterInformation { Label = new ParameterInformationLabel(label) });
 				i++;
 			}

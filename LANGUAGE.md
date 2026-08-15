@@ -1,6 +1,6 @@
 # GameScript — Language Reference
 
-> **Scope** This guide covers writing GameScript 2.0: files, types, methods, operators, control flow, and common patterns.
+> **Scope** This guide covers writing GameScript 2.1: files, types, methods, operators, control flow, and common patterns.
 >
 > Embedding the compiler/VM in a C# game? See **[EMBEDDING.md](EMBEDDING.md)**.
 >
@@ -83,6 +83,12 @@ against declarations; a local may not share a name with any func or command
 (compile error), so bare names are never ambiguous.
 
 Convention: `snake_case` for funcs/commands/triggers/constants/context vars, `camelCase` for locals.
+
+### Reserved words
+
+`func` `command` `trigger` `return` `returns` `if` `else` `while` `switch`
+`case` `default` `for` `in` `break` `continue` `and` `or` `not` `true` `false`
+— these cannot be used as identifiers.
 
 ### Literals
 
@@ -168,7 +174,8 @@ Locals may not shadow a func or command name — pick a different name.
 | --------- | --------- | ----------- | -------- | ---------------------------------------------------- |
 | `func`    | `func`    | `name()`    | ✅        | Script routine; calls in tail position tail-transfer |
 | `command` | `command` | `name()`    | ✅        | Host-implemented opcode; no body in script           |
-| `trigger` | *(type)*  | —           | ❌        | Game-event entry point; cannot be called from script |
+| `trigger` | `trigger` | —           | ❌        | Declares a game-event dispatch point (see below)     |
+| handler   | *(kind)*  | —           | ❌        | Game-event entry point; cannot be called from script |
 
 Funcs and commands share one call syntax. Two declarations may share a name if
 their **parameter signatures** differ (overloading, see [§8](#8-commands--the-host));
@@ -218,17 +225,51 @@ Commands can also declare tuple returns, which is common for host calls that rep
 command send_login() returns (bool success, string error)
 ```
 
-### Triggers
+### Default parameter values
 
-Triggers are entry points fired by the host (UI events, NPC interactions, etc.). They cannot be called from script and cannot return values.
-
-The name format is `<trigger-type> <trigger-name>`, stored internally as `"<trigger-type> <trigger-name>"`. A trigger header takes `(...)` only when it declares parameters — an empty `()` is an error. The set of trigger types is defined by your game — common conventions:
+Trailing parameters of funcs and commands may declare a default — a literal
+(including a negated number) or a `^constant`. Call sites may omit arguments
+only from the end; the compiler bakes the default into the call site:
 
 ```gamescript
-// Right-click option 3 on an NPC — numbered interaction slots
-npc_op_3 village_elder
-    talk_elder_main()
+func input_choice_npc(string text, string c1, string c2, string c3 = "",
+        int anim = ^anim_human_still) returns int
 
+input_choice_npc("What'll it be?", "Gossip", "Just passing through")
+```
+
+Rules:
+
+- Defaults are allowed only on a **contiguous trailing group** of parameters.
+- Default values must be compile-time constants — they are baked into the call
+  site, so the runtime never sees them.
+- If omitting defaults makes a call site match more than one overload, that is
+  an ambiguity error — pass the arguments explicitly.
+- Trigger handler parameters cannot declare defaults (the host supplies them).
+
+### Triggers
+
+Trigger *kinds* are declared with the `trigger` keyword — one declaration per
+engine dispatch point, conventionally collected in `core.gs` next to the
+command declarations. The declaration lists the parameters the engine passes,
+and its `//` comment is the kind's authoritative doc:
+
+```gamescript
+// Player clicks option 1 on a world object; Obj pointer is set
+trigger obj_op_1
+// NPC script-queue slot 1; Npc pointer is set; args from npc_queue(1, delay, …)
+trigger npc_queue_1(int arg0, int arg1)
+// Text submitted from a menu input component
+trigger mn_text(string text)
+```
+
+Trigger *handlers* are entry points fired by the host. They cannot be called
+from script and cannot return values. The header format is
+`<trigger-kind> <subject>`, stored internally as `"<trigger-kind> <subject>"`.
+A handler takes `(...)` only when it declares parameters — an empty `()` is an
+error:
+
+```gamescript
 // Object interaction
 obj_op_1 old_door
     open_door()
@@ -237,10 +278,21 @@ obj_op_1 old_door
 mn_button_1 hud:logout
     logout()
 
-// A trigger with parameters keeps its parens
+// A handler with parameters keeps its parens
 mn_text username:input(string text)
     validate(text)
 ```
+
+The compiler validates handler headers against the declarations:
+
+- The trigger kind must be declared — a typo'd kind (`obj_po_1`) is a compile
+  error instead of a silently dead handler.
+- The handler's parameters must be a **prefix** of the declared parameters —
+  handlers may ignore trailing arguments.
+- Subjects (`old_door`, `hud:logout`) are **not** validated — they remain
+  content-bound names resolved at dispatch time.
+- Trigger names share the global namespace with funcs and commands but are
+  never callable, so a trigger may not share a name with either.
 
 ---
 
@@ -261,6 +313,9 @@ Operators from highest to lowest precedence:
 | Assignment     | `=` `+=` `-=` `*=` `/=` `%=`     | Also tuple assignment `(a, b) = …`       |
 
 The `!` prefix is removed — write `not`. (`!=` is unaffected.)
+
+The `..` range operator appears only in `for` headers (`for i in 0..10`) — it
+is not a general expression operator.
 
 ```gamescript
 if level >= 10 and not @tutorial_done
@@ -288,11 +343,66 @@ else
     login_flow()
 ```
 
-There is no `switch` — chain `else if`.
+An `if` or `else` body may be written inline as a single statement after a `:`
+— the same rule as `case` bodies:
+
+```gamescript
+if coin_count() < cost: return false
+else: remove_coins(cost)
+```
+
+An inline statement and an indented block cannot be combined.
+
+### `switch`
+
+`switch` compares one expression against constant cases. The first matching
+case runs and the switch exits — there is no fallthrough. It compiles to the
+same bytecode as the equivalent `else if` ladder (with the subject evaluated
+once):
+
+```gamescript
+func skill_name(int skill) returns string
+    switch skill
+        case ^skill_attack: return "Attack"        // inline form
+        case ^skill_defense: return "Defense"
+        case ^skill_mining, ^skill_fishing:        // multiple values per case
+            message("gathering skill")             // block form
+            return "Gathering"
+        default: return "Unknown"
+```
+
+- Subjects may be `int`, `string`, or `bool`.
+- Case values must be constants: `^const` or literals. Duplicate case values
+  are a compile error.
+- A case body is either **inline** (a single statement after the `:`) or a
+  **block** (indented statements on the following lines) — not both.
+- `default` is optional and must be last; with no match and no default the
+  switch is skipped.
+- A `switch` with a `default` where every arm returns counts as a guaranteed
+  return for return-path analysis.
+- `break` inside a case body binds to the enclosing **loop** (a switch is not
+  a loop).
 
 ### Loops
 
-`while` is the only loop construct (no `for`):
+`for` iterates ints over the half-open range `[START, END)`. Both bounds are
+evaluated once, before the first iteration. The header declares the loop
+variable (always `int`):
+
+```gamescript
+for i in 0..inv_size(^inv_backpack)      // half-open: 0, 1, …, size-1
+    int itemType = inv_get_item(^inv_backpack, i)
+    if itemType == 0
+        continue
+    if itemType == target
+        break
+```
+
+Function-flat scoping is unchanged — the loop variable stays visible after the
+loop. As a special case, a later `for` in the same func may reuse the same
+variable name.
+
+`while` loops on a bare bool condition:
 
 ```gamescript
 int i = 0
@@ -305,6 +415,9 @@ while i < 10
     println(i)
     i++
 ```
+
+`break` and `continue` work in both `for` and `while` (in a `for`, `continue`
+still increments). Outside a loop they are compile errors.
 
 ### Early returns
 

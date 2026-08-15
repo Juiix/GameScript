@@ -7,11 +7,13 @@ namespace GameScript.Language.Ast
 	public sealed class ParameterNode(
 		TypeNode type,
 		IdentifierDeclarationNode name,
+		ExpressionNode? defaultValue,
 		string filePath,
 		in FileRange fileRange) : AstNode(filePath, in fileRange)
 	{
 		public TypeNode Type { get; } = type;
 		public IdentifierDeclarationNode Name { get; } = name;
+		public ExpressionNode? Default { get; } = defaultValue;
 
 		public override IEnumerable<AstNode> Children
 		{
@@ -19,6 +21,10 @@ namespace GameScript.Language.Ast
 			{
 				yield return Type;
 				yield return Name;
+				if (Default != null)
+				{
+					yield return Default;
+				}
 			}
 		}
 

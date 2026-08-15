@@ -25,6 +25,11 @@ namespace GameScript.Language.Visitors
 				Error($"{node.Name.Type} cannot have return values", node.ReturnTypes);
 			}
 
+			if (node.ReturnTypes != null &&
+				node.Name.Type == IdentifierType.TriggerDeclaration)
+			{
+				Error("Trigger declarations cannot declare return values.", node.ReturnTypes);
+			}
 
 			if (node.Name.Type == IdentifierType.Command &&
 				node.Body != null)
@@ -32,7 +37,63 @@ namespace GameScript.Language.Visitors
 				Error($"Commands cannot define a method body.", node.Body);
 			}
 
+			if (node.Name.Type == IdentifierType.TriggerDeclaration &&
+				node.Body != null)
+			{
+				Error("Trigger declarations cannot define a method body; handlers provide the body.", node.Body);
+			}
+
+			ParameterDefaultsCheck(node);
+
 			base.Visit(node);
+		}
+
+		// Defaults are allowed only on a contiguous trailing group of func/command
+		// parameters, and must be compile-time constants (baked at the call site).
+		private void ParameterDefaultsCheck(MethodDefinitionNode node)
+		{
+			if (node.Parameters == null)
+				return;
+
+			var isTrigger = node.Name.Type is IdentifierType.Trigger or IdentifierType.TriggerDeclaration;
+			var seenDefault = false;
+			foreach (var param in node.Parameters)
+			{
+				if (param.Default == null)
+				{
+					if (seenDefault && !isTrigger)
+					{
+						Error($"Parameter '{param.Name.Name}' must also declare a default value; parameters without defaults cannot follow defaulted parameters.", param);
+					}
+					continue;
+				}
+
+				seenDefault = true;
+
+				if (isTrigger)
+				{
+					Error("Trigger parameters cannot declare default values.", param.Default);
+					continue;
+				}
+
+				if (!IsConstantExpression(param.Default))
+				{
+					Error("Parameter defaults must be a literal or a '^' constant.", param.Default);
+				}
+			}
+		}
+
+		// The shape whitelist shared by constant initializers, parameter defaults
+		// and case values: a literal, a negated number literal, or a '^' constant.
+		private static bool IsConstantExpression(ExpressionNode node)
+		{
+			return node switch
+			{
+				LiteralNode => true,
+				UnaryExpressionNode { Operator: UnaryOperator.Negate, Operand: LiteralNode } => true,
+				IdentifierNode { Type: IdentifierType.Constant } => true,
+				_ => false,
+			};
 		}
 
 		public override void Visit(ConstantDefinitionNode node)
@@ -66,6 +127,28 @@ namespace GameScript.Language.Visitors
 			_loopDepth++;
 			base.Visit(node);
 			_loopDepth--;
+		}
+
+		public override void Visit(ForStatementNode node)
+		{
+			_loopDepth++;
+			base.Visit(node);
+			_loopDepth--;
+		}
+
+		public override void Visit(SwitchCaseNode node)
+		{
+			if (node.Values != null)
+			{
+				foreach (var value in node.Values)
+				{
+					if (!IsConstantExpression(value))
+					{
+						Error("Case values must be constants ('^name' or a literal).", value);
+					}
+				}
+			}
+			base.Visit(node);
 		}
 
 		public override void Visit(BlockNode node)
@@ -160,6 +243,9 @@ namespace GameScript.Language.Visitors
 					case IdentifierType.Trigger:
 						Error($"{symbol.IdentifierType} '{symbol.Name}' cannot be referenced.", node);
 						break;
+					case IdentifierType.TriggerDeclaration:
+						Error($"Trigger '{symbol.Name}' cannot be called or referenced.", node);
+						break;
 					case IdentifierType.Context:
 						Error($"{symbol.IdentifierType} '{symbol.Name}' must be referenced with an '@' mark", node);
 						break;
@@ -190,7 +276,7 @@ namespace GameScript.Language.Visitors
 
 		private void ReturnFlowCheck(MethodDefinitionNode node)
 		{
-			if (node.Name.Type == IdentifierType.Command ||
+			if (node.Name.Type is IdentifierType.Command or IdentifierType.TriggerDeclaration ||
 				node.ReturnTypes == null ||
 				node.ReturnTypes.Count <= 0)
 			{
@@ -255,6 +341,22 @@ namespace GameScript.Language.Visitors
 					// Usually "while" is not guaranteed to return unless the DSL ensures infinite loop or break
 					// For simplicity, we'll say it might not return => false
 					return false;
+
+				case ForStatementNode:
+					// the range may be empty, so the body may never run
+					return false;
+
+				case SwitchStatementNode switchNode:
+					// guaranteed only when a default exists and every arm returns —
+					// without a default, a no-match skips the switch entirely
+					if (switchNode.Cases == null || switchNode.DefaultCase == null)
+						return false;
+					foreach (var caseNode in switchNode.Cases)
+					{
+						if (!MustReturn(caseNode.Body))
+							return false;
+					}
+					return true;
 
 				default:
 					// By default, if the statement is a block or something else, just keep checking children

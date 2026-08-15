@@ -163,7 +163,7 @@ namespace GameScript.LanguageServer.Handlers
 		{
 			return type switch
 			{
-				IdentifierType.Func or IdentifierType.Label or IdentifierType.Command or IdentifierType.Trigger => 1,
+				IdentifierType.Func or IdentifierType.Label or IdentifierType.Command or IdentifierType.Trigger or IdentifierType.TriggerDeclaration => 1,
 				IdentifierType.Local or IdentifierType.Constant or IdentifierType.Context => 2,
 				_ => 0,
 			};

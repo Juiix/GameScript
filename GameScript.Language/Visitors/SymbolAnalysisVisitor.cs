@@ -28,10 +28,83 @@ namespace GameScript.Language.Visitors
 			// Triggers stay name-unique (their SymbolName embeds the trigger keyword);
 			// funcs/labels/commands may overload as long as parameter signatures differ.
 			if (node.Name.Type == IdentifierType.Trigger)
+			{
 				CheckSymbol(_context.Symbols, node.SymbolName, node.Name);
+				CheckTriggerHandler(node);
+			}
+			else if (node.Name.Type == IdentifierType.TriggerDeclaration)
+			{
+				CheckSymbol(_context.Symbols, node.SymbolName, node.Name);
+				CheckTriggerDeclarationCollision(node);
+			}
 			else
+			{
 				CheckOverloadableSymbol(node);
+			}
 			base.Visit(node);
+		}
+
+		// Validates a trigger handler's header against the declared trigger kind:
+		// the kind must be declared, and the handler's parameters must be a prefix
+		// of the declaration's. Subjects are deliberately not validated.
+		private void CheckTriggerHandler(MethodDefinitionNode node)
+		{
+			var kind = node.Keyword.Keyword;
+			if (InvalidSymbolName(kind))
+				return;
+
+			SymbolInfo? decl = null;
+			foreach (var symbol in _context.Symbols.GetSymbols(kind))
+			{
+				if (symbol.IdentifierType == IdentifierType.TriggerDeclaration)
+				{
+					decl = symbol;
+					break;
+				}
+			}
+
+			if (decl == null)
+			{
+				Error($"Unknown trigger kind '{kind}'. Trigger kinds must be declared (e.g. in core.gs): 'trigger {kind}'.", node.Keyword);
+				return;
+			}
+
+			var paramCount = node.Parameters?.Count ?? 0;
+			if (paramCount > decl.Arity)
+			{
+				Error($"Handler declares {paramCount} parameter(s) but trigger '{kind}' only provides {decl.Arity}: {decl.ParamSignature}. Handler parameters must be a prefix of the trigger's.", node.Name);
+				return;
+			}
+
+			if (node.Parameters == null || decl.ParamTypes == null)
+				return;
+
+			var i = 0;
+			foreach (var declType in decl.ParamTypes.AllTypes)
+			{
+				if (i >= node.Parameters.Count)
+					break;
+				var param = node.Parameters[i++];
+				var paramType = _context.Types.GetType(param.Type.Name);
+				if (paramType != null && !paramType.Equals(declType))
+				{
+					Error($"Parameter '{param.Name.Name}' must be '{declType.Name}' to match trigger '{kind}' {decl.ParamSignature}. Handler parameters must be a prefix of the trigger's.", param);
+				}
+			}
+		}
+
+		// Trigger declarations share the flat global namespace with funcs/commands
+		// but are never callable, so a shared name is always a conflict.
+		private void CheckTriggerDeclarationCollision(MethodDefinitionNode node)
+		{
+			foreach (var symbol in _context.Symbols.GetSymbols(node.SymbolName))
+			{
+				if (symbol.IsCallable())
+				{
+					Error($"Trigger '{node.SymbolName}' conflicts with {symbol.IdentifierType} '{node.SymbolName}'. Triggers are never callable; rename one.", node.Name);
+					return;
+				}
+			}
 		}
 
 		private void CheckOverloadableSymbol(MethodDefinitionNode node)
@@ -67,7 +140,10 @@ namespace GameScript.Language.Visitors
 			{
 				if (!other.IsCallable())
 				{
-					Error($"'{symbolName}' is already defined in this context.", node.Name);
+					if (other.IdentifierType == IdentifierType.TriggerDeclaration)
+						Error($"{node.Name.Type} '{symbolName}' conflicts with trigger '{symbolName}'. Triggers are never callable; rename one.", node.Name);
+					else
+						Error($"'{symbolName}' is already defined in this context.", node.Name);
 					return;
 				}
 				if (other.ParamSignature == self.ParamSignature)
@@ -76,6 +152,29 @@ namespace GameScript.Language.Visitors
 					return;
 				}
 			}
+		}
+
+		public override void Visit(ForStatementNode node)
+		{
+			var name = node.Variable.Name;
+			if (!InvalidSymbolName(name))
+			{
+				var existing = LocalIndex?.GetSymbol(name);
+				if (existing == null)
+				{
+					Error($"Something went wrong with '{name}'", node.Variable);
+				}
+				else if ((!existing.FilePath.Equals(node.Variable.FilePath) ||
+						  existing.FileRange != node.Variable.FileRange) &&
+						 !(LocalIndex?.IsLoopVariable(name) ?? false))
+				{
+					// Carve-out: a later 'for' may reuse a name only when the earlier
+					// declaration was itself a for-loop variable.
+					Error($"'{name}' is already defined in this context.", node.Variable);
+				}
+				CheckLocalCollision(name, node.Variable);
+			}
+			base.Visit(node);
 		}
 
 		public override void Visit(VariableDefinitionNode node)
