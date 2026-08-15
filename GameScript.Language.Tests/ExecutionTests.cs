@@ -704,6 +704,23 @@ public class ExecutionTests
 	}
 
 	[Fact]
+	public void Multi_Line_Signature_And_Call_Run()
+	{
+		var (host, program) = Build("""
+			func describe(string who, string suffix = "!",
+			        int reps = 1) returns string
+			    return who + suffix + int_to_str(reps)
+
+			func main()
+			    print(describe("a",
+			        "?",
+			        2))
+			""");
+		host.Start(program, "main");
+		Assert.Equal(new[] { "a?2" }, host.Context.Printed);
+	}
+
+	[Fact]
 	public void String_Interpolation_Edge_Shapes()
 	{
 		var (host, program) = Build("""

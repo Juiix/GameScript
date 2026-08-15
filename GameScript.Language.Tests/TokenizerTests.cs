@@ -180,6 +180,31 @@ public class TokenizerTests
 	}
 
 	[Fact]
+	public void Newlines_Inside_Parens_Are_Joined()
+	{
+		// implicit line joining: no EndOfLine/Indent/Dedent tokens inside '(...)'
+		var tokens = Lex("f(1,\n        2)\nnext");
+		Assert.Equal(new[] {
+			(TokenType.Identifier, "f"),
+			(TokenType.OpenParen, "("),
+			(TokenType.Number, "1"),
+			(TokenType.Comma, ","),
+			(TokenType.Number, "2"),
+			(TokenType.CloseParen, ")"),
+			(TokenType.EndOfLine, "\n"),
+			(TokenType.Identifier, "next") }, tokens);
+	}
+
+	[Fact]
+	public void Indentation_Resumes_After_Parens_Close()
+	{
+		var tokens = Lex("func f(int a,\n        int b)\n    return");
+		// the body line after the joined signature still indents normally
+		Assert.Contains((TokenType.Indent, ""), tokens);
+		Assert.DoesNotContain(tokens, t => t.Type == TokenType.Error);
+	}
+
+	[Fact]
 	public void Multi_Dot_Prefix_Now_Lexes_As_Range()
 	{
 		// '..cmd' (2+ dots) was never a valid identifier form; it now lexes as Range + name

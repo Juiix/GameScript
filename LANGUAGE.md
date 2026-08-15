@@ -48,6 +48,15 @@ func entry()
 
 Statements end at the newline — semicolons are illegal.
 
+**Implicit line joining**: inside `(...)` newlines and indentation are not
+significant, so long signatures, call sites, and conditions may wrap freely
+(continuation-line indentation is unrestricted):
+
+```gamescript
+func input_choice_npc(string text, string c1, string c2, string c3 = "",
+        int anim = ^anim_human_still) returns int
+```
+
 ---
 
 ## 2 Lexical Basics

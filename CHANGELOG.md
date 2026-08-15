@@ -2,6 +2,11 @@
 
 All notable changes to GameScript will be documented in this file.
 
+## [2.1.1]
+
+### Added
+- **Implicit line joining**: newlines and indentation are not significant inside `(...)`, so method signatures, call sites, and conditions may wrap across lines (continuation-line indentation is unrestricted). The 2.1 spec's wrapped-signature examples now compile.
+
 ## [2.1.0]
 
 **Feature release — declared triggers, `switch`, `for`, and default parameter values.** All four features are additive parser/compiler work: no new opcodes, no VM changes, and existing 2.0 bytecode is unaffected.

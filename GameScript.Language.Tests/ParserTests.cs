@@ -533,6 +533,39 @@ public class ParserTests
 	}
 
 	[Fact]
+	public void Parses_Multi_Line_Method_Signature()
+	{
+		var (root, errors) = ParseProgram("""
+			func input_choice_npc(string text, string c1, string c2, string c3 = "",
+			        int anim = -1) returns int
+			    return 0
+			""");
+		Assert.Empty(errors);
+		var method = Assert.Single(root.Methods!);
+		Assert.Equal(5, method.Parameters!.Count);
+		Assert.Single(method.ReturnTypes!);
+		Assert.NotNull(method.Body);
+	}
+
+	[Fact]
+	public void Parses_Multi_Line_Call_And_Condition()
+	{
+		var (root, errors) = ParseProgram("""
+			func add(int a, int b, int c) returns int
+			    return a + b + c
+
+			func main(bool x,
+			        bool y)
+			    if (x or
+			            y) and true
+			        add(1,
+			            2,
+			            3)
+			""");
+		Assert.Empty(errors);
+	}
+
+	[Fact]
 	public void If_Colon_Without_Statement_Is_An_Error()
 	{
 		var (_, errors) = ParseProgram("""

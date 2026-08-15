@@ -15,6 +15,7 @@ namespace GameScript.Language.Lexer
 		private int _column;
 		private FilePosition _lineStart;
 		private int _indent;
+		private int _parenDepth;
 		private bool _inMultilineComment;
 		private readonly FilePosition _origin;
 		private readonly List<int> _lineOffsets = [];
@@ -66,14 +67,16 @@ namespace GameScript.Language.Lexer
 				_column = 0;
 				_lineStart = newPos;
 
-				if (newPos.Line > 0)
+				// Implicit line joining: inside '(...)' newlines are not
+				// significant, so signatures, calls, and conditions may wrap.
+				if (newPos.Line > 0 && _parenDepth == 0)
 					return new Token(TokenType.EndOfLine, "\n".AsSpan(), new FileRange(start, newPos));
 			}
 
 			/*──────────────────────────────────────────────────────────────
-			 * 2.  Indentation / whitespace
+			 * 2.  Indentation / whitespace (suppressed inside parens)
 			 *──────────────────────────────────────────────────────────────*/
-			if (_column == 0 && ProcessIndentation(out var indentTok))
+			if (_parenDepth == 0 && _column == 0 && ProcessIndentation(out var indentTok))
 				return indentTok;
 
 			SkipWhitespace();
@@ -88,9 +91,16 @@ namespace GameScript.Language.Lexer
 
 			switch (ch)
 			{
-				case '\n': _column++; return new Token(TokenType.EndOfLine, "\n".AsSpan(), CurrentRange(pos));
-				case '(': _column++; return new Token(TokenType.OpenParen, "(".AsSpan(), CurrentRange(pos));
-				case ')': _column++; return new Token(TokenType.CloseParen, ")".AsSpan(), CurrentRange(pos));
+				case '\n':
+					_column++;
+					if (_parenDepth > 0)
+						return NextToken();      // joined line — no EndOfLine inside parens
+					return new Token(TokenType.EndOfLine, "\n".AsSpan(), CurrentRange(pos));
+				case '(': _column++; _parenDepth++; return new Token(TokenType.OpenParen, "(".AsSpan(), CurrentRange(pos));
+				case ')':
+					_column++;
+					if (_parenDepth > 0) _parenDepth--;
+					return new Token(TokenType.CloseParen, ")".AsSpan(), CurrentRange(pos));
 				case ',': _column++; return new Token(TokenType.Comma, ",".AsSpan(), CurrentRange(pos));
 				case ':': _column++; return new Token(TokenType.Colon, ":".AsSpan(), CurrentRange(pos));
 			}
