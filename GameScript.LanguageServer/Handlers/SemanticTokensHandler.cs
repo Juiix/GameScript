@@ -20,7 +20,8 @@ namespace GameScript.LanguageServer.Handlers
 			SemanticTokenType.String,       // 4
 			SemanticTokenType.Comment,      // 5
 			SemanticTokenType.Operator,     // 6
-			SemanticTokenType.Type			// 7
+			SemanticTokenType.Type,			// 7
+			SemanticTokenType.Namespace		// 8 — engine-op names in command '= name' bindings
 		];
 		private static readonly SemanticTokenModifier[] _modifiers = [
 
@@ -165,6 +166,7 @@ namespace GameScript.LanguageServer.Handlers
 			{
 				IdentifierType.Func or IdentifierType.Label or IdentifierType.Command or IdentifierType.Trigger or IdentifierType.TriggerDeclaration => 1,
 				IdentifierType.Local or IdentifierType.Constant or IdentifierType.Context => 2,
+				IdentifierType.EngineOp => 8,
 				_ => 0,
 			};
 		}

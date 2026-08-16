@@ -87,6 +87,9 @@ namespace GameScript.LanguageServer.Extensions
 		{
 			MethodDefinitionNode m => m.Name.Name,
 			IdentifierNode i => i.Name,
+			// an engine-op binding name is a host identifier, not a script symbol —
+			// rename/references/highlight must not treat it as one
+			IdentifierDeclarationNode { Type: IdentifierType.EngineOp } => null,
 			IdentifierDeclarationNode d => d.Name,
 			_ => null
 		};

@@ -58,10 +58,27 @@ internal sealed class HoverHandler(
 		{
 			MethodDefinitionNode methodDefinitionNode => CreateMethodHover(methodDefinitionNode.SymbolName, symbols),
 			IdentifierNode identifierNode => GetHover(identifierNode.Type, identifierNode.Name, localIndex, symbols),
+			IdentifierDeclarationNode { Type: IdentifierType.EngineOp } engineOp
+				when parent is MethodDefinitionNode boundMethod => CreateEngineOpHover(engineOp, boundMethod),
 			IdentifierDeclarationNode identifierDeclarationNode => parent is MethodDefinitionNode parentMethod
 						? CreateMethodHover(parentMethod.SymbolName, symbols)
 						: GetHover(identifierDeclarationNode.Type, identifierDeclarationNode.Name, localIndex, symbols),
 			_ => null
+		};
+	}
+
+	// hovering the engine-op name of a command '= name' binding
+	private static Hover CreateEngineOpHover(IdentifierDeclarationNode engineOp, MethodDefinitionNode command)
+	{
+		var md = new MarkupContent
+		{
+			Kind = MarkupKind.Markdown,
+			Value = $"Engine op binding: `{command.SymbolName}` compiles to the host operation `{engineOp.Name}`."
+		};
+		return new Hover
+		{
+			Contents = new MarkedStringsOrMarkupContent(md),
+			Range = engineOp.FileRange.ConvertRange()
 		};
 	}
 

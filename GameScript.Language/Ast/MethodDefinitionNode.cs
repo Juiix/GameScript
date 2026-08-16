@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using GameScript.Language.File;
 using GameScript.Language.Visitors;
 
@@ -13,7 +13,8 @@ namespace GameScript.Language.Ast
 		BlockNode? body,
 		string filePath,
 		in FileRange fileRange,
-		string? internalName = null) : AstNode(filePath, in fileRange)
+		OperatorNode? bindingOperator = null,
+		IdentifierDeclarationNode? bindingName = null) : AstNode(filePath, in fileRange)
 	{
 		public KeywordNode Keyword { get; } = keyword;
 		public KeywordNode? ReturnsKeyword { get; } = returnsKeyword;
@@ -24,8 +25,14 @@ namespace GameScript.Language.Ast
 		public string SymbolName { get; } = name.Type == IdentifierType.Trigger ?
 					$"{keyword.Keyword} {name.Name}" : name.Name;
 
+		/// <summary>The '=' of a command's '= engine_op' binding, if present.</summary>
+		public OperatorNode? BindingOperator { get; } = bindingOperator;
+
+		/// <summary>The engine-op name node of a command's '= engine_op' binding, if present.</summary>
+		public IdentifierDeclarationNode? BindingName { get; } = bindingName;
+
 		/// <summary>Engine-op name from a command's '= name' binding, if present.</summary>
-		public string? InternalName { get; } = internalName;
+		public string? InternalName { get; } = bindingName?.Name;
 
 		public override IEnumerable<AstNode> Children
 		{
@@ -50,6 +57,14 @@ namespace GameScript.Language.Ast
 					{
 						yield return returnType;
 					}
+				}
+				if (BindingOperator != null)
+				{
+					yield return BindingOperator;
+				}
+				if (BindingName != null)
+				{
+					yield return BindingName;
 				}
 				if (Body != null)
 				{

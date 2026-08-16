@@ -68,6 +68,8 @@ namespace GameScript.Language.Ast
 		Command = 1 << 7,
 		Trigger = 1 << 8,
 		TriggerDeclaration = 1 << 9,
+		// the engine-op name of a command '= name' binding; not a symbol (never indexed or referenced)
+		EngineOp = 1 << 10,
 
 		Variable = Local | Context | Constant,
 		Method = Func | Label | Command | Trigger | TriggerDeclaration,

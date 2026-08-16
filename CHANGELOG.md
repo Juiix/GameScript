@@ -2,6 +2,14 @@
 
 All notable changes to GameScript will be documented in this file.
 
+## [2.3.0]
+
+### Added
+- **Command op bindings are highlighted and hoverable.** The `= engine_op` binding on a command declaration is now a real AST node (`MethodDefinitionNode.BindingOperator` / `.BindingName`, typed `IdentifierType.EngineOp`): both editor grammars color it, the language server emits semantic tokens for it (new `namespace` token type), and hovering the op name explains the binding. `InternalName` is unchanged for compiler/host consumers.
+
+### Fixed
+- Rename / references / highlight no longer treat the engine-op name as a script symbol — F2 on `queue_strong_int` previously attempted to rename any same-named func or command.
+
 ## [2.2.0]
 
 ### Added

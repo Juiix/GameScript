@@ -259,28 +259,31 @@ public ref struct AstParser
 		}
 
 		/* ───── '=' internal-name binding (commands only) ───── */
-		string? internalName = null;
+		OperatorNode? bindingOp = null;
+		IdentifierDeclarationNode? bindingName = null;
 		if (Match(TokenType.Operator, "="))
 		{
-			var eqRange = PreviousRange;
+			bindingOp = new OperatorNode("=", _filePath, PreviousRange);
 			var internalTok = Expect(TokenType.Identifier, "Expected an engine-op name after '='", "?".AsSpan());
-			internalName = internalTok.Value.ToString();
+			bindingName = new IdentifierDeclarationNode(internalTok.Value.ToString(),
+														IdentifierType.EngineOp, null, _filePath, internalTok.Range);
 			if (idType != IdentifierType.Command)
-				Error("'=' op binding is only allowed on command declarations", eqRange);
+				Error("'=' op binding is only allowed on command declarations", bindingOp.FileRange);
 		}
 
 		/* ───── body ───── */
 		var body = ParseBlock();     // may be null if no nested indent
 		AstNode? lastNode = (AstNode?)body
-			?? (AstNode?)returns?.FirstOrDefault()
+			?? (AstNode?)bindingName
+			?? (AstNode?)returns?.LastOrDefault()
 			?? (AstNode?)returnsKw
-			?? (AstNode?)parameters?.FirstOrDefault()
+			?? (AstNode?)parameters?.LastOrDefault()
 			?? (AstNode?)nameNode;
 
 		return new MethodDefinitionNode(
 			kwNode, returnsKw, returns, nameNode, parameters, body, _filePath,
 			new FileRange(start, lastNode?.FileRange.End ?? start),
-			internalName);
+			bindingOp, bindingName);
 	}
 
 	private ConstantDefinitionNode ParseConstantDefinition()

@@ -237,6 +237,19 @@
                 <key>match</key>
                 <string>\breturns\b</string>
               </dict>
+              <dict>
+                <key>comment</key>
+                <string>command '= engine_op' binding — the trailing '= name' after the signature</string>
+                <key>match</key>
+                <string>(=)\s*([A-Za-z_][\w]*)\s*(?=$|//|/\*)</string>
+                <key>captures</key>
+                <dict>
+                  <key>1</key>
+                  <dict><key>name</key><string>keyword.operator.binding.gamescript</string></dict>
+                  <key>2</key>
+                  <dict><key>name</key><string>entity.name.tag.op-binding.gamescript</string></dict>
+                </dict>
+              </dict>
               <dict><key>include</key><string>#variables</string></dict>
               <dict><key>include</key><string>#types</string></dict>
               <dict><key>include</key><string>#strings</string></dict>

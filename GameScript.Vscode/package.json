@@ -2,7 +2,7 @@
     "name": "gamescript-tools",
     "displayName": "GameScript Tools",
     "description": "Adds syntax highlighting, IntelliSense, and diagnostics for the GameScript language in Vscode.",
-    "version": "1.5.0",
+    "version": "1.6.0",
     "publisher": "giantblade",
     "icon": "images/icon.png",
     "engines": {

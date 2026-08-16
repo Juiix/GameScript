@@ -215,6 +215,22 @@ public class ParserTests
 		Assert.Empty(errors);
 		var method = Assert.Single(root.Methods!);
 		Assert.Equal("queue_strong", method.InternalName);
+
+		// the binding is a real AST node (semantic tokens / hover need its range),
+		// typed EngineOp so it is never mistaken for a script symbol
+		//              0         1         2         3         4
+		//              0123456789012345678901234567890123456789012345678
+		// source:      command enqueue(func method, int delay) = queue_strong
+		Assert.NotNull(method.BindingOperator);
+		Assert.Equal(40, method.BindingOperator!.FileRange.Start.Column);
+		var bindingName = Assert.IsType<IdentifierDeclarationNode>(method.BindingName);
+		Assert.Equal(IdentifierType.EngineOp, bindingName.Type);
+		Assert.Equal(42, bindingName.FileRange.Start.Column);
+		Assert.Equal(54, bindingName.FileRange.End.Column);
+		Assert.Contains(bindingName, method.Children);
+
+		// the method's own range extends over the binding
+		Assert.Equal(54, method.FileRange.End.Column);
 	}
 
 	[Fact]
