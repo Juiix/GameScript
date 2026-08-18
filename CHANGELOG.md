@@ -2,6 +2,11 @@
 
 All notable changes to GameScript will be documented in this file.
 
+## [2.4.1]
+
+### Fixed
+- The `not` operator is now emitted as a keyword semantic token, matching `and`/`or` and the grammar's `keyword.control` scope — it previously colored as a symbol operator in editors that prefer semantic tokens.
+
 ## [2.4.0]
 
 **Feature release — constant tables.** One language feature, `table`, replacing data-in-code ladders (tier → outputs assignment blocks, menu-id ladders, name/jingle switches, desktop/mobile twin branches) with declared rows of constants. Additive parser/compiler work: no new opcodes, no VM changes; every table access lowers to the compare-chain / counted-loop bytecode the 2.1 `switch` and `for` emitters already produce.

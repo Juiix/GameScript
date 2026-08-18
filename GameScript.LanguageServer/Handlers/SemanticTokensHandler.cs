@@ -141,7 +141,8 @@ namespace GameScript.LanguageServer.Handlers
 					builder.Push(line, column, length, 0, 0);
 					break;
 				case OperatorNode operatorNode:
-					var opType = operatorNode.Operator is "and" or "or" ? 0 : 6;
+					// word operators are keywords, symbol operators are operators
+					var opType = operatorNode.Operator is "and" or "or" or "not" ? 0 : 6;
 					builder.Push(line, column, length, opType, 0);
 					break;
 				case CommentNode commentNode:
