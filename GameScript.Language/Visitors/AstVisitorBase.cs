@@ -99,6 +99,36 @@ namespace GameScript.Language.Visitors
 			Visit((AstNode)node);
 		}
 
+		public virtual void Visit(TableDefinitionNode node)
+		{
+			Visit((AstNode)node);
+		}
+
+		public virtual void Visit(TableColumnNode node)
+		{
+			Visit((AstNode)node);
+		}
+
+		public virtual void Visit(TableRowNode node)
+		{
+			Visit((AstNode)node);
+		}
+
+		public virtual void Visit(ForTableStatementNode node)
+		{
+			Visit((AstNode)node);
+		}
+
+		public virtual void Visit(IndexExpressionNode node)
+		{
+			Visit((AstNode)node);
+		}
+
+		public virtual void Visit(MemberExpressionNode node)
+		{
+			Visit((AstNode)node);
+		}
+
 		public virtual void Visit(ParameterNode node)
 		{
 			Visit((AstNode)node);

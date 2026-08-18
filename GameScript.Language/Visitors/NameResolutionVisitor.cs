@@ -30,7 +30,7 @@ namespace GameScript.Language.Visitors
 
 			foreach (var symbol in _context.Symbols.GetSymbols(node.Name))
 			{
-				if (symbol.IsCallable())
+				if (symbol.IsCallable() || symbol.IsTable)
 				{
 					node.ResolveType(symbol.IdentifierType);
 					return;

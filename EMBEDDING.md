@@ -56,7 +56,7 @@ Each file type has its own entry point:
 
 | Extension  | Entry point        | Returns         | Node list                |
 | ---------- | ------------------ | --------------- | ------------------------ |
-| `.gs`      | `ParseProgram()`   | `ProgramNode`   | `.Methods`               |
+| `.gs`      | `ParseProgram()`   | `ProgramNode`   | `.Methods`, `.Tables` (`.Declarations` in source order) |
 | `.const`   | `ParseConstants()` | `ConstantsNode` | `.Definitions`           |
 | `.context` | `ParseContexts()`  | `ContextsNode`  | `.Definitions`           |
 
@@ -114,13 +114,15 @@ Collect the parsed nodes from **all** files, then compile them together in one c
 // call site to the overload chosen during analysis. Required whenever any name
 // is overloaded; merge the per-file dictionaries into one.
 var compiler = new BytecodeCompiler<ServerOpCode>(resolvedCalls);
-var result   = compiler.Compile(constantNodes, contextNodes, methodNodes);
+var result   = compiler.Compile(constantNodes, contextNodes, methodNodes, tableNodes);
 
 BytecodeProgram         prog = result.Program;   // methods + constant pool
 BytecodeProgramMetadata meta = result.Metadata;  // per-method line/file maps, local names, context slot names
 ```
 
+- `tableNodes` is every `ProgramNode.Tables` entry across the root (2.4+). The 3-argument `Compile(constants, contexts, methods)` overload still exists for content without tables; a table that is *used* but not passed is a compile error.
 - Constant declarations are folded into the constant pool at compile time — there is no init step to run.
+- Constant tables produce no bytecode of their own: each access site compiles to a compare chain over the table's rows (all-constant keys fold to the cell), so a table only costs where it is read.
 - `func` and trigger-handler methods compile to bytecode; `command` declarations resolve to your opcode enum, and `trigger` declarations produce no bytecode (they only validate handler headers).
 - A call in tail position (`return f(...)`, or a call as the final statement of a void func) compiles to the `TailCall` opcode — the VM replaces the current frame instead of pushing one, so state-machine chains never grow the stack.
 - Keep `meta` if you want stack traces or debugging — it maps every instruction back to a file and line, and names every local and context slot.
@@ -312,10 +314,13 @@ static void VisitAst<T>(AstNode n, T v, List<FileError> errs) where T : IAstVisi
 | -------------------------- | ---------------------------------------------------- |
 | `NameResolutionVisitor`    | Classifies bare identifiers against symbol tables    |
 | `SymbolAnalysisVisitor`    | Duplicate declarations, local/global name collisions |
-| `SemanticAnalysisVisitor`  | Control flow, mark rules, break/continue scope       |
-| `TypeAnalysisVisitor`      | Type inference, overload resolution, assignments     |
+| `SemanticAnalysisVisitor`  | Control flow, mark rules, break/continue scope, table shape (row arity, constant cells, >64-row warning), table/cursor misuse |
+| `TypeAnalysisVisitor`      | Type inference, overload resolution, assignments, table cell types, key uniqueness / key width, lookup arity and key types |
 
 All visitors collect `FileError` instances for easy aggregation and reporting.
+Table key uniqueness is checked at analysis time (not indexing) because cells
+may name `^` constants from files indexed later — run every file's `IndexVisitor`
+before any analysis pass, as the LSP and `TestCompilation` do.
 
 ---
 

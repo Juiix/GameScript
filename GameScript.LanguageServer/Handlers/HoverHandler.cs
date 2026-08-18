@@ -41,7 +41,34 @@ internal sealed class HoverHandler(
 
 		var localIndex = rootData.GetLocalIndex(request.Position.Line, request.Position.Character);
 		var symbols = _projects.GetProject(filePath).Symbols;
+
+		// table columns resolve against their table, not the symbol tables
+		if (astNode.IsColumnIdentifier())
+		{
+			var (table, column) = rootData.ResolveColumn(astNode, parent, localIndex, symbols);
+			return column != null && table != null ? CreateColumnHover(astNode, table, column) : null;
+		}
+
 		return GetHover(astNode, parent, localIndex, symbols);
+	}
+
+	private static Hover CreateColumnHover(AstNode node, SymbolInfo table, TableColumnInfo column)
+	{
+		var builder = new StringBuilder();
+		builder.AppendLine("```gamescript");
+		builder.AppendLine(column.ColumnSignature());
+		builder.AppendLine("```");
+		builder.AppendLine();
+		builder.AppendLine($"Column of `table {table.Name}`");
+		return new Hover
+		{
+			Contents = new MarkedStringsOrMarkupContent(new MarkupContent
+			{
+				Kind = MarkupKind.Markdown,
+				Value = builder.ToString()
+			}),
+			Range = node.FileRange.ConvertRange()
+		};
 	}
 
 	public HoverRegistrationOptions GetRegistrationOptions(HoverCapability capability, ClientCapabilities clientCapabilities)
@@ -57,13 +84,31 @@ internal sealed class HoverHandler(
 		return astNode switch
 		{
 			MethodDefinitionNode methodDefinitionNode => CreateMethodHover(methodDefinitionNode.SymbolName, symbols),
+			TableDefinitionNode tableDefinitionNode => CreateTableHover(tableDefinitionNode.Name.Name, symbols),
 			IdentifierNode identifierNode => GetHover(identifierNode.Type, identifierNode.Name, localIndex, symbols),
 			IdentifierDeclarationNode { Type: IdentifierType.EngineOp } engineOp
 				when parent is MethodDefinitionNode boundMethod => CreateEngineOpHover(engineOp, boundMethod),
-			IdentifierDeclarationNode identifierDeclarationNode => parent is MethodDefinitionNode parentMethod
-						? CreateMethodHover(parentMethod.SymbolName, symbols)
-						: GetHover(identifierDeclarationNode.Type, identifierDeclarationNode.Name, localIndex, symbols),
+			IdentifierDeclarationNode identifierDeclarationNode => parent switch
+			{
+				MethodDefinitionNode parentMethod => CreateMethodHover(parentMethod.SymbolName, symbols),
+				TableDefinitionNode parentTable => CreateTableHover(parentTable.Name.Name, symbols),
+				_ => GetHover(identifierDeclarationNode.Type, identifierDeclarationNode.Name, localIndex, symbols),
+			},
 			_ => null
+		};
+	}
+
+	private static Hover? CreateTableHover(string tableName, ISymbolIndex symbols)
+	{
+		var symbol = TableAccess.GetTable(symbols, tableName);
+		if (symbol == null)
+			return null;
+
+		var md = CreateFromSymbol(symbol);
+		return new Hover
+		{
+			Contents = new MarkedStringsOrMarkupContent(md),
+			Range = symbol.FileRange.ConvertRange()
 		};
 	}
 
@@ -84,7 +129,11 @@ internal sealed class HoverHandler(
 
 	private static Hover? GetHover(IdentifierType identifierType, string name, LocalIndex? localIndex, ISymbolIndex symbols)
 	{
-		if ((identifierType & IdentifierType.Method) != IdentifierType.Unknown)
+		if (identifierType == IdentifierType.Table)
+		{
+			return CreateTableHover(name, symbols);
+		}
+		else if ((identifierType & IdentifierType.Method) != IdentifierType.Unknown)
 		{
 			return CreateMethodHover(name, symbols);
 		}

@@ -19,6 +19,9 @@
 		Comment,
 		Colon,
 		Error,
-		Range
+		Range,
+		OpenBracket,
+		CloseBracket,
+		Dot
 	}
 }

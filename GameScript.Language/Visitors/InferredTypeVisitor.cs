@@ -138,5 +138,46 @@ namespace GameScript.Language.Visitors
 		{
 			node.Operand.Accept(this);
 		}
+
+		// A keyed lookup yields a row, never a value.
+		public override void Visit(IndexExpressionNode node)
+		{
+			InferredType = null;
+		}
+
+		// t.count → int; t.has(...) → bool; t.at(i) → row (null); row.col → the column's type.
+		public override void Visit(MemberExpressionNode node)
+		{
+			if (node.IsCount)
+			{
+				InferredType = _context.Types.GetType(TypeKind.Int);
+				return;
+			}
+			if (node.IsHas)
+			{
+				InferredType = _context.Types.GetType(TypeKind.Bool);
+				return;
+			}
+			if (node.IsAt)
+			{
+				InferredType = null;
+				return;
+			}
+
+			InferredType = null;
+			if (!TableAccess.IsRowTarget(node.Target, LocalIndex))
+				return;
+			var table = TableAccess.ResolveTable(node.Target, LocalIndex, _context.Symbols);
+			if (table?.Columns == null)
+				return;
+			foreach (var column in table.Columns)
+			{
+				if (column.Name == node.Member.Name)
+				{
+					InferredType = column.Type;
+					return;
+				}
+			}
+		}
 	}
 }

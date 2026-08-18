@@ -103,6 +103,12 @@ namespace GameScript.Language.Lexer
 					return new Token(TokenType.CloseParen, ")".AsSpan(), CurrentRange(pos));
 				case ',': _column++; return new Token(TokenType.Comma, ",".AsSpan(), CurrentRange(pos));
 				case ':': _column++; return new Token(TokenType.Colon, ":".AsSpan(), CurrentRange(pos));
+				// table lookups 't[k]' — brackets join lines exactly like parens
+				case '[': _column++; _parenDepth++; return new Token(TokenType.OpenBracket, "[".AsSpan(), CurrentRange(pos));
+				case ']':
+					_column++;
+					if (_parenDepth > 0) _parenDepth--;
+					return new Token(TokenType.CloseBracket, "]".AsSpan(), CurrentRange(pos));
 			}
 
 			/*──────────────────────────────────────────────────────────────
@@ -237,6 +243,20 @@ namespace GameScript.Language.Lexer
 				return new Token(TokenType.Range,
 								 _text.Slice(start, 2),
 								 CurrentRange(pos));
+			}
+
+			/*──────────────────────────────────────────────────────────────
+			 * 7a'. Member-access dot: a '.' glued to the preceding token
+			 *      (identifier char, ')' or ']') is a member operator —
+			 *      't.count', 't[k].col', 'r.col'. No lookahead on what
+			 *      follows, so a mid-typing 't.' still yields a Dot for
+			 *      parser recovery / completion. A '.' after whitespace or
+			 *      at line start stays a dot-prefixed command identifier.
+			 *──────────────────────────────────────────────────────────────*/
+			if (ch == '.' && _column > 0 && IsMemberAccessLead(_text[_column - 1]))
+			{
+				_column++;
+				return new Token(TokenType.Dot, ".".AsSpan(), CurrentRange(pos));
 			}
 
 			/*──────────────────────────────────────────────────────────────
@@ -412,6 +432,11 @@ namespace GameScript.Language.Lexer
 		private static bool IsVariableAccessor(char c)
 		{
 			return c == '^' || c == '@';
+		}
+
+		private static bool IsMemberAccessLead(char c)
+		{
+			return char.IsLetterOrDigit(c) || c == '_' || c == ')' || c == ']';
 		}
 
 		private bool HasLetterOrAccessorAfterDots(int pos)

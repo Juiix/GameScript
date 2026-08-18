@@ -6,6 +6,8 @@
 		String,
 		Bool,
 		Label,
-		Tuple = 100
+		Tuple = 100,
+		// the row cursor of a 'for r in table' loop — never a value; only 'r.col' is valid
+		TableRow = 101
 	}
 }

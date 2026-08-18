@@ -57,7 +57,7 @@ public class TokenizerTests
 	[Fact]
 	public void Keywords_Are_Keyword_Tokens()
 	{
-		foreach (var kw in new[] { "func", "label", "command", "return", "returns", "if", "else", "while", "break", "continue", "and", "or", "not", "trigger", "switch", "case", "default", "for", "in" })
+		foreach (var kw in new[] { "func", "label", "command", "return", "returns", "if", "else", "while", "break", "continue", "and", "or", "not", "trigger", "switch", "case", "default", "for", "in", "table" })
 		{
 			var tokens = LexNoLayout(kw);
 			Assert.Equal(TokenType.Keyword, tokens[0].Type);
@@ -212,5 +212,89 @@ public class TokenizerTests
 		Assert.Equal(new[] {
 			(TokenType.Range, ".."),
 			(TokenType.Identifier, "cmd") }, tokens);
+	}
+
+	// ---------------------------------------------------------------
+	// 2.4: constant tables — brackets and the member-access dot
+	// ---------------------------------------------------------------
+
+	[Fact]
+	public void Brackets_Are_Tokens()
+	{
+		var tokens = LexNoLayout("t[k, 2]");
+		Assert.Equal(new[] {
+			(TokenType.Identifier, "t"),
+			(TokenType.OpenBracket, "["),
+			(TokenType.Identifier, "k"),
+			(TokenType.Comma, ","),
+			(TokenType.Number, "2"),
+			(TokenType.CloseBracket, "]") }, tokens);
+	}
+
+	[Fact]
+	public void Glued_Dot_Is_Member_Access_Not_Command_Prefix()
+	{
+		// after an identifier char, ')' or ']' the dot is a member operator
+		Assert.Equal(new[] {
+			(TokenType.Identifier, "t"),
+			(TokenType.Dot, "."),
+			(TokenType.Identifier, "count") }, LexNoLayout("t.count"));
+		Assert.Equal(new[] {
+			(TokenType.Identifier, "t"),
+			(TokenType.OpenBracket, "["),
+			(TokenType.Identifier, "k"),
+			(TokenType.CloseBracket, "]"),
+			(TokenType.Dot, "."),
+			(TokenType.Identifier, "col") }, LexNoLayout("t[k].col"));
+		Assert.Equal(new[] {
+			(TokenType.Identifier, "t"),
+			(TokenType.Dot, "."),
+			(TokenType.Identifier, "at"),
+			(TokenType.OpenParen, "("),
+			(TokenType.Number, "1"),
+			(TokenType.CloseParen, ")"),
+			(TokenType.Dot, "."),
+			(TokenType.Identifier, "col") }, LexNoLayout("t.at(1).col"));
+	}
+
+	[Fact]
+	public void Dot_After_Whitespace_Or_At_Line_Start_Is_Still_A_Command_Prefix()
+	{
+		Assert.Equal(new[] { (TokenType.Identifier, ".cmd"), (TokenType.OpenParen, "("), (TokenType.CloseParen, ")") }, LexNoLayout(".cmd()"));
+		Assert.Equal(new[] { (TokenType.Identifier, "x"), (TokenType.Identifier, ".cmd") }, LexNoLayout("x .cmd"));
+		Assert.Equal(new[] { (TokenType.Identifier, "@ctx"), (TokenType.Identifier, ".@other") }, LexNoLayout("@ctx .@other"));
+	}
+
+	[Fact]
+	public void Range_Still_Wins_Over_Member_Dot()
+	{
+		Assert.Equal(new[] {
+			(TokenType.Number, "0"),
+			(TokenType.Range, ".."),
+			(TokenType.Identifier, "n") }, LexNoLayout("0..n"));
+	}
+
+	[Fact]
+	public void Trailing_Dot_Lexes_As_Dot_For_Completion()
+	{
+		Assert.Equal(new[] { (TokenType.Identifier, "t"), (TokenType.Dot, ".") }, LexNoLayout("t."));
+	}
+
+	[Fact]
+	public void Brackets_Join_Lines_Like_Parens()
+	{
+		var tokens = Lex("t[a,\n    b].col\nnext");
+		Assert.DoesNotContain(tokens, t => t.Type == TokenType.Indent);
+		Assert.Equal(new[] {
+			(TokenType.Identifier, "t"),
+			(TokenType.OpenBracket, "["),
+			(TokenType.Identifier, "a"),
+			(TokenType.Comma, ","),
+			(TokenType.Identifier, "b"),
+			(TokenType.CloseBracket, "]"),
+			(TokenType.Dot, "."),
+			(TokenType.Identifier, "col"),
+			(TokenType.EndOfLine, "\n"),
+			(TokenType.Identifier, "next") }, tokens);
 	}
 }

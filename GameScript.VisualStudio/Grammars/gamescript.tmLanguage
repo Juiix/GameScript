@@ -22,7 +22,9 @@
     <key>patterns</key>
     <array>
       <dict><key>include</key><string>#comment</string></dict>
+      <dict><key>include</key><string>#table-declaration</string></dict>
       <dict><key>include</key><string>#method-declaration</string></dict>
+      <dict><key>include</key><string>#member-access</string></dict>
       <dict><key>include</key><string>#method-call</string></dict>
       <dict><key>include</key><string>#variable-declaration</string></dict>
       <dict><key>include</key><string>#keywords</string></dict>
@@ -106,6 +108,7 @@
                 <string>\}</string>
                 <key>patterns</key>
                 <array>
+                  <dict><key>include</key><string>#member-access</string></dict>
                   <dict><key>include</key><string>#method-call</string></dict>
                   <dict><key>include</key><string>#keywords</string></dict>
                   <dict><key>include</key><string>#boolean-literals</string></dict>
@@ -161,7 +164,7 @@
             <key>name</key>
             <string>keyword.declaration.gamescript</string>
             <key>match</key>
-            <string>\b(?:func|command|trigger)\b</string>
+            <string>\b(?:func|command|trigger|table)\b</string>
           </dict>
           <dict>
             <key>name</key>
@@ -259,6 +262,42 @@
         </array>
       </dict>
 
+      <!-- table declaration: table NAME([key] TYPE col, ...) — key is a contextual column modifier -->
+      <key>table-declaration</key>
+      <dict>
+        <key>patterns</key>
+        <array>
+          <dict>
+            <key>name</key>
+            <string>meta.table.declaration.gamescript</string>
+            <key>begin</key>
+            <string>^(\\s*)(table)\\s+([A-Za-z_][\\w]*)\\s*(?=\\(|$)</string>
+            <key>beginCaptures</key>
+            <dict>
+              <key>1</key>
+              <dict><key>name</key><string>punctuation.whitespace.leading.gamescript</string></dict>
+              <key>2</key>
+              <dict><key>name</key><string>keyword.declaration.gamescript</string></dict>
+              <key>3</key>
+              <dict><key>name</key><string>entity.name.type.table.gamescript</string></dict>
+            </dict>
+            <key>end</key>
+            <string>$</string>
+            <key>patterns</key>
+            <array>
+              <dict>
+                <key>name</key>
+                <string>storage.modifier.key.gamescript</string>
+                <key>match</key>
+                <string>\bkey\b(?=\s+(?:int|bool|string)\b)</string>
+              </dict>
+              <dict><key>include</key><string>#types</string></dict>
+              <dict><key>include</key><string>#variables</string></dict>
+            </array>
+          </dict>
+        </array>
+      </dict>
+
       <!-- variable declaration -->
       <key>variable-declaration</key>
       <dict>
@@ -275,6 +314,40 @@
               <dict><key>name</key><string>storage.type.gamescript</string></dict>
               <key>3</key>
               <dict><key>name</key><string>variable.other.declared.gamescript</string></dict>
+            </dict>
+          </dict>
+        </array>
+      </dict>
+
+      <!-- member access: table built-ins and columns after a glued dot -->
+      <key>member-access</key>
+      <dict>
+        <key>patterns</key>
+        <array>
+          <dict>
+            <key>comment</key>
+            <string>table built-ins after a glued dot: t.count / t.has(...) / t.at(...)</string>
+            <key>match</key>
+            <string>(?&lt;=[\\w\\)\\]])(\\.)(count|has|at)\\b</string>
+            <key>captures</key>
+            <dict>
+              <key>1</key>
+              <dict><key>name</key><string>punctuation.accessor.gamescript</string></dict>
+              <key>2</key>
+              <dict><key>name</key><string>support.function.table.gamescript</string></dict>
+            </dict>
+          </dict>
+          <dict>
+            <key>comment</key>
+            <string>table column after a glued dot: t[k].col / t.at(i).col / r.col</string>
+            <key>match</key>
+            <string>(?&lt;=[\\w\\)\\]])(\\.)([A-Za-z_][\\w]*)</string>
+            <key>captures</key>
+            <dict>
+              <key>1</key>
+              <dict><key>name</key><string>punctuation.accessor.gamescript</string></dict>
+              <key>2</key>
+              <dict><key>name</key><string>variable.other.member.gamescript</string></dict>
             </dict>
           </dict>
         </array>

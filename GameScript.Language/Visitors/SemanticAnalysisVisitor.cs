@@ -1,6 +1,7 @@
 ﻿using GameScript.Language.Ast;
 using GameScript.Language.File;
 using GameScript.Language.Index;
+using GameScript.Language.Symbols;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -13,6 +14,16 @@ namespace GameScript.Language.Visitors
 	{
 		private readonly VisitorContext _context = context;
 		private int _loopDepth = 0;
+
+		// Visitors have no parent pointers, so the nodes that legitimately appear
+		// as a table / row target ('t' in 't[k]', 'r' in 'r.col', 't[k]' in
+		// 't[k].col', 't' in 'for r in t') are recorded by their parent before the
+		// children are visited; any table / cursor / row-valued node seen outside
+		// this set is being misused as a value.
+		private readonly HashSet<AstNode> _tableTargets = [];
+
+		/// <summary>Row-count threshold above which a table warns (lookups are compare chains).</summary>
+		public const int LargeTableRowCount = 64;
 
 		public override void Visit(MethodDefinitionNode node)
 		{
@@ -83,17 +94,83 @@ namespace GameScript.Language.Visitors
 			}
 		}
 
-		// The shape whitelist shared by constant initializers, parameter defaults
-		// and case values: a literal, a negated number literal, or a '^' constant.
-		private static bool IsConstantExpression(ExpressionNode node)
+		// The shape whitelist shared by constant initializers, parameter defaults,
+		// case values and table cells: a literal, a negated number literal, or a '^' constant.
+		private static bool IsConstantExpression(ExpressionNode node) => ConstantExpressions.IsConstant(node);
+
+		// ---------------------------------------------------------------
+		// tables
+		// ---------------------------------------------------------------
+
+		public override void Visit(TableDefinitionNode node)
 		{
-			return node switch
+			var name = node.Name.Name;
+			var columns = node.Columns ?? [];
+
+			if (columns.Count == 0)
+				Error($"Table '{name}' must declare at least one column.", node.Name);
+
+			var seenColumns = new HashSet<string>();
+			foreach (var column in columns)
 			{
-				LiteralNode => true,
-				UnaryExpressionNode { Operator: UnaryOperator.Negate, Operand: LiteralNode } => true,
-				IdentifierNode { Type: IdentifierType.Constant } => true,
-				_ => false,
-			};
+				if (column.Type.Name is not ("int" or "string" or "bool"))
+					Error($"Table columns must be 'int', 'string' or 'bool'; column '{column.Name.Name}' is '{column.Type.Name}'.", column.Type);
+				if (MemberExpressionNode.IsReservedMemberName(column.Name.Name))
+					Error($"'{column.Name.Name}' is a reserved table member ('count', 'has', 'at'); pick another column name.", column.Name);
+				else if (!seenColumns.Add(column.Name.Name))
+					Error($"Duplicate column '{column.Name.Name}' in table '{name}'.", column.Name);
+			}
+
+			var rows = node.Rows ?? [];
+			if (rows.Count == 0)
+				Error($"Table '{name}' needs at least one row.", node.Name);
+			else if (rows.Count > LargeTableRowCount)
+				Warning($"Table '{name}' has {rows.Count} rows; lookups compile to compare chains, so consider a data asset for tables this large.", node.Name.FileRange);
+
+			for (int r = 0; r < rows.Count; r++)
+				RowShapeCheck(node, rows[r], r);
+			if (node.DefaultRow != null)
+				RowShapeCheck(node, node.DefaultRow, -1);
+
+			base.Visit(node);
+		}
+
+		private void RowShapeCheck(TableDefinitionNode table, TableRowNode row, int rowIndex)
+		{
+			var columnCount = table.Columns?.Count ?? 0;
+			var label = rowIndex < 0 ? "The default row" : $"Row {rowIndex + 1}";
+			if (row.Cells.Count != columnCount)
+				Error($"{label} of table '{table.Name.Name}' has {row.Cells.Count} cell(s) but the table has {columnCount} column(s).", row);
+
+			foreach (var cell in row.Cells)
+			{
+				if (!IsConstantExpression(cell))
+					Error("Table cells must be constants ('^name' or a literal).", cell);
+			}
+		}
+
+		public override void Visit(ForTableStatementNode node)
+		{
+			_tableTargets.Add(node.Table);
+			_loopDepth++;
+			base.Visit(node);
+			_loopDepth--;
+		}
+
+		public override void Visit(IndexExpressionNode node)
+		{
+			_tableTargets.Add(node.Target);
+			if (!_tableTargets.Contains(node))
+				Error("A table lookup yields a row; select a column: t[key].column", node);
+			base.Visit(node);
+		}
+
+		public override void Visit(MemberExpressionNode node)
+		{
+			_tableTargets.Add(node.Target);
+			if (node.IsAt && !_tableTargets.Contains(node))
+				Error("'at' yields a row; select a column: t.at(i).column", node);
+			base.Visit(node);
 		}
 
 		public override void Visit(ConstantDefinitionNode node)
@@ -228,6 +305,10 @@ namespace GameScript.Language.Visitors
 
 		public override void Visit(IdentifierNode node)
 		{
+			// column names resolve against their table (type analysis), not the symbol tables
+			if (node.Type == IdentifierType.Column)
+				return;
+
 			// check that the written mark ('^'/'@'/bare) agrees with the symbol's kind
 			var symbol = LocalIndex?.GetSymbol(node.Name) ??
 				_context.Symbols.GetSymbol(node.Name);
@@ -235,6 +316,18 @@ namespace GameScript.Language.Visitors
 			if (symbol == null)
 			{
 				Error($"'{node.Name}' is not declared.", node);
+			}
+			else if (node.Type == IdentifierType.Table)
+			{
+				if (!_tableTargets.Contains(node))
+					Error($"Table '{node.Name}' cannot be used as a value; look up a column with {node.Name}[key].column", node);
+				return;
+			}
+			else if (symbol.IdentifierType == IdentifierType.Local && TableRowType.IsRow(symbol.Type))
+			{
+				// falls through to the declared-before-use check below
+				if (!_tableTargets.Contains(node))
+					Error($"'{node.Name}' is a table row cursor; read a column with {node.Name}.column", node);
 			}
 			else if (symbol.IdentifierType != node.Type)
 			{
@@ -343,7 +436,8 @@ namespace GameScript.Language.Visitors
 					return false;
 
 				case ForStatementNode:
-					// the range may be empty, so the body may never run
+				case ForTableStatementNode:
+					// the range / table may be empty, so the body may never run
 					return false;
 
 				case SwitchStatementNode switchNode:

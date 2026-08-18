@@ -51,13 +51,18 @@ internal sealed class CompletionHandler(
 		}
 
 		var prefix = rootData.GetPrefix(text, request.Position, out var targetType);
+
+		// get local scope
+		var localIndex = rootData.GetLocalIndex(request.Position.Line, request.Position.Character);
+
+		// 't.', 't[k].', 't.at(i).', 'r.' — offer the table's members
+		if (targetType == IdentifierType.Column)
+			return HandleMemberCompletion(rootData, filePath, request.Position, prefix, localIndex);
+
 		// strip leading dots for matching — symbol names don't include the dot prefix
 		prefix = prefix.TrimStart('.');
 		var startsWithSymbols = new List<SymbolInfo>();
 		var containsSymbols = new List<SymbolInfo>();
-
-		// get local scope
-		var localIndex = rootData.GetLocalIndex(request.Position.Line, request.Position.Character);
 		if (localIndex != null)
 		{
 			foreach (var x in localIndex.Symbols)
@@ -87,6 +92,8 @@ internal sealed class CompletionHandler(
 				IdentifierType.Label or
 				IdentifierType.Command => CompletionItemKind.Function,
 
+				IdentifierType.Table => CompletionItemKind.Struct,
+
 				_ => default
 			},
 			Detail = x.Signature
@@ -108,6 +115,46 @@ internal sealed class CompletionHandler(
 			items = keywordItems.Concat(symbolItems);
 		}
 		return new CompletionList(items, false);
+	}
+
+	// Completion after a member-access dot: the columns of the table behind the
+	// target (a keyed lookup, '.at(i)', or a row cursor), or the built-ins
+	// ('count', 'has', 'at') when the target is the table itself.
+	private CompletionList HandleMemberCompletion(Parsing.RootFileData rootData, string filePath, Position position, string prefix, LocalIndex? localIndex)
+	{
+		// prefix is '.name' — the target ends just before the dot
+		var dotOffset = rootData.GetOffset(position.Line, position.Character) - prefix.Length;
+		var targetNode = dotOffset > 0 ? rootData.Root.FindNodeAtPosition(dotOffset - 1) : null;
+		if (targetNode is not ExpressionNode target)
+			return new CompletionList();
+
+		var symbols = _projects.GetProject(filePath).Symbols;
+		var table = TableAccess.ResolveTable(target, localIndex, symbols);
+		if (table == null)
+			return new CompletionList();
+
+		var typed = prefix.TrimStart('.');
+		var items = new List<CompletionItem>();
+
+		if (TableAccess.IsTableTarget(target))
+		{
+			AddMember(MemberExpressionNode.CountMember, $"int {table.Name}.count", CompletionItemKind.Property);
+			AddMember(MemberExpressionNode.HasMember, $"bool {table.Name}.has(key)", CompletionItemKind.Method);
+			AddMember(MemberExpressionNode.AtMember, $"{table.Name}.at(i)", CompletionItemKind.Method);
+		}
+		else if (TableAccess.IsRowTarget(target, localIndex) && table.Columns != null)
+		{
+			foreach (var column in table.Columns)
+				AddMember(column.Name, column.ColumnSignature(), CompletionItemKind.Field);
+		}
+
+		return new CompletionList(items, false);
+
+		void AddMember(string name, string detail, CompletionItemKind kind)
+		{
+			if (typed.Length == 0 || name.Contains(typed, StringComparison.OrdinalIgnoreCase))
+				items.Add(new CompletionItem { Label = name, Kind = kind, Detail = detail });
+		}
 	}
 
 	private CompletionList HandleObjectDefCompletion(string filePath, Position position)

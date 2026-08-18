@@ -1,6 +1,6 @@
 # GameScript — Language Reference
 
-> **Scope** This guide covers writing GameScript 2.1: files, types, methods, operators, control flow, and common patterns.
+> **Scope** This guide covers writing GameScript 2.4: files, types, methods, constant tables, operators, control flow, and common patterns.
 >
 > Embedding the compiler/VM in a C# game? See **[EMBEDDING.md](EMBEDDING.md)**.
 >
@@ -26,7 +26,7 @@
 
 | Extension  | Allowed content                | Purpose                                  |
 | ---------- | ------------------------------ | ---------------------------------------- |
-| `.gs`      | **Only** method declarations   | Funcs, commands, triggers                |
+| `.gs`      | Method and table declarations  | Funcs, commands, triggers, tables        |
 | `.const`   | **Only** constant declarations | Compile-time values (`^name`)            |
 | `.context` | **Only** context declarations  | Host-backed variable slots (`@name`)     |
 
@@ -97,9 +97,11 @@ Convention: `snake_case` for funcs/commands/triggers/constants/context vars, `ca
 
 ### Reserved words
 
-`func` `command` `trigger` `return` `returns` `if` `else` `while` `switch`
-`case` `default` `for` `in` `break` `continue` `and` `or` `not` `true` `false`
-— these cannot be used as identifiers.
+`func` `command` `trigger` `table` `return` `returns` `if` `else` `while`
+`switch` `case` `default` `for` `in` `break` `continue` `and` `or` `not`
+`true` `false` — these cannot be used as identifiers. (`key` is contextual:
+it only means "key column" inside a `table` header and is otherwise a normal
+name.)
 
 ### Literals
 
@@ -175,7 +177,135 @@ int a, b
 string first, last
 ```
 
-Locals may not shadow a func or command name — pick a different name.
+Locals may not shadow a func, command, or table name — pick a different name.
+
+### Constant tables (`table`)
+
+A `table` is a compile-time table of constants with keyed and positional
+lookup. It replaces data-in-code ladders — "tier → outputs" assignment blocks,
+menu-id `if` chains, `skill_name`/`skill_jingle` switches, desktop/mobile twin
+branches — with declared rows. There is **no runtime table**: every access
+compiles to the same compare-chain bytecode a `switch` produces, so tables are
+for the 4–10-row cases; the compiler warns above 64 rows.
+
+A table is a top-level declaration (anywhere a `func` may appear). The header
+names typed columns; the body is one row per line, indented, cells
+comma-separated:
+
+```gamescript
+// bar tier -> the anvil outputs, in display order
+table smith_tier(int bar, int sword, int helm, int armor)
+    ^item_bronze_bar, ^item_bronze_sword, ^item_bronze_helm, ^item_bronze_armor
+    ^item_iron_bar,   ^item_iron_sword,   ^item_iron_helm,   ^item_iron_armor
+    ^item_steel_bar,  ^item_steel_sword,  ^item_steel_helm,  ^item_steel_armor
+
+func tier_sword(int bar) returns int
+    return smith_tier[bar].sword          // keyed lookup on the first column
+```
+
+- Column types are `int`, `string`, or `bool`.
+- Cells are `^const` or `int`/`string`/`bool` literals — no expressions, no
+  variables. A cell's type must match its column; every row has the header's
+  arity; a table needs at least one row.
+- Table names share the func/command/trigger namespace and are visible
+  wherever funcs declared in the same compile root are visible.
+- The `//` comment above the declaration is the table's doc (hover text).
+
+**Keys.** With no modifier, the leading column(s) are the key. The compiler
+works out the table's *key width* — the smallest number of leading columns
+whose values are unique across the rows — so `smith_tier[bar]` keys on column
+0, while a table whose first column repeats keys on the leading pair:
+
+```gamescript
+table choice_ui(bool mobile, bool three, int menu, int title, int opt1, int opt2, int opt3)
+    false, false, ^menu_choice_2,   ^menu_choice_2_title,   ^menu_choice_2_opt_1,   ^menu_choice_2_opt_2,   0
+    false, true,  ^menu_choice_3,   ^menu_choice_3_title,   ^menu_choice_3_opt_1,   ^menu_choice_3_opt_2,   ^menu_choice_3_opt_3
+    true,  false, ^menu_choice_2_m, ^menu_choice_2_m_title, ^menu_choice_2_m_opt_1, ^menu_choice_2_m_opt_2, 0
+    true,  true,  ^menu_choice_3_m, ^menu_choice_3_m_title, ^menu_choice_3_m_opt_1, ^menu_choice_3_m_opt_2, ^menu_choice_3_m_opt_3
+
+int menu = choice_ui[m, three].menu       // compound key: leading columns, positionally
+```
+
+A positional lookup passes at least the key width and at most the column
+count; the arguments match the leading columns positionally, by type. Two
+identical rows are a compile error.
+
+Mark additional columns `key` to make them independently lookup-able with
+`t[name: k]`. A bare `[k]` still means the leading key; the compiler never
+infers the key from the argument's type. Each `key` column must be unique on
+its own; a lookup on a non-key column is a compile error.
+
+```gamescript
+table skill(key int id, key string name, int jingle)
+    ^skill_attack,  "Attack",  ^jingle_level_up_attack
+    ^skill_defense, "Defense", ^jingle_level_up_attack
+    ^skill_mining,  "Mining",  ^jingle_level_up_gather
+
+skill[s].name              // first key column (id)
+skill[id: s].name          // same, explicit
+skill[name: "Attack"].id   // reverse lookup on the 'key' name column
+skill[jingle: j].id        // compile error: jingle is not a key column
+```
+
+**Lookup forms.**
+
+| Form                                                | Type     | Meaning                                  |
+| --------------------------------------------------- | -------- | ---------------------------------------- |
+| `t[k].col` / `t[a, b].col` / `t[name: k].col`       | col type | keyed lookup                             |
+| `t.has(k)` / `t.has(a, b)` / `t.has(name: k)`       | `bool`   | key present                              |
+| `t.at(i).col`                                       | col type | positional row `i` (0-based)             |
+| `t.count`                                           | `int`    | row count                                |
+| `for r in t`                                        | —        | positional iteration; `r.col` reads a cell |
+
+- A missing key (or an out-of-range `at` index) yields the column's zero
+  value: `0`, `""`, `false`. An optional `default:` row (same syntax as
+  `switch`) overrides that per column:
+
+  ```gamescript
+  table death_msg(int i, string text)
+      0, "You have been slain!"
+      1, "You died."
+      default: 0, "You were defeated."
+  ```
+
+  The `default:` row is not a real row: it does not count toward `count`, is
+  not reachable via `at` or `has`, and its key cells are ignored (write `0`/`""`).
+- A bare `t[k]` or `t.at(i)` is a row, not a value — always select a column.
+  `count`, `has`, and `at` are reserved column names.
+- `for r in t` declares `r` as a row cursor: `r.col` is its only valid use;
+  `r` itself cannot be assigned, passed, or compared. Function-flat scoping and
+  the `break`/`continue` rules are those of `for … in a..b`; a later `for` may
+  reuse the cursor name only over the same table.
+- `.count`, and any lookup whose keys are all constants, fold to the cell value
+  at compile time — zero runtime cost. A constant key that matches no row is a
+  warning (unless the table has a `default:` row).
+- The key expressions are evaluated once per access. Inside `for r in t`, each
+  `r.col` read is its own compare chain on the hidden row index — the honest
+  cost of "no runtime tables".
+- An unset `string` local is *null*, not `""`, and never matches a `""` key.
+
+```gamescript
+// display-inventory slot -> lock label + bar-count label, desktop / mobile
+table smith_slot(int idx, int lv, int lv_m, int bc, int bc_m)
+    0, ^menu_smithing_lv_sword, ^menu_smithing_m_lv_sword, ^menu_smithing_bc_sword, ^menu_smithing_m_bc_sword
+    1, ^menu_smithing_lv_helm,  ^menu_smithing_m_lv_helm,  ^menu_smithing_bc_helm,  ^menu_smithing_m_bc_helm
+
+func set_smith_bar(int bar)
+    bool m = is_platform_mobile()
+    for s in smith_slot
+        int item = tier_output(bar, s.idx)
+        int lv = s.lv
+        int bc = s.bc
+        if m
+            lv = s.lv_m
+            bc = s.bc_m
+        mn_set_text(lv, level_lock_label(item))
+        mn_set_text_color(bc, bar_count_color(item))
+```
+
+Deliberately **not** included: column-by-index (`t[k].col(i)`), row values as
+first-class locals, mutation, or lookups on non-key columns. Those turn tables
+into arrays; if arrays are wanted, they will be their own feature.
 
 ---
 
@@ -412,6 +542,9 @@ for i in 0..inv_size(^inv_backpack)      // half-open: 0, 1, …, size-1
 Function-flat scoping is unchanged — the loop variable stays visible after the
 loop. As a special case, a later `for` in the same func may reuse the same
 variable name.
+
+`for r in TABLE` iterates the rows of a constant table positionally; `r.col`
+reads the current row. See [Constant tables](#constant-tables-table).
 
 `while` loops on a bare bool condition:
 

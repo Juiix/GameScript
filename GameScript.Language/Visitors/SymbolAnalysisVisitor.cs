@@ -99,12 +99,36 @@ namespace GameScript.Language.Visitors
 		{
 			foreach (var symbol in _context.Symbols.GetSymbols(node.SymbolName))
 			{
-				if (symbol.IsCallable())
+				if (symbol.IsCallable() || symbol.IsTable)
 				{
 					Error($"Trigger '{node.SymbolName}' conflicts with {symbol.IdentifierType} '{node.SymbolName}'. Triggers are never callable; rename one.", node.Name);
 					return;
 				}
 			}
+		}
+
+		// Tables share the flat global namespace with funcs/commands/triggers and
+		// are never callable, so any other symbol with the same name is a conflict.
+		public override void Visit(TableDefinitionNode node)
+		{
+			var name = node.Name.Name;
+			if (!InvalidSymbolName(name))
+			{
+				foreach (var symbol in _context.Symbols.GetSymbols(name))
+				{
+					if (symbol.FilePath.Equals(node.Name.FilePath) &&
+						symbol.FileRange == node.Name.FileRange)
+					{
+						continue;   // self
+					}
+					if (symbol.IsTable)
+						Error($"Table '{name}' is already defined in this context.", node.Name);
+					else
+						Error($"Table '{name}' conflicts with {symbol.IdentifierType} '{name}'. Tables share the func/command/trigger namespace; rename one.", node.Name);
+					break;
+				}
+			}
+			base.Visit(node);
 		}
 
 		private void CheckOverloadableSymbol(MethodDefinitionNode node)
@@ -142,6 +166,8 @@ namespace GameScript.Language.Visitors
 				{
 					if (other.IdentifierType == IdentifierType.TriggerDeclaration)
 						Error($"{node.Name.Type} '{symbolName}' conflicts with trigger '{symbolName}'. Triggers are never callable; rename one.", node.Name);
+					else if (other.IsTable)
+						Error($"{node.Name.Type} '{symbolName}' conflicts with table '{symbolName}'. Tables share the func/command/trigger namespace; rename one.", node.Name);
 					else
 						Error($"'{symbolName}' is already defined in this context.", node.Name);
 					return;
@@ -156,25 +182,51 @@ namespace GameScript.Language.Visitors
 
 		public override void Visit(ForStatementNode node)
 		{
-			var name = node.Variable.Name;
-			if (!InvalidSymbolName(name))
-			{
-				var existing = LocalIndex?.GetSymbol(name);
-				if (existing == null)
-				{
-					Error($"Something went wrong with '{name}'", node.Variable);
-				}
-				else if ((!existing.FilePath.Equals(node.Variable.FilePath) ||
-						  existing.FileRange != node.Variable.FileRange) &&
-						 !(LocalIndex?.IsLoopVariable(name) ?? false))
-				{
-					// Carve-out: a later 'for' may reuse a name only when the earlier
-					// declaration was itself a for-loop variable.
-					Error($"'{name}' is already defined in this context.", node.Variable);
-				}
-				CheckLocalCollision(name, node.Variable);
-			}
+			CheckLoopVariable(node.Variable, tableName: null);
 			base.Visit(node);
+		}
+
+		public override void Visit(ForTableStatementNode node)
+		{
+			CheckLoopVariable(node.Cursor, node.Table.Name);
+			base.Visit(node);
+		}
+
+		// A 'for' header declares its variable; a later 'for' in the same method may
+		// reuse the name only when the earlier declaration was itself a loop variable
+		// of the same kind — an int counter, or a row cursor of the same table.
+		private void CheckLoopVariable(IdentifierDeclarationNode variable, string? tableName)
+		{
+			var name = variable.Name;
+			if (InvalidSymbolName(name))
+				return;
+
+			var existing = LocalIndex?.GetSymbol(name);
+			if (existing == null)
+			{
+				Error($"Something went wrong with '{name}'", variable);
+			}
+			else if (!existing.FilePath.Equals(variable.FilePath) ||
+					 existing.FileRange != variable.FileRange)
+			{
+				if (!(LocalIndex?.IsLoopVariable(name) ?? false))
+				{
+					Error($"'{name}' is already defined in this context.", variable);
+				}
+				else
+				{
+					var existingTable = TableRowType.TryGetTableName(existing.Type);
+					if (existingTable != tableName)
+					{
+						Error(existingTable == null
+							? $"'{name}' is already an int loop variable; a row cursor cannot reuse it."
+							: tableName == null
+								? $"'{name}' is already a row cursor of '{existingTable}'; an int loop variable cannot reuse it."
+								: $"'{name}' is already a row cursor of '{existingTable}'; it cannot iterate '{tableName}'.", variable);
+					}
+				}
+			}
+			CheckLocalCollision(name, variable);
 		}
 
 		public override void Visit(VariableDefinitionNode node)
@@ -207,7 +259,7 @@ namespace GameScript.Language.Visitors
 		{
 			foreach (var symbol in _context.Symbols.GetSymbols(name))
 			{
-				if (symbol.IsCallable())
+				if (symbol.IsCallable() || symbol.IsTable)
 				{
 					Error($"Local '{name}' conflicts with {symbol.IdentifierType} '{name}'; rename the local.", node);
 					return;

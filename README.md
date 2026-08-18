@@ -26,6 +26,14 @@ func greet(string name, string suffix = "!")   // trailing params may default
 
 mn_button_1 login:submit              // trigger handler — UI event entry point
     greet("adventurer")               // final statement → tail transfer
+
+// constant tables (.gs) — rows of constants with keyed lookup, no runtime cost
+table skill(key int id, key string name, int jingle)
+    ^skill_attack, "Attack", ^jingle_melee
+    ^skill_mining, "Mining", ^jingle_gather
+
+func level_up(int s)
+    play(skill[s].jingle)             // t[key].col — compiles to a compare chain
 ```
 
 | Kind        | Keyword    | Returns? | Notes                                              |
@@ -34,12 +42,14 @@ mn_button_1 login:submit              // trigger handler — UI event entry poin
 | `command`   | `command`  | ✅        | Declares a host opcode; no body allowed            |
 | `trigger`   | `trigger`  | ❌        | Declares an event dispatch point                   |
 | handler     | *(kind)*   | ❌        | Event entry point; cannot be called from script    |
+| `table`     | `table`    | —        | Compile-time constant rows; `t[k].col`, `t.at(i)`, `t.count`, `for r in t` |
 
 | Symbol       | Mark   | Declared in   |
 | ------------ | ------ | ------------- |
 | Local var    | —      | `.gs`         |
 | Constant     | `^`    | `.const`      |
 | Context var  | `@`    | `.context`    |
+| Table        | —      | `.gs`         |
 
 **Learn more:**
 

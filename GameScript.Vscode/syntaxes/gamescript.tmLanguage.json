@@ -3,7 +3,9 @@
   "scopeName": "source.gamescript",
   "patterns": [
     { "include": "#comment" },
+    { "include": "#table-declaration" },
     { "include": "#method-declaration" },
+    { "include": "#member-access" },
     { "include": "#method-call" },
     { "include": "#variable-declaration" },
     { "include": "#keywords" },
@@ -41,6 +43,7 @@
               "end": "\\}",
               "endCaptures": { "0": { "name": "punctuation.definition.interpolation.end.gamescript" } },
               "patterns": [
+                { "include": "#member-access" },
                 { "include": "#method-call" },
                 { "include": "#keywords" },
                 { "include": "#boolean-literals" },
@@ -61,7 +64,7 @@
     "keywords": {
       "patterns": [
         { "name": "keyword.control.gamescript", "match": "\\b(?:if|else|return|while|switch|case|default|for|in|break|continue|and|or|not)\\b" },
-        { "name": "keyword.declaration.gamescript", "match": "\\b(?:func|command|trigger)\\b" },
+        { "name": "keyword.declaration.gamescript", "match": "\\b(?:func|command|trigger|table)\\b" },
         { "name": "invalid.deprecated.gamescript", "match": "\\blabel\\b" }
       ]
     },
@@ -104,6 +107,26 @@
         }
       ]
     },
+    "table-declaration": {
+      "patterns": [
+        {
+          "comment": "table NAME([key] TYPE col, ...) — 'key' is a contextual column modifier",
+          "name": "meta.table.declaration.gamescript",
+          "begin": "^(\\s*)(table)\\s+([A-Za-z_][\\w]*)\\s*(?=\\(|$)",
+          "beginCaptures": {
+            "1": { "name": "punctuation.whitespace.leading.gamescript" },
+            "2": { "name": "keyword.declaration.gamescript" },
+            "3": { "name": "entity.name.type.table.gamescript" }
+          },
+          "end": "$",
+          "patterns": [
+            { "name": "storage.modifier.key.gamescript", "match": "\\bkey\\b(?=\\s+(?:int|bool|string)\\b)" },
+            { "include": "#types" },
+            { "include": "#variables" }
+          ]
+        }
+      ]
+    },
     "variable-declaration": {
       "patterns": [
         {
@@ -112,6 +135,26 @@
           "captures": {
             "2": { "name": "storage.type.gamescript" },
             "3": { "name": "variable.other.declared.gamescript" }
+          }
+        }
+      ]
+    },
+    "member-access": {
+      "patterns": [
+        {
+          "comment": "table built-ins after a glued dot: t.count / t.has(...) / t.at(...)",
+          "match": "(?<=[\\w\\)\\]])(\\.)(count|has|at)\\b",
+          "captures": {
+            "1": { "name": "punctuation.accessor.gamescript" },
+            "2": { "name": "support.function.table.gamescript" }
+          }
+        },
+        {
+          "comment": "table column after a glued dot: t[k].col / t.at(i).col / r.col",
+          "match": "(?<=[\\w\\)\\]])(\\.)([A-Za-z_][\\w]*)",
+          "captures": {
+            "1": { "name": "punctuation.accessor.gamescript" },
+            "2": { "name": "variable.other.member.gamescript" }
           }
         }
       ]

@@ -28,7 +28,7 @@ Bring the full power of the **GameScript** language into Visual Studio 2022. The
 
 | Extension           | Content                    |
 | ------------------- | -------------------------- |
-| `.gs`               | Method definitions (funcs, commands, triggers, handlers) |
+| `.gs`               | Method definitions (funcs, commands, triggers, handlers) and constant tables |
 | `.const`            | Constant declarations      |
 | `.context`          | Context variable declarations |
 | `.varp` `.item` `.npc` `.menu` `.obj` `.tile` | Object Definition files (syntax highlighting only) |

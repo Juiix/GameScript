@@ -195,37 +195,269 @@ namespace GameScript.Language.Visitors
 
 		// Compile-time value of a case expression: literal, negated number literal,
 		// or a '^' constant's indexed literal value. Null when not extractable.
-		private object? ExtractConstantValue(ExpressionNode node)
-		{
-			switch (node)
-			{
-				case LiteralNode literal:
-					return ParseLiteralValue(literal);
-
-				case UnaryExpressionNode { Operator: UnaryOperator.Negate, Operand: LiteralNode operand }:
-					return ParseLiteralValue(operand) is int number ? -number : null;
-
-				case IdentifierNode { Type: IdentifierType.Constant } identifier:
-					return _context.Symbols.GetSymbol(identifier.Name)?.LiteralValue;
-
-				default:
-					return null;
-			}
-		}
-
-		private static object? ParseLiteralValue(LiteralNode literal)
-		{
-			return literal.Type switch
-			{
-				LiteralType.Number => LiteralNode.TryParseNumber(literal.Value, out var i) ? i : null,
-				LiteralType.Boolean => bool.TryParse(literal.Value, out var b) ? b : null,
-				LiteralType.String => literal.Value.Length >= 2 ? literal.Value.Substring(1, literal.Value.Length - 2) : null,
-				_ => null,
-			};
-		}
+		private object? ExtractConstantValue(ExpressionNode node) => ConstantExpressions.Evaluate(node, _context.Symbols);
 
 		private static string DisplayConstant(object value) =>
 			value is bool b ? (b ? "true" : "false") : value.ToString() ?? "?";
+
+		// ---------------------------------------------------------------
+		// tables
+		// ---------------------------------------------------------------
+
+		private readonly Dictionary<SymbolInfo, TableShape> _shapes = [];
+
+		private TableShape GetShape(SymbolInfo table)
+		{
+			if (!_shapes.TryGetValue(table, out var shape))
+			{
+				shape = TableShape.Resolve(table, _context.Symbols);
+				_shapes[table] = shape;
+			}
+			return shape;
+		}
+
+		public override void Visit(TableDefinitionNode node)
+		{
+			base.Visit(node);    // column TypeNodes ('Undefined type'), cell identifiers
+
+			// find this declaration's own symbol (a same-named table elsewhere is a
+			// separate diagnostic)
+			SymbolInfo? self = null;
+			foreach (var symbol in _context.Symbols.GetSymbols(node.Name.Name))
+			{
+				if (symbol.IsTable &&
+					symbol.FilePath.Equals(node.Name.FilePath) &&
+					symbol.FileRange == node.Name.FileRange)
+				{
+					self = symbol;
+					break;
+				}
+			}
+			if (self == null)
+				return;
+
+			var shape = GetShape(self);
+			var columns = node.Columns ?? [];
+			var rows = node.Rows ?? [];
+
+			// cell types
+			for (int r = 0; r < rows.Count; r++)
+				RowTypeCheck(node, rows[r], r, columns);
+			if (node.DefaultRow != null)
+				RowTypeCheck(node, node.DefaultRow, -1, columns);
+
+			// key uniqueness
+			if (shape.DuplicateRowIndex >= 0 && shape.DuplicateRowIndex < rows.Count)
+			{
+				Error($"Duplicate row: row {shape.DuplicateRowIndex + 1} of table '{node.Name.Name}' repeats an earlier row.", rows[shape.DuplicateRowIndex]);
+			}
+			foreach (var (column, row) in shape.DuplicateKeyRows)
+			{
+				if (row < rows.Count && column < rows[row].Cells.Count)
+				{
+					var value = ConstantExpressions.Display(shape.Rows[row][column]);
+					Error($"Duplicate key {value} in 'key' column '{columns[column].Name.Name}' of table '{node.Name.Name}'.", rows[row].Cells[column]);
+				}
+			}
+		}
+
+		private void RowTypeCheck(TableDefinitionNode table, TableRowNode row, int rowIndex, List<TableColumnNode> columns)
+		{
+			var label = rowIndex < 0 ? "the default row" : $"row {rowIndex + 1}";
+			for (int c = 0; c < row.Cells.Count && c < columns.Count; c++)
+			{
+				var columnType = _context.Types.GetType(columns[c].Type.Name);
+				var cellType = GetInferredType(row.Cells[c]);
+				if (columnType != null && cellType != null && !cellType.Equals(columnType))
+				{
+					Error($"Cell {c + 1} of {label} in table '{table.Name.Name}' is '{cellType}' but column '{columns[c].Name.Name}' is '{columnType}'.", row.Cells[c]);
+				}
+			}
+		}
+
+		public override void Visit(ForTableStatementNode node)
+		{
+			base.Visit(node);
+
+			if (node.Table.Type != IdentifierType.Table)
+			{
+				// unknown names are reported by the semantic pass
+				if (node.Table.Type != IdentifierType.Unknown)
+					Error($"'{node.Table.Name}' is not a table; 'for {node.Cursor.Name} in ...' iterates a table.", node.Table);
+			}
+		}
+
+		public override void Visit(IndexExpressionNode node)
+		{
+			base.Visit(node);
+
+			if (!TableAccess.IsTableTarget(node.Target))
+			{
+				if (node.Target is not IdentifierNode { Type: IdentifierType.Unknown })
+					Error(node.Target is IdentifierNode target
+						? $"'{target.Name}' is not a table and cannot be indexed."
+						: "Only a table can be indexed with '[ ]'.", node.Target);
+				return;
+			}
+
+			var table = TableAccess.ResolveTable(node.Target, LocalIndex, _context.Symbols);
+			if (table == null)
+				return;
+
+			CheckKeyArguments(GetShape(table), node.KeyColumn, node.Arguments, node);
+		}
+
+		public override void Visit(MemberExpressionNode node)
+		{
+			base.Visit(node);
+
+			var member = node.Member.Name;
+
+			if (node.IsBuiltin)
+			{
+				if (!TableAccess.IsTableTarget(node.Target))
+				{
+					if (node.Target is not IdentifierNode { Type: IdentifierType.Unknown })
+						Error($"'.{member}' is only valid on a table (t.{member}{(node.IsCount ? "" : "(...)")}).", node.Target);
+					return;
+				}
+
+				var table = TableAccess.ResolveTable(node.Target, LocalIndex, _context.Symbols);
+				if (table == null)
+					return;
+				var shape = GetShape(table);
+
+				if (node.IsCount)
+				{
+					if (node.Arguments != null)
+						Error($"'count' is a property; write {table.Name}.count without parentheses.", node);
+					if (node.KeyColumn != null)
+						Error("'count' takes no key.", node.KeyColumn);
+					return;
+				}
+
+				if (node.IsHas)
+				{
+					if (node.Arguments == null)
+						Error($"'has' takes the key(s) to test: {table.Name}.has(key)", node);
+					else
+						CheckKeyArguments(shape, node.KeyColumn, node.Arguments, node);
+					return;
+				}
+
+				// at
+				if (node.KeyColumn != null)
+					Error("'at' takes a row index, not a key column.", node.KeyColumn);
+				if (node.Arguments == null || node.Arguments.Count != 1)
+				{
+					Error($"'at' takes one row index: {table.Name}.at(i)", node);
+				}
+				else
+				{
+					var indexType = GetInferredType(node.Arguments[0]);
+					if (indexType != null && indexType.Kind != TypeKind.Int)
+						Error($"'at' takes an 'int' row index, not '{indexType}'.", node.Arguments[0]);
+				}
+				return;
+			}
+
+			// a column read: the target must be a row (lookup, at, or cursor)
+			if (!TableAccess.IsRowTarget(node.Target, LocalIndex))
+			{
+				if (TableAccess.IsTableTarget(node.Target))
+				{
+					var t = TableAccess.ResolveTable(node.Target, LocalIndex, _context.Symbols);
+					Error($"Select a row before a column: {t?.Name ?? "t"}[key].{member} or {t?.Name ?? "t"}.at(i).{member}", node.Member);
+				}
+				else if (node.Target is not IdentifierNode { Type: IdentifierType.Unknown })
+				{
+					Error("Member access ('.name') is only valid on a table or a table row.", node.Member);
+				}
+				return;
+			}
+
+			var rowTable = TableAccess.ResolveTable(node.Target, LocalIndex, _context.Symbols);
+			if (rowTable == null)
+				return;
+
+			if (GetShape(rowTable).IndexOfColumn(member) < 0)
+			{
+				Error($"Table '{rowTable.Name}' has no column '{member}'.", node.Member);
+				return;
+			}
+			if (node.Arguments != null)
+				Error($"Column '{member}' is a value, not a call; write .{member} without parentheses.", node);
+			if (node.KeyColumn != null)
+				Error("A column read takes no key.", node.KeyColumn);
+		}
+
+		// Validates the key(s) of 't[...]' / 't.has(...)': named or positional,
+		// arity against the key width, per-key type, and (for all-constant keys)
+		// warns when no row can match.
+		private void CheckKeyArguments(TableShape shape, IdentifierNode? keyColumn, List<ExpressionNode> args, AstNode site)
+		{
+			var tableName = shape.Table.Name;
+			var keyColumns = new List<int>();
+
+			if (keyColumn != null)
+			{
+				var column = shape.IndexOfColumn(keyColumn.Name);
+				if (column < 0)
+				{
+					Error($"Table '{tableName}' has no column '{keyColumn.Name}'.", keyColumn);
+					return;
+				}
+				if (!shape.IsLookupColumn(column))
+				{
+					Error($"'{keyColumn.Name}' is not a key column of table '{tableName}'; mark it 'key' in the table header to look it up.", keyColumn);
+					return;
+				}
+				if (args.Count != 1)
+				{
+					Error($"A named lookup takes exactly one key: {tableName}[{keyColumn.Name}: value]", site);
+					return;
+				}
+				keyColumns.Add(column);
+			}
+			else
+			{
+				if (args.Count == 0)
+					return;    // the parser already reported the empty '[ ]'
+				if (args.Count < shape.MinKeyArgs)
+				{
+					Error($"Lookup on '{tableName}' needs at least {shape.MinKeyArgs} key(s): its first {shape.MinKeyArgs} columns form the key.", site);
+					return;
+				}
+				if (args.Count > shape.Columns.Count)
+				{
+					Error($"Lookup on '{tableName}' passes {args.Count} key(s) but the table has only {shape.Columns.Count} column(s).", site);
+					return;
+				}
+				for (int i = 0; i < args.Count; i++)
+					keyColumns.Add(i);
+			}
+
+			var allConstant = true;
+			var values = new List<object?>();
+			for (int i = 0; i < keyColumns.Count; i++)
+			{
+				var column = shape.Columns[keyColumns[i]];
+				var argType = GetInferredType(args[i]);
+				if (argType != null && !argType.Equals(column.Type))
+					Error($"Key {i + 1} of '{tableName}' must be '{column.Type}' (column '{column.Name}'), not '{argType}'.", args[i]);
+
+				var value = ConstantExpressions.IsConstant(args[i]) ? ExtractConstantValue(args[i]) : null;
+				allConstant &= value != null;
+				values.Add(value);
+			}
+
+			if (allConstant && shape.IsFullyResolved && shape.DefaultRow == null &&
+				shape.FindRow(keyColumns, values) < 0)
+			{
+				var shown = string.Join(", ", values.Select(ConstantExpressions.Display));
+				Warning($"No row of '{tableName}' has key ({shown}); this lookup always yields the zero value.", site.FileRange);
+			}
+		}
 
 		public override void Visit(BinaryExpressionNode node)
 		{

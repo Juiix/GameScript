@@ -110,6 +110,9 @@ namespace GameScript.LanguageServer.Extensions
 				IdentifierType.TriggerDeclaration or
 				IdentifierType.Command => SymbolKind.Function,
 
+				IdentifierType.Table => SymbolKind.Struct,
+				IdentifierType.Column => SymbolKind.Field,
+
 				_ => default
 			};
 	}

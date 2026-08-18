@@ -23,7 +23,8 @@ namespace GameScript.Language
 			"case",
 			"default",
 			"for",
-			"in"
+			"in",
+			"table"
 		];
 
 		public static readonly IReadOnlyList<string> Bools = [

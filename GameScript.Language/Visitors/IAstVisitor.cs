@@ -21,12 +21,16 @@ namespace GameScript.Language.Visitors
 		void Visit(MethodDefinitionNode node);
 		void Visit(ConstantDefinitionNode node);
 		void Visit(ContextDefinitionNode node);
+		void Visit(TableDefinitionNode node);
+		void Visit(TableColumnNode node);
+		void Visit(TableRowNode node);
 
 		// Statement nodes
 		void Visit(IfStatementNode node);
 		void Visit(ElseIfStatementNode node);
 		void Visit(WhileStatementNode node);
 		void Visit(ForStatementNode node);
+		void Visit(ForTableStatementNode node);
 		void Visit(SwitchStatementNode node);
 		void Visit(SwitchCaseNode node);
 		void Visit(ParameterNode node);
@@ -46,6 +50,8 @@ namespace GameScript.Language.Visitors
 		void Visit(AssignmentExpressionNode node);
 		void Visit(OperatorNode node);
 		void Visit(CallExpressionNode node);
+		void Visit(IndexExpressionNode node);
+		void Visit(MemberExpressionNode node);
 		void Visit(DeclarationExpressionNode node);
 		void Visit(ParenthesizedExpressionNode node);
 		void Visit(UnparsableExpressionNode node);

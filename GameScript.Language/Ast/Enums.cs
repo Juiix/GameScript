@@ -70,6 +70,12 @@ namespace GameScript.Language.Ast
 		TriggerDeclaration = 1 << 9,
 		// the engine-op name of a command '= name' binding; not a symbol (never indexed or referenced)
 		EngineOp = 1 << 10,
+		// a compile-time constant table declaration ('table name(...)'); shares the
+		// func/command/trigger namespace but is never callable and never a value
+		Table = 1 << 11,
+		// a table column: the header declaration, a '.col' member, or a '[col: k]'
+		// key selector. Not a symbol — resolved against the owning table's columns.
+		Column = 1 << 12,
 
 		Variable = Local | Context | Constant,
 		Method = Func | Label | Command | Trigger | TriggerDeclaration,

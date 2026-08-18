@@ -591,4 +591,235 @@ public class ParserTests
 			""");
 		Assert.Contains(errors, e => e.Message.Contains("Expected a statement after ':'"));
 	}
+
+	// ---------------------------------------------------------------
+	// 2.4: constant tables
+	// ---------------------------------------------------------------
+
+	[Fact]
+	public void Parses_Table_Declaration_With_Keys_And_Default_Row()
+	{
+		var (root, errors) = ParseProgram("""
+			// skill id -> name and jingle
+			table skill(key int id, key string name, int jingle)
+			    ^skill_attack, "Attack", ^jingle_melee
+			    ^skill_mining, "Mining", ^jingle_gather
+			    default: 0, "?", 0
+
+			func main()
+			    return
+			""");
+		Assert.Empty(errors);
+		var table = Assert.Single(root.Tables!);
+		Assert.Equal("skill", table.Name.Name);
+		Assert.Equal(IdentifierType.Table, table.Name.Type);
+		Assert.Equal("skill id -> name and jingle", table.Name.Summary);
+
+		Assert.Equal(3, table.Columns!.Count);
+		Assert.True(table.Columns[0].IsKey);
+		Assert.Equal("int", table.Columns[0].Type.Name);
+		Assert.Equal("id", table.Columns[0].Name.Name);
+		Assert.Equal(IdentifierType.Column, table.Columns[0].Name.Type);
+		Assert.True(table.Columns[1].IsKey);
+		Assert.False(table.Columns[2].IsKey);
+
+		Assert.Equal(2, table.Rows!.Count);
+		Assert.Equal(3, table.Rows[0].Cells.Count);
+		Assert.NotNull(table.DefaultRow);
+		Assert.True(table.DefaultRow!.IsDefault);
+		Assert.Equal(3, table.DefaultRow.Cells.Count);
+
+		// declarations keep source order; Methods still lists just the methods
+		Assert.Equal(2, root.Declarations!.Count);
+		Assert.IsType<TableDefinitionNode>(root.Declarations[0]);
+		Assert.Single(root.Methods!);
+	}
+
+	[Fact]
+	public void Table_Column_Named_Key_Without_Modifier()
+	{
+		// 'key' is contextual: 'int key' is a plain column named key
+		var (root, errors) = ParseProgram("""
+			table t(int key, string value)
+			    1, "a"
+			""");
+		Assert.Empty(errors);
+		var table = Assert.Single(root.Tables!);
+		Assert.False(table.Columns![0].IsKey);
+		Assert.Equal("key", table.Columns[0].Name.Name);
+	}
+
+	[Fact]
+	public void Table_Header_May_Wrap_Inside_Parens()
+	{
+		var (root, errors) = ParseProgram("""
+			table t(int a,
+			        int b)
+			    1, 2
+			""");
+		Assert.Empty(errors);
+		Assert.Equal(2, Assert.Single(root.Tables!).Columns!.Count);
+	}
+
+	[Fact]
+	public void Table_Without_Rows_Is_An_Error()
+	{
+		var (_, errors) = ParseProgram("""
+			table t(int a)
+
+			func main()
+			    return
+			""");
+		Assert.Contains(errors, e => e.Message.Contains("A table requires at least one row"));
+	}
+
+	[Fact]
+	public void Table_Default_Row_Must_Be_Last_And_Unique()
+	{
+		var (_, errors) = ParseProgram("""
+			table t(int a)
+			    default: 0
+			    1
+			    default: 2
+			""");
+		Assert.Contains(errors, e => e.Message.Contains("'default' must be the last row"));
+		Assert.Contains(errors, e => e.Message.Contains("Only one 'default' row"));
+	}
+
+	[Fact]
+	public void Table_Ragged_Row_Parses_For_Analysis()
+	{
+		// arity is a semantic error, not a parse error
+		var (root, errors) = ParseProgram("""
+			table t(int a, int b)
+			    1, 2
+			    3
+			""");
+		Assert.Empty(errors);
+		Assert.Equal(1, Assert.Single(root.Tables!).Rows![1].Cells.Count);
+	}
+
+	[Fact]
+	public void Parses_Table_Lookup_Forms()
+	{
+		var (root, errors) = ParseProgram("""
+			func main(int k, string n, bool m)
+			    int a = t[k].col
+			    int b = t[m, k].col
+			    int c = t[name: n].col
+			    bool d = t.has(k)
+			    bool e = t.has(name: n)
+			    int f = t.at(2).col
+			    int g = t.count
+			""");
+		Assert.Empty(errors);
+		var stmts = root.Methods![0].Body!.Statements!;
+
+		var a = Assert.IsType<MemberExpressionNode>(Assert.IsType<VariableDefinitionNode>(stmts[0]).Vars[0].Initializer);
+		Assert.Equal("col", a.Member.Name);
+		Assert.Equal(IdentifierType.Column, a.Member.Type);
+		Assert.Null(a.Arguments);
+		var aIndex = Assert.IsType<IndexExpressionNode>(a.Target);
+		Assert.Single(aIndex.Arguments);
+		Assert.Null(aIndex.KeyColumn);
+		Assert.Equal("t", Assert.IsType<IdentifierNode>(aIndex.Target).Name);
+
+		var b = Assert.IsType<MemberExpressionNode>(Assert.IsType<VariableDefinitionNode>(stmts[1]).Vars[0].Initializer);
+		Assert.Equal(2, Assert.IsType<IndexExpressionNode>(b.Target).Arguments.Count);
+
+		var c = Assert.IsType<MemberExpressionNode>(Assert.IsType<VariableDefinitionNode>(stmts[2]).Vars[0].Initializer);
+		var cIndex = Assert.IsType<IndexExpressionNode>(c.Target);
+		Assert.Equal("name", cIndex.KeyColumn!.Name);
+		Assert.Single(cIndex.Arguments);
+
+		var d = Assert.IsType<MemberExpressionNode>(Assert.IsType<VariableDefinitionNode>(stmts[3]).Vars[0].Initializer);
+		Assert.True(d.IsHas);
+		Assert.Single(d.Arguments!);
+		Assert.Null(d.KeyColumn);
+
+		var e = Assert.IsType<MemberExpressionNode>(Assert.IsType<VariableDefinitionNode>(stmts[4]).Vars[0].Initializer);
+		Assert.True(e.IsHas);
+		Assert.Equal("name", e.KeyColumn!.Name);
+
+		var f = Assert.IsType<MemberExpressionNode>(Assert.IsType<VariableDefinitionNode>(stmts[5]).Vars[0].Initializer);
+		Assert.Equal("col", f.Member.Name);
+		var at = Assert.IsType<MemberExpressionNode>(f.Target);
+		Assert.True(at.IsAt);
+		Assert.Single(at.Arguments!);
+
+		var g = Assert.IsType<MemberExpressionNode>(Assert.IsType<VariableDefinitionNode>(stmts[6]).Vars[0].Initializer);
+		Assert.True(g.IsCount);
+		Assert.Null(g.Arguments);
+	}
+
+	[Fact]
+	public void Parses_For_In_Table()
+	{
+		var (root, errors) = ParseProgram("""
+			func main()
+			    for r in smith_slot
+			        print(r.lv)
+			""");
+		Assert.Empty(errors);
+		var loop = Assert.IsType<ForTableStatementNode>(root.Methods![0].Body!.Statements![0]);
+		Assert.Equal("r", loop.Cursor.Name);
+		Assert.Equal(IdentifierType.Local, loop.Cursor.Type);
+		Assert.Equal("smith_slot", loop.Table.Name);
+		Assert.NotNull(loop.Body);
+	}
+
+	[Fact]
+	public void For_Range_Still_Parses_As_Range()
+	{
+		var (root, errors) = ParseProgram("""
+			func main(int n)
+			    for i in n..10
+			        return
+			""");
+		Assert.Empty(errors);
+		Assert.IsType<ForStatementNode>(root.Methods![0].Body!.Statements![0]);
+	}
+
+	[Fact]
+	public void Missing_Close_Bracket_Is_An_Error()
+	{
+		var (_, errors) = ParseProgram("""
+			func main(int k)
+			    int a = t[k.col
+			""");
+		Assert.Contains(errors, e => e.Message.Contains("Expected ']'"));
+	}
+
+	[Fact]
+	public void Empty_Index_Is_An_Error()
+	{
+		var (_, errors) = ParseProgram("""
+			func main()
+			    int a = t[].col
+			""");
+		Assert.Contains(errors, e => e.Message.Contains("Expected a key inside '[ ]'"));
+	}
+
+	[Fact]
+	public void Trailing_Dot_Recovers_With_A_Member_Node()
+	{
+		var (root, errors) = ParseProgram("""
+			func main()
+			    int a = t.
+			""");
+		Assert.Contains(errors, e => e.Message.Contains("Expected a column name after '.'"));
+		var init = Assert.IsType<VariableDefinitionNode>(root.Methods![0].Body!.Statements![0]).Vars[0].Initializer;
+		Assert.IsType<MemberExpressionNode>(init);
+	}
+
+	[Fact]
+	public void Dot_Command_After_Space_Is_Unchanged()
+	{
+		// 'x .cmd' is still two tokens: a name and a dot-prefixed command
+		var (_, errors) = ParseProgram("""
+			func main()
+			    .cmd()
+			""");
+		Assert.Empty(errors);
+	}
 }

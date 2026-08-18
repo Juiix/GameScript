@@ -647,4 +647,360 @@ public class AnalysisTests
 			""");
 		Assert.Contains(errors, e => e.Contains("already defined"));
 	}
+
+	// ---------------------------------------------------------------
+	// 2.4: constant tables
+	// ---------------------------------------------------------------
+
+	private const string SkillsConst = """
+		int ^skill_attack = 0
+		int ^skill_mining = 2
+		int ^jingle_melee = 100
+		""";
+
+	private const string SkillTable = """
+		table skill(key int id, key string name, int jingle)
+		    ^skill_attack, "Attack", ^jingle_melee
+		    ^skill_mining, "Mining", ^jingle_melee
+
+		""";
+
+	[Fact]
+	public void Negative_Constants_Are_Distinct_Compile_Time_Values()
+	{
+		// previously any non-literal initializer indexed as a boxed Value.Null, so
+		// two negative constants compared equal in duplicate-case / key checks
+		var errors = ErrorsFor("""
+			table t(key int a, string b)
+			    ^neg_one, "x"
+			    ^neg_two, "y"
+
+			func main(int x)
+			    switch x
+			        case ^neg_one: return
+			        case ^neg_two: return
+			""",
+			("n.const", "int ^neg_one = -1\nint ^neg_two = -2"));
+		Assert.Empty(errors);
+	}
+
+	[Fact]
+	public void Valid_Table_Script_Has_No_Errors()
+	{
+		var errors = ErrorsFor(SkillTable + """
+			func main(int s, string n)
+			    print(skill[s].name)
+			    print(skill[name: n].name)
+			    print(skill[id: s].name)
+			    if skill.has(s): print("y")
+			    print(skill.at(skill.count - 1).name)
+			    for r in skill
+			        print(r.name + int_to_str(r.jingle))
+			""",
+			("skills.const", SkillsConst));
+		Assert.Empty(errors);
+	}
+
+	[Fact]
+	public void Table_Column_Type_Must_Be_Scalar()
+	{
+		var errors = ErrorsFor("""
+			table t(func a, int b)
+			    main, 1
+
+			func main()
+			    return
+			""");
+		Assert.Contains(errors, e => e.Contains("Table columns must be 'int', 'string' or 'bool'"));
+	}
+
+	[Fact]
+	public void Table_Reserved_And_Duplicate_Column_Names_Are_Reported()
+	{
+		var errors = ErrorsFor("""
+			table t(int count, int a, int a)
+			    1, 2, 3
+			""");
+		Assert.Contains(errors, e => e.Contains("'count' is a reserved table member"));
+		Assert.Contains(errors, e => e.Contains("Duplicate column 'a'"));
+	}
+
+	[Fact]
+	public void Table_Ragged_Row_Is_Reported()
+	{
+		var errors = ErrorsFor("""
+			table t(int a, int b)
+			    1, 2
+			    3
+			    default: 0
+			""");
+		Assert.Contains(errors, e => e.Contains("Row 2 of table 't' has 1 cell(s) but the table has 2 column(s)"));
+		Assert.Contains(errors, e => e.Contains("The default row of table 't' has 1 cell(s)"));
+	}
+
+	[Fact]
+	public void Table_Cells_Must_Be_Constants_Of_The_Column_Type()
+	{
+		var errors = ErrorsFor("""
+			table t(int a, string b)
+			    1 + 1, "x"
+			    2, 3
+			""");
+		Assert.Contains(errors, e => e.Contains("Table cells must be constants"));
+		Assert.Contains(errors, e => e.Contains("Cell 2 of row 2 in table 't' is 'int' but column 'b' is 'string'"));
+	}
+
+	[Fact]
+	public void Table_Duplicate_Key_Column_Value_Is_Reported()
+	{
+		var errors = ErrorsFor("""
+			table t(key int a, key string b)
+			    ^skill_attack, "x"
+			    0, "y"
+			""",
+			("skills.const", SkillsConst));
+		Assert.Contains(errors, e => e.Contains("Duplicate key 0 in 'key' column 'a' of table 't'"));
+	}
+
+	[Fact]
+	public void Table_Duplicate_Row_Is_Reported()
+	{
+		var errors = ErrorsFor("""
+			table t(int a, string b)
+			    1, "x"
+			    2, "y"
+			    1, "x"
+			""");
+		Assert.Contains(errors, e => e.Contains("Duplicate row: row 3 of table 't' repeats an earlier row"));
+	}
+
+	[Fact]
+	public void Table_Lookup_Arity_Follows_The_Key_Width()
+	{
+		var errors = ErrorsFor("""
+			table choice_ui(bool mobile, bool three, int menu)
+			    false, false, 1
+			    false, true,  2
+			    true,  false, 3
+
+			func main(bool m, bool three)
+			    int a = choice_ui[m].menu
+			    int b = choice_ui[m, three, 1, 2].menu
+			    int c = choice_ui[m, three].menu
+			""");
+		Assert.Contains(errors, e => e.Contains("Lookup on 'choice_ui' needs at least 2 key(s)"));
+		Assert.Contains(errors, e => e.Contains("Lookup on 'choice_ui' passes 4 key(s) but the table has only 3 column(s)"));
+		Assert.Single(errors.Where(e => e.Contains("Lookup on 'choice_ui'")).Distinct().Where(e => e.Contains("needs")));
+	}
+
+	[Fact]
+	public void Table_Key_Type_Mismatch_Is_Reported()
+	{
+		var errors = ErrorsFor(SkillTable + """
+			func main(string s)
+			    print(skill[s].name)
+			""",
+			("skills.const", SkillsConst));
+		Assert.Contains(errors, e => e.Contains("Key 1 of 'skill' must be 'int' (column 'id'), not 'string'"));
+	}
+
+	[Fact]
+	public void Table_Named_Lookup_Requires_A_Key_Column()
+	{
+		var errors = ErrorsFor(SkillTable + """
+			func main(int j)
+			    print(skill[jingle: j].name)
+			    print(skill[bogus: j].name)
+			""",
+			("skills.const", SkillsConst));
+		Assert.Contains(errors, e => e.Contains("'jingle' is not a key column of table 'skill'"));
+		Assert.Contains(errors, e => e.Contains("Table 'skill' has no column 'bogus'"));
+	}
+
+	[Fact]
+	public void Table_Unknown_Column_And_Missing_Column_Are_Reported()
+	{
+		var errors = ErrorsFor(SkillTable + """
+			func main(int s)
+			    print(skill[s].nope)
+			    skill[s]
+			    skill.at(0)
+			""",
+			("skills.const", SkillsConst));
+		Assert.Contains(errors, e => e.Contains("Table 'skill' has no column 'nope'"));
+		Assert.Contains(errors, e => e.Contains("A table lookup yields a row; select a column"));
+		Assert.Contains(errors, e => e.Contains("'at' yields a row; select a column"));
+	}
+
+	[Fact]
+	public void Table_Builtin_Shapes_Are_Checked()
+	{
+		var errors = ErrorsFor(SkillTable + """
+			func main(int s, string n)
+			    int a = skill.count()
+			    bool b = skill.has
+			    string c = skill.at(n).name
+			    string d = skill.name
+			""",
+			("skills.const", SkillsConst));
+		Assert.Contains(errors, e => e.Contains("'count' is a property; write skill.count without parentheses"));
+		Assert.Contains(errors, e => e.Contains("'has' takes the key(s) to test"));
+		Assert.Contains(errors, e => e.Contains("'at' takes an 'int' row index, not 'string'"));
+		Assert.Contains(errors, e => e.Contains("Select a row before a column: skill[key].name"));
+	}
+
+	[Fact]
+	public void Table_Cannot_Be_Used_As_A_Value()
+	{
+		var errors = ErrorsFor(SkillTable + """
+			func main()
+			    print(skill)
+			""",
+			("skills.const", SkillsConst));
+		Assert.Contains(errors, e => e.Contains("Table 'skill' cannot be used as a value"));
+	}
+
+	[Fact]
+	public void Row_Cursor_Is_Only_Valid_As_A_Member_Target()
+	{
+		var errors = ErrorsFor(SkillTable + """
+			func main()
+			    for r in skill
+			        int x = r
+			        r = r
+			        r.name = "x"
+			""",
+			("skills.const", SkillsConst));
+		Assert.Contains(errors, e => e.Contains("'r' is a table row cursor; read a column with r.column"));
+		Assert.Contains(errors, e => e.Contains("Left-hand side of assignment must be an assignable variable"));
+	}
+
+	[Fact]
+	public void Row_Cursor_Reuse_Must_Match_The_Table()
+	{
+		var errors = ErrorsFor(SkillTable + """
+			table other(int a)
+			    1
+
+			func main()
+			    for r in skill
+			        print(r.name)
+			    for r in other
+			        print(int_to_str(r.a))
+			    for r in skill
+			        print(r.name)
+			    for i in 0..2
+			        return
+			    for i in skill
+			        return
+			""",
+			("skills.const", SkillsConst));
+		Assert.Contains(errors, e => e.Contains("'r' is already a row cursor of 'skill'; it cannot iterate 'other'"));
+		Assert.Contains(errors, e => e.Contains("'i' is already an int loop variable; a row cursor cannot reuse it"));
+	}
+
+	[Fact]
+	public void For_In_Non_Table_Is_Reported()
+	{
+		var errors = ErrorsFor("""
+			func helper()
+			    return
+
+			func main(int n)
+			    for r in n
+			        return
+			    for q in helper
+			        return
+			    for z in nothing
+			        return
+			""");
+		Assert.Contains(errors, e => e.Contains("'n' is not a table"));
+		Assert.Contains(errors, e => e.Contains("'helper' is not a table"));
+		Assert.Contains(errors, e => e.Contains("'nothing' is not declared"));
+	}
+
+	[Fact]
+	public void Non_Table_Cannot_Be_Indexed_Or_Dotted()
+	{
+		var errors = ErrorsFor("""
+			func main(int n)
+			    int a = n[1].x
+			    int b = n.count
+			    int c = main.x
+			""");
+		Assert.Contains(errors, e => e.Contains("'n' is not a table and cannot be indexed"));
+		Assert.Contains(errors, e => e.Contains("'.count' is only valid on a table"));
+		Assert.Contains(errors, e => e.Contains("Member access ('.name') is only valid on a table or a table row"));
+	}
+
+	[Fact]
+	public void Table_Name_Shares_The_Method_Namespace()
+	{
+		var errors = ErrorsFor("""
+			table print(int a)
+			    1
+
+			table dup(int a)
+			    1
+
+			func dup() returns int
+			    return 1
+
+			func main()
+			    int dup = 0
+			""");
+		Assert.Contains(errors, e => e.Contains("Table 'print' conflicts with Command 'print'"));
+		Assert.Contains(errors, e => e.Contains("conflicts with table 'dup'") || e.Contains("Table 'dup' conflicts with Func 'dup'"));
+		Assert.Contains(errors, e => e.Contains("Local 'dup' conflicts with Table 'dup'"));
+	}
+
+	[Fact]
+	public void Duplicate_Table_Across_Files_Is_Reported()
+	{
+		var errors = ErrorsFor("""
+			table t(int a)
+			    1
+			""",
+			("other.gs", "table t(int a)\n    2\n"));
+		Assert.Contains(errors, e => e.Contains("Table 't' is already defined in this context"));
+	}
+
+	[Fact]
+	public void Table_In_Another_File_With_Const_Cells_Resolves()
+	{
+		var errors = ErrorsFor("""
+			func main(int s)
+			    print(skill[s].name)
+			""",
+			("skills.const", SkillsConst),
+			("tables.gs", SkillTable));
+		Assert.Empty(errors);
+	}
+
+	[Fact]
+	public void Large_Table_Warns()
+	{
+		var rows = string.Join("\n", Enumerable.Range(0, 65).Select(i => $"    {i}, {i}"));
+		var errors = ErrorsFor("table big(int a, int b)\n" + rows + "\n");
+		Assert.Contains(errors, e => e.Contains("Table 'big' has 65 rows"));
+	}
+
+	[Fact]
+	public void Constant_Key_With_No_Row_Warns_Unless_Default_Row_Exists()
+	{
+		var errors = ErrorsFor(SkillTable + """
+			table dm(int i, string text)
+			    0, "a"
+			    default: 0, "z"
+
+			func main()
+			    print(skill[42].name)
+			    print(skill[name: "Nope"].name)
+			    print(dm[42].text)
+			""",
+			("skills.const", SkillsConst));
+		Assert.Contains(errors, e => e.Contains("No row of 'skill' has key (42)"));
+		Assert.Contains(errors, e => e.Contains("No row of 'skill' has key (\"Nope\")"));
+		Assert.DoesNotContain(errors, e => e.Contains("No row of 'dm'"));
+	}
 }

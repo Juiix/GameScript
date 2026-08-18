@@ -56,7 +56,7 @@ public ref struct AstParser
 	// Parses an entire program file.
 	public ProgramNode ParseProgram()
 	{
-		var defs = new List<MethodDefinitionNode>();
+		var defs = new List<AstNode>();
 
 		Advance(); // prime tokenizer
 		var start = _current.Start;
@@ -142,11 +142,14 @@ public ref struct AstParser
 								 new FileRange(start, _previous.End));
 	}
 
-	// Parses definition
-	private MethodDefinitionNode ParseDefinition()
+	// Parses a top-level definition: a method (func/command/trigger/handler) or a table.
+	private AstNode ParseDefinition()
 	{
 		if (CurrentIsKeyword("label"))
 			Error("'label' declarations are removed; declare a 'func' instead (calls tail-transfer automatically)", CurrentRange);
+
+		if (CurrentIsKeyword("table"))
+			return ParseTableDefinition();
 
 		var method = _current switch
 		{
@@ -286,6 +289,167 @@ public ref struct AstParser
 			bindingOp, bindingName);
 	}
 
+	// table NAME([key] TYPE col, ...)
+	//     cell, cell, ...            one data row per physical line
+	//     default: cell, cell, ...   optional; must be last
+	private TableDefinitionNode ParseTableDefinition()
+	{
+		var summary = GetSummary();
+		var start = _current.Start;
+
+		var kwTok = Expect(TokenType.Keyword, "Expected 'table' keyword");
+		var kwNode = new KeywordNode(kwTok.Value.ToString(), _filePath, PreviousRange);
+
+		var nameTok = Expect(TokenType.Identifier, "Expected a table name after 'table'", "?".AsSpan());
+		var nameNode = new IdentifierDeclarationNode(nameTok.Value.ToString(), IdentifierType.Table,
+													 summary, _filePath, PreviousRange);
+
+		/* ───── columns ───── */
+		List<TableColumnNode>? columns = null;
+		if (Match(TokenType.OpenParen))
+		{
+			columns = ParseTableColumns();
+			Expect(TokenType.CloseParen, "Expected ')' after the table columns", ")".AsSpan());
+		}
+		else
+		{
+			Error("Expected '(' and a column list after the table name", CurrentRange);
+		}
+
+		/* ───── rows: an indented block, one row per line ───── */
+		SkipEndOfLineTokens();
+		if (!Match(TokenType.Indent))
+		{
+			Error("A table requires at least one row", new FileRange(start, _previous.End));
+			return new TableDefinitionNode(kwNode, nameNode, columns, null, null, _filePath,
+										   new FileRange(start, _previous.End));
+		}
+		SkipEndOfLineTokens();
+
+		List<TableRowNode>? rows = null;
+		TableRowNode? defaultRow = null;
+		var defaultNotLastReported = false;
+		var end = _previous.End;
+
+		while (_current.Type is not (TokenType.Dedent or TokenType.EndOfFile))
+		{
+			if (_current.Type == TokenType.Indent)
+			{
+				// a row nested deeper than the block — skip it (and its dedent) whole
+				Error("Table rows must all share the same indentation", CurrentRange);
+				int depth = 0;
+				do
+				{
+					if (_current.Type == TokenType.Indent) depth++;
+					else if (_current.Type == TokenType.Dedent) depth--;
+					Advance();
+				}
+				while (depth > 0 && _current.Type != TokenType.EndOfFile);
+				SkipEndOfLineTokens();
+				continue;
+			}
+
+			var lineStart = _current.Start;
+			var row = ParseTableRow();
+			end = row.FileRange.End;
+
+			if (row.IsDefault)
+			{
+				if (defaultRow != null)
+					Error("Only one 'default' row is allowed", row.DefaultKeyword!.FileRange);
+				else
+					defaultRow = row;
+			}
+			else
+			{
+				if (defaultRow != null && !defaultNotLastReported)
+				{
+					Error("'default' must be the last row in a table", defaultRow.DefaultKeyword!.FileRange);
+					defaultNotLastReported = true;
+				}
+				(rows ??= []).Add(row);
+			}
+
+			// Only one row per physical line
+			if (_current.Type is not (TokenType.EndOfLine or TokenType.Dedent or TokenType.EndOfFile) &&
+				_current.Start.Line == lineStart.Line)
+			{
+				Error("Only one row per line is allowed.", _current.Range);
+				while (_current.Type is not (TokenType.EndOfLine or TokenType.Dedent or TokenType.EndOfFile))
+					Advance();
+			}
+
+			SkipEndOfLineTokens();
+		}
+
+		Match(TokenType.Dedent);     // consume the dedent, if present
+
+		return new TableDefinitionNode(kwNode, nameNode, columns, rows, defaultRow, _filePath,
+									   new FileRange(start, end));
+	}
+
+	// '[key] TYPE name' (',' '[key] TYPE name')* — 'key' is contextual: an identifier
+	// spelled 'key' that is immediately followed by another identifier (the type).
+	private List<TableColumnNode>? ParseTableColumns()
+	{
+		if (_current.Type == TokenType.CloseParen)
+			return null;
+
+		var columns = new List<TableColumnNode>();
+		do
+		{
+			var start = _current.Start;
+
+			KeywordNode? keyKw = null;
+			if (_current.Type == TokenType.Identifier &&
+				_current.Value.SequenceEqual("key".AsSpan()) &&
+				PeekIsIdentifier())
+			{
+				keyKw = new KeywordNode("key", _filePath, CurrentRange);
+				Advance();
+			}
+
+			var typeTok = ExpectTypeIdentifier("Expected a column type");
+			var typeNode = new TypeNode(typeTok.Value.ToString(), _filePath, PreviousRange);
+
+			var nameTok = Expect(TokenType.Identifier, "Expected a column name", "?".AsSpan());
+			var nameNode = new IdentifierDeclarationNode(nameTok.Value.ToString(), IdentifierType.Column,
+														 null, _filePath, PreviousRange);
+
+			columns.Add(new TableColumnNode(keyKw, typeNode, nameNode, _filePath,
+											new FileRange(start, _previous.End)));
+		}
+		while (Match(TokenType.Comma));
+
+		return columns;
+	}
+
+	// One table row: ['default' ':'] expr (',' expr)*
+	private TableRowNode ParseTableRow()
+	{
+		var start = _current.Start;
+
+		KeywordNode? defaultKw = null;
+		if (CurrentIsKeyword("default"))
+		{
+			defaultKw = new KeywordNode(_current.Value.ToString(), _filePath, CurrentRange);
+			Advance();
+			Expect(TokenType.Colon, "Expected ':' after 'default'", ":".AsSpan());
+		}
+
+		var cells = new List<ExpressionNode>();
+		if (_current.Type is not (TokenType.EndOfLine or TokenType.Dedent or TokenType.EndOfFile))
+		{
+			do
+			{
+				cells.Add(ParseExpression());
+			}
+			while (Match(TokenType.Comma));
+		}
+
+		return new TableRowNode(defaultKw, cells, _filePath, new FileRange(start, _previous.End));
+	}
+
 	private ConstantDefinitionNode ParseConstantDefinition()
 	{
 		var summary = GetSummary();
@@ -420,7 +584,9 @@ public ref struct AstParser
 			new FileRange(start, _previous.End));
 	}
 
-	private ForStatementNode ParseForStatement()
+	// for VAR in START..END      — half-open int range (ForStatementNode)
+	// for CURSOR in TABLE       — positional table iteration (ForTableStatementNode)
+	private AstNode ParseForStatement()
 	{
 		var start = _current.Start;
 
@@ -442,8 +608,18 @@ public ref struct AstParser
 			Error("Expected 'in' after the loop variable", inTok.Range);
 		var inNode = new KeywordNode(inTok.Value.ToString(), _filePath, inTok.Range);
 
-		// START .. END (half-open range)
+		// START .. END (half-open range), or a bare table name
 		var startExpr = ParseExpression();
+
+		if (_current.Type != TokenType.Range &&
+			startExpr is IdentifierNode { Type: IdentifierType.Unknown, DotPrefix: 0 } tableIdent)
+		{
+			var tableBody = ParseBlock();
+			return new ForTableStatementNode(
+				kwNode, varNode, inNode, tableIdent, tableBody,
+				_filePath, new FileRange(start, _previous.End));
+		}
+
 		var rangeTok = Expect(TokenType.Range, "Expected '..' between the range start and end", "..".AsSpan());
 		var rangeNode = new OperatorNode(rangeTok.Value.ToString(), _filePath, rangeTok.Range);
 		var endExpr = ParseExpression();
@@ -990,25 +1166,114 @@ public ref struct AstParser
 		return ParsePostfixExpression();
 	}
 
-	// Parses postfix expressions
+	// Parses postfix expressions: x++ / x--, table lookups 't[k]', and member
+	// accesses '.col' / '.count' / '.has(...)' / '.at(...)'.
 	private ExpressionNode ParsePostfixExpression()
 	{
 		var start = _current.Start;
 		var expr = ParsePrimaryExpression();
 
-		// Chain any number of postfix ops (++, --, etc.)
-		while (_current.Type == TokenType.Operator &&
-			   TryParsePostfixOperator(_current, out var op))
+		while (true)
 		{
-			var opNode = new OperatorNode(_current.Value.ToString(), _filePath, CurrentRange);
-			Advance();   // consume the operator
+			if (_current.Type == TokenType.Operator &&
+				TryParsePostfixOperator(_current, out var op))
+			{
+				var opNode = new OperatorNode(_current.Value.ToString(), _filePath, CurrentRange);
+				Advance();   // consume the operator
 
-			expr = new PostfixExpressionNode(
-				expr, op, opNode, _filePath,
-				new FileRange(start, _previous.End));
+				expr = new PostfixExpressionNode(
+					expr, op, opNode, _filePath,
+					new FileRange(start, _previous.End));
+				continue;
+			}
+
+			if (_current.Type == TokenType.OpenBracket)
+			{
+				expr = ParseIndexExpression(expr, start);
+				continue;
+			}
+
+			if (_current.Type == TokenType.Dot)
+			{
+				expr = ParseMemberExpression(expr, start);
+				continue;
+			}
+
+			return expr;
+		}
+	}
+
+	// '[' (NAME ':')? expr (',' expr)* ']'
+	private IndexExpressionNode ParseIndexExpression(ExpressionNode target, FilePosition start)
+	{
+		Expect(TokenType.OpenBracket, "Expected '['");
+
+		IdentifierNode? keyColumn = null;
+		if (_current.Type == TokenType.Identifier && PeekIs(TokenType.Colon))
+		{
+			keyColumn = new IdentifierNode(_current.Value.ToString(), IdentifierType.Column, 0,
+										   _filePath, CurrentRange);
+			Advance();   // name
+			Advance();   // ':'
 		}
 
-		return expr;
+		var args = new List<ExpressionNode>();
+		if (_current.Type != TokenType.CloseBracket)
+		{
+			do
+			{
+				args.Add(ParseExpression());
+			}
+			while (Match(TokenType.Comma));
+		}
+		else
+		{
+			Error("Expected a key inside '[ ]'", CurrentRange);
+		}
+
+		Expect(TokenType.CloseBracket, "Expected ']' after the table key", "]".AsSpan());
+
+		return new IndexExpressionNode(target, keyColumn, args, _filePath,
+									   new FileRange(start, _previous.End));
+	}
+
+	// '.' NAME [ '(' args ')' ]
+	private MemberExpressionNode ParseMemberExpression(ExpressionNode target, FilePosition start)
+	{
+		Expect(TokenType.Dot, "Expected '.'");
+
+		var nameTok = Expect(TokenType.Identifier, "Expected a column name after '.'", "?".AsSpan());
+		var member = new IdentifierNode(nameTok.Value.ToString(), IdentifierType.Column, 0,
+										_filePath, nameTok.Range);
+
+		IdentifierNode? keyColumn = null;
+		List<ExpressionNode>? args = null;
+		if (Match(TokenType.OpenParen))
+		{
+			args = [];
+			if (!Match(TokenType.CloseParen))
+			{
+				// 't.has(name: k)' — a named key column, as in 't[name: k]'
+				if (_current.Type == TokenType.Identifier && PeekIs(TokenType.Colon))
+				{
+					keyColumn = new IdentifierNode(_current.Value.ToString(), IdentifierType.Column, 0,
+												   _filePath, CurrentRange);
+					Advance();   // name
+					Advance();   // ':'
+				}
+
+				do
+				{
+					args.Add(ParseExpression());
+				}
+				while (Match(TokenType.Comma));
+
+				Expect(TokenType.CloseParen, "Expected ')' after the arguments", ")".AsSpan());
+			}
+		}
+
+		return new MemberExpressionNode(target, member, keyColumn, args, _filePath,
+										new FileRange(start, _previous.End));
 	}
 
 	// Parses primary expressions: numbers, identifiers, parenthesized expressions, and function calls.
@@ -1443,11 +1708,16 @@ public ref struct AstParser
 	}
 
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
-	private bool PeekIsIdentifier()
+	private bool PeekIsIdentifier() => PeekIs(TokenType.Identifier);
+
+	// Peeks one raw token ahead (comments/errors are not filtered — the same
+	// limitation as every existing peek site).
+	[MethodImpl(MethodImplOptions.AggressiveInlining)]
+	private bool PeekIs(TokenType type)
 	{
 		if (_peek.Type != TokenType.None) throw new InvalidOperationException("Peek must be consumed before peeking again");
 		_peek = _tokenizer.NextToken();
-		return _peek.Type == TokenType.Identifier;
+		return _peek.Type == type;
 	}
 
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]

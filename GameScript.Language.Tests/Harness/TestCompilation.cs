@@ -88,9 +88,10 @@ public sealed class TestCompilation
 		var constants = roots.OfType<ConstantsNode>().SelectMany(x => x.Definitions ?? []);
 		var contexts = roots.OfType<ContextsNode>().SelectMany(x => x.Definitions ?? []);
 		var methods = roots.OfType<ProgramNode>().SelectMany(x => x.Methods ?? []);
+		var tables = roots.OfType<ProgramNode>().SelectMany(x => x.Tables ?? []);
 
 		var compiler = new BytecodeCompiler<TestOp>(ResolvedCalls);
-		return compiler.Compile(constants, contexts, methods);
+		return compiler.Compile(constants, contexts, methods, tables);
 	}
 
 	public static string FormatError(FileError error) =>

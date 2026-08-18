@@ -201,4 +201,110 @@ public class PositionLookupTests
 		Assert.Contains(references, r => r.FileRange.Start.Line == 9);
 		Assert.Equal(4, references.Count);
 	}
+
+	// ---------------------------------------------------------------
+	// 2.4: constant tables
+	// ---------------------------------------------------------------
+
+	private const string TableSource = """
+		// bar tier -> outputs
+		table smith_tier(key int bar, int sword, int helm)
+		    1, 2, 3
+		    4, 5, 6
+
+		func main(int bar)
+		    int s = smith_tier[bar].sword
+		    int h = smith_tier[bar: bar].helm
+		    for r in smith_tier
+		        int x = r.helm
+		    int n = smith_tier.count
+		""";
+
+	private static (AstNode Root, GlobalSymbolTable Symbols, System.Collections.Generic.Dictionary<MethodDefinitionNode, LocalIndex> Locals) SetupTables()
+	{
+		var symbols = new GlobalSymbolTable();
+		var types = new GlobalTypeIndex();
+		System.Collections.Generic.Dictionary<MethodDefinitionNode, LocalIndex> locals = [];
+
+		var parser = new AstParser("tables.gs", TableSource);
+		var root = parser.ParseProgram();
+		Assert.Empty(parser.Errors ?? []);
+		var fileIndex = new FileIndex();
+		var visitor = new IndexVisitor(fileIndex, new VisitorContext(types, symbols, "tables.gs"));
+		root.Accept(visitor);
+		symbols.AddFile("tables.gs", fileIndex.FileSymbols);
+		foreach (var (method, index) in visitor.LocalIndexes)
+			locals[method] = index;
+
+		// name resolution classifies the bare 'smith_tier' references as Table
+		root.Accept(new NameResolutionVisitor(locals, new VisitorContext(types, symbols, "tables.gs")));
+		return (root, symbols, locals);
+	}
+
+	[Theory]
+	[InlineData(6, 14, "smith_tier")]   // 't' in 't[bar].sword'
+	[InlineData(8, 14, "smith_tier")]   // 't' in 'for r in t'
+	[InlineData(10, 14, "smith_tier")]  // 't' in 't.count'
+	public void Definition_Lookup_Finds_Table_Under_Cursor(int line, int character, string expectedName)
+	{
+		var (root, symbols, _) = SetupTables();
+
+		var identifier = root.FindNodeAtPosition<IdentifierNode>(line, character);
+		Assert.NotNull(identifier);
+		Assert.Equal(expectedName, identifier!.Name);
+		Assert.Equal(IdentifierType.Table, identifier.Type);
+
+		var symbol = symbols.GetSymbol(identifier.Name);
+		Assert.NotNull(symbol);
+		Assert.True(symbol!.IsTable);
+		Assert.Equal("table smith_tier(key int bar, int sword, int helm)", symbol.Signature);
+		Assert.Equal("bar tier -> outputs", symbol.Summary);
+		Assert.Equal(3, symbol.Columns!.Count);
+		Assert.Equal(2, symbol.Rows!.Count);
+	}
+
+	[Theory]
+	[InlineData(6, 30, "sword")]   // '.sword' member of a keyed lookup
+	[InlineData(7, 25, "bar")]     // 'bar' key selector in '[bar: bar]'
+	[InlineData(9, 20, "helm")]    // 'r.helm' on a row cursor
+	public void Column_Under_Cursor_Resolves_To_The_Table_Column(int line, int character, string expectedColumn)
+	{
+		var (root, symbols, locals) = SetupTables();
+
+		// mirror DefinitionHandler / HoverHandler: a Column identifier resolves
+		// through its parent expression's target to the owning table symbol
+		var (node, parent) = root.FindNodeAndParentAtPosition(line, character);
+		var identifier = Assert.IsType<IdentifierNode>(node);
+		Assert.Equal(expectedColumn, identifier.Name);
+		Assert.Equal(IdentifierType.Column, identifier.Type);
+
+		var localIndex = locals.Values.FirstOrDefault(x => x.FileRange.Contains(line, character));
+		var target = parent switch
+		{
+			MemberExpressionNode m => m.Target,
+			IndexExpressionNode i => i.Target,
+			_ => null,
+		};
+		Assert.NotNull(target);
+		var table = Symbols.TableAccess.ResolveTable(target!, localIndex, symbols);
+		Assert.NotNull(table);
+		var column = table!.Columns!.Single(c => c.Name == expectedColumn);
+		Assert.Equal(1, column.Range.Start.Line);   // declared in the header line
+	}
+
+	[Fact]
+	public void Column_Identifiers_Are_Not_Recorded_As_References()
+	{
+		var (_, _, locals) = SetupTables();
+		var mainIndex = locals.Values.Single();
+
+		// the cursor 'r' is a local with the table's row type
+		var cursor = mainIndex.GetSymbol("r");
+		Assert.NotNull(cursor);
+		Assert.Equal("smith_tier", Symbols.TableRowType.TryGetTableName(cursor!.Type));
+
+		// '.sword' / '.helm' / 'bar:' never become references named like a symbol
+		Assert.Empty(mainIndex.GetReferences("sword"));
+		Assert.Empty(mainIndex.GetReferences("helm"));
+	}
 }

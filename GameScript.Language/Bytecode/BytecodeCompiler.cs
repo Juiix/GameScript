@@ -33,6 +33,11 @@ public sealed class BytecodeCompiler<TCommandOp> where TCommandOp : struct, Enum
 	private readonly Dictionary<Value, int> _constMap = [];
 	private readonly List<Value> _constPool = [];
 
+	// constant tables by name (compiled in step 2b), and the table each active
+	// 'for r in t' row cursor iterates (per method)
+	private readonly Dictionary<string, TableData> _tables = [];
+	private readonly Dictionary<string, TableData> _cursorTables = [];
+
 	private readonly List<int> _lineNumbers = [];
 	private readonly List<ushort> _ops = [];
 	private readonly List<int> _operands = [];
@@ -42,10 +47,26 @@ public sealed class BytecodeCompiler<TCommandOp> where TCommandOp : struct, Enum
 	private int _nextSlot;
 	private int _currentReturnCount;
 
+	/// <summary>Compiles content without constant tables (kept for existing hosts).</summary>
 	public BytecodeCompilerResult Compile(
 		IEnumerable<ConstantDefinitionNode> constants,
 		IEnumerable<ContextDefinitionNode> contexts,
 		IEnumerable<MethodDefinitionNode> methods)
+	{
+		return Compile(constants, contexts, methods, []);
+	}
+
+	/// <summary>
+	/// Compiles a whole content root. <paramref name="tables"/> are the 'table'
+	/// declarations of every program file (ProgramNode.Tables) — every table access
+	/// in a method body lowers to a compare chain over the table's rows, so a table
+	/// that is used but not passed here is a compile error.
+	/// </summary>
+	public BytecodeCompilerResult Compile(
+		IEnumerable<ConstantDefinitionNode> constants,
+		IEnumerable<ContextDefinitionNode> contexts,
+		IEnumerable<MethodDefinitionNode> methods,
+		IEnumerable<TableDefinitionNode> tables)
 	{
 		// Initialize data
 		_methods.Clear();
@@ -58,6 +79,8 @@ public sealed class BytecodeCompiler<TCommandOp> where TCommandOp : struct, Enum
 		_constPool.Clear();
 		_loopStack.Clear();
 		_lineNumbers.Clear();
+		_tables.Clear();
+		_cursorTables.Clear();
 
 		// 1) Index all methods (keyed by name + parameter signature so overloads coexist)
 		int index = 0;
@@ -75,6 +98,9 @@ public sealed class BytecodeCompiler<TCommandOp> where TCommandOp : struct, Enum
 
 		// 2) Compile constant init method
 		CompileConstants(constants);
+
+		// 2b) Resolve constant tables (cells may reference the constants above)
+		CompileTables(tables);
 
 		// 3) Compile context definitions
 		CompileContexts(contexts);
@@ -132,6 +158,68 @@ public sealed class BytecodeCompiler<TCommandOp> where TCommandOp : struct, Enum
 		}
 	}
 
+	// A resolved constant table: column names/types, data rows and the optional
+	// default row as Values. There is no runtime representation — accesses lower
+	// to compare chains over these cells at each site.
+	private sealed class TableData(string name, string[] columnNames, ValueType[] columnTypes, List<Value[]> rows, Value[]? defaultRow)
+	{
+		public string Name { get; } = name;
+		public string[] ColumnNames { get; } = columnNames;
+		public ValueType[] ColumnTypes { get; } = columnTypes;
+		public List<Value[]> Rows { get; } = rows;
+		public Value[]? DefaultRow { get; } = defaultRow;
+
+		public int IndexOfColumn(string column) => Array.IndexOf(ColumnNames, column);
+
+		/// <summary>The value a lookup yields when no row matches: the default row's cell, else the column type's zero.</summary>
+		public Value FallbackValue(int column) => DefaultRow != null
+			? DefaultRow[column]
+			: ColumnTypes[column] switch
+			{
+				ValueType.String => Value.FromString(string.Empty),
+				ValueType.Bool => Value.FromBool(false),
+				_ => Value.FromInt(0),
+			};
+	}
+
+	private void CompileTables(IEnumerable<TableDefinitionNode> tables)
+	{
+		foreach (var table in tables)
+		{
+			var columns = table.Columns ?? [];
+			var columnNames = new string[columns.Count];
+			var columnTypes = new ValueType[columns.Count];
+			for (int c = 0; c < columns.Count; c++)
+			{
+				columnNames[c] = columns[c].Name.Name;
+				columnTypes[c] = columns[c].Type.Name switch
+				{
+					"string" => ValueType.String,
+					"bool" => ValueType.Bool,
+					_ => ValueType.Int,
+				};
+			}
+
+			var rows = new List<Value[]>();
+			foreach (var row in table.Rows ?? [])
+				rows.Add(CompileRow(table, row, columns.Count));
+
+			var defaultRow = table.DefaultRow != null ? CompileRow(table, table.DefaultRow, columns.Count) : null;
+
+			_tables[table.Name.Name] = new TableData(table.Name.Name, columnNames, columnTypes, rows, defaultRow);
+		}
+	}
+
+	private Value[] CompileRow(TableDefinitionNode table, TableRowNode row, int columnCount)
+	{
+		if (row.Cells.Count != columnCount)
+			throw new InvalidOperationException($"Row of table '{table.Name.Name}' has {row.Cells.Count} cells; expected {columnCount}");
+		var values = new Value[columnCount];
+		for (int c = 0; c < columnCount; c++)
+			values[c] = EvaluateConstantExpression(row.Cells[c], $"Cell of table '{table.Name.Name}'");
+		return values;
+	}
+
 	private void CompileContexts(IEnumerable<ContextDefinitionNode> contexts)
 	{
 		// each context variable sets its own slot from the initializer
@@ -155,6 +243,7 @@ public sealed class BytecodeCompiler<TCommandOp> where TCommandOp : struct, Enum
 		_operands.Clear();
 		_lineNumbers.Clear();
 		_localSlots.Clear();
+		_cursorTables.Clear();
 
 		// 1) Parameter slots
 		var paramCount = methodNode.Parameters?.Count ?? 0;
@@ -264,7 +353,15 @@ public sealed class BytecodeCompiler<TCommandOp> where TCommandOp : struct, Enum
 					// regular expr: push result then pop it off
 					var popCount = EmitExpression(expression);
 					for (int i = 0; i < popCount; i++)
-						EmitPopLast(statement.FileRange.End.Line);
+					{
+						// a table access ends in a jump-patched compare chain whose
+						// last op is only one of several arms' pushes — it must be
+						// popped for real, never elided
+						if (expression is IndexExpressionNode or MemberExpressionNode)
+							Emit(CoreOpCode.Pop, 0, statement.FileRange.End.Line);
+						else
+							EmitPopLast(statement.FileRange.End.Line);
+					}
 				}
 				break;
 
@@ -465,43 +562,36 @@ public sealed class BytecodeCompiler<TCommandOp> where TCommandOp : struct, Enum
 					EmitExpression(forStmt.End);
 					Emit(CoreOpCode.StoreLocal, endSlot, line);
 
-					// 2) condition: i < END
-					int conditionIp = _ops.Count;
-					Emit(CoreOpCode.LoadLocal, varSlot, line);
-					Emit(CoreOpCode.LoadLocal, endSlot, line);
-					Emit(CoreOpCode.LessThan, 0, line);
-					int exitPlaceholder = EmitPlaceholder(CoreOpCode.JumpIfFalse, line);
+					// 2..5) condition i < END, body, increment, patch exits
+					EmitCountedLoopTail(varSlot, () => Emit(CoreOpCode.LoadLocal, endSlot, line), forStmt.Body, line);
+				}
+				break;
 
-					var ctx = new LoopContext
+			// ----------------------------------------
+			// for CURSOR in TABLE { ... }  — positional iteration over a constant
+			// table: a counted loop over a hidden row index; each 'CURSOR.col' read
+			// inside is a positional lookup on that index (see EmitTableLookup).
+			// ----------------------------------------
+			case ForTableStatementNode forTable:
+				{
+					int line = statement.FileRange.Start.Line;
+					var table = ResolveTable(forTable.Table.Name);
+
+					// the cursor's slot IS the hidden row index; a later same-name
+					// 'for' over the same table reuses it
+					if (!_localSlots.TryGetValue(forTable.Cursor.Name, out int indexSlot))
 					{
-						ConditionIp = conditionIp,
-						ExitPlaceholder = exitPlaceholder
-					};
-					_loopStack.Push(ctx);
-
-					// 3) body
-					EmitBlock(forStmt.Body);
-
-					// 4) increment ('continue' target): i = i + 1
-					ctx.ContinueTargetIp = _ops.Count;
-					Emit(CoreOpCode.LoadLocal, varSlot, line);
-					Emit(CoreOpCode.LoadConstInt, 1, line);
-					Emit(CoreOpCode.Add, 0, line);
-					Emit(CoreOpCode.StoreLocal, varSlot, line);
-					Emit(CoreOpCode.Jump, conditionIp - _ops.Count, line);
-
-					// 5) patch exits
-					_loopStack.Pop();
-					int loopEndIp = _ops.Count;
-					Patch(exitPlaceholder, loopEndIp - exitPlaceholder);
-					foreach (var brPos in ctx.BreakPlaceholders)
-					{
-						Patch(brPos, loopEndIp - brPos);
+						indexSlot = _nextSlot++;
+						_localSlots[forTable.Cursor.Name] = indexSlot;
 					}
-					foreach (var contPos in ctx.ContinuePlaceholders)
-					{
-						Patch(contPos, ctx.ContinueTargetIp - contPos);
-					}
+					_cursorTables[forTable.Cursor.Name] = table;
+
+					// 1) index = 0
+					Emit(CoreOpCode.LoadConstInt, 0, line);
+					Emit(CoreOpCode.StoreLocal, indexSlot, line);
+
+					// 2..5) condition index < count, body, increment, patch exits
+					EmitCountedLoopTail(indexSlot, () => Emit(CoreOpCode.LoadConstInt, table.Rows.Count, line), forTable.Body, line);
 				}
 				break;
 
@@ -817,8 +907,241 @@ public sealed class BytecodeCompiler<TCommandOp> where TCommandOp : struct, Enum
 				}
 				return tuple.Elements.Count;
 
+			// ----------------------------------------
+			// Table accesses: t.count / t.has(...) / t[k].col / t.at(i).col / r.col
+			// (a bare 't[k]' or 't.at(i)' is a row, never a value — analysis rejects it)
+			// ----------------------------------------
+			case MemberExpressionNode member:
+				EmitMemberExpression(member);
+				return 1;
+
+			case IndexExpressionNode index:
+				throw new InvalidOperationException($"Table lookup on '{DescribeTarget(index.Target)}' yields a row; select a column");
+
 			default:
 				throw new NotSupportedException($"Expression not handled: {expression.GetType().Name}");
+		}
+	}
+
+	// ----------------------------------------------------------------------
+	// Constant tables
+	// ----------------------------------------------------------------------
+
+	private TableData ResolveTable(string name)
+	{
+		if (!_tables.TryGetValue(name, out var table))
+			throw new InvalidOperationException($"Unknown table '{name}' (was it passed to Compile?)");
+		return table;
+	}
+
+	private static string DescribeTarget(ExpressionNode target) =>
+		target is IdentifierNode id ? id.Name : target.GetType().Name;
+
+	private void EmitMemberExpression(MemberExpressionNode member)
+	{
+		int line = member.FileRange.Start.Line;
+
+		// t.count / t.has(...) — the target is the table itself
+		if (member.IsCount || member.IsHas)
+		{
+			if (member.Target is not IdentifierNode { Type: IdentifierType.Table } tableId)
+				throw new InvalidOperationException($"'.{member.Member.Name}' requires a table target");
+			var table = ResolveTable(tableId.Name);
+
+			if (member.IsCount)
+			{
+				EmitLoadConstant(Value.FromInt(table.Rows.Count), line);
+				return;
+			}
+
+			var (keyColumns, keyExprs) = KeyColumnsOf(table, member.KeyColumn, member.Arguments ?? []);
+			EmitTableLookup(table, keyColumns, keyExprs, null, valueColumn: -1, has: true, line);
+			return;
+		}
+
+		if (member.IsAt)
+			throw new InvalidOperationException("'at' yields a row; select a column");
+
+		// row.col — the target is a keyed lookup, a positional 'at', or a row cursor
+		switch (member.Target)
+		{
+			case IndexExpressionNode index when index.Target is IdentifierNode { Type: IdentifierType.Table } tableId:
+				{
+					var table = ResolveTable(tableId.Name);
+					var (keyColumns, keyExprs) = KeyColumnsOf(table, index.KeyColumn, index.Arguments);
+					EmitTableLookup(table, keyColumns, keyExprs, null, ColumnOf(table, member), has: false, line);
+					return;
+				}
+
+			case MemberExpressionNode { IsAt: true } at when at.Target is IdentifierNode { Type: IdentifierType.Table } tableId:
+				{
+					var table = ResolveTable(tableId.Name);
+					// key column -1 = the row index
+					EmitTableLookup(table, [-1], [at.Arguments![0]], null, ColumnOf(table, member), has: false, line);
+					return;
+				}
+
+			case IdentifierNode { Type: IdentifierType.Local } cursor when _cursorTables.TryGetValue(cursor.Name, out var cursorTable):
+				{
+					// the cursor's own slot holds the row index — no evaluation needed
+					var indexSlot = _localSlots[cursor.Name];
+					EmitTableLookup(cursorTable, [-1], null, [indexSlot], ColumnOf(cursorTable, member), has: false, line);
+					return;
+				}
+
+			default:
+				throw new InvalidOperationException($"Member '.{member.Member.Name}' on '{DescribeTarget(member.Target)}' is not a table row access");
+		}
+	}
+
+	private static int ColumnOf(TableData table, MemberExpressionNode member)
+	{
+		var column = table.IndexOfColumn(member.Member.Name);
+		if (column < 0)
+			throw new InvalidOperationException($"Table '{table.Name}' has no column '{member.Member.Name}'");
+		return column;
+	}
+
+	// The key columns of a lookup: 'name' for '[name: k]', else the leading N columns.
+	private static (int[] Columns, ExpressionNode[] Exprs) KeyColumnsOf(TableData table, IdentifierNode? keyColumn, List<ExpressionNode> args)
+	{
+		if (keyColumn != null)
+		{
+			var column = table.IndexOfColumn(keyColumn.Name);
+			if (column < 0)
+				throw new InvalidOperationException($"Table '{table.Name}' has no column '{keyColumn.Name}'");
+			return ([column], [.. args]);
+		}
+		var columns = new int[args.Count];
+		for (int i = 0; i < columns.Length; i++)
+			columns[i] = i;
+		return (columns, [.. args]);
+	}
+
+	// Lowers one table access to a value on the stack.
+	//   keyColumns[i] : the column compared for key i, or -1 for "the row index"
+	//   keyExprs      : the key expressions to evaluate (null when keySlots is given)
+	//   keySlots      : local slots already holding the keys (row cursors)
+	//   valueColumn   : the column pushed on a match (ignored when has)
+	//   has           : push true/false instead of a cell
+	// All-constant keys fold to a single constant push. Otherwise each key is
+	// evaluated once into a hidden temp and the rows are scanned as a compare
+	// chain — the same shape the 'switch' emitter produces — with the default
+	// row's cell (or the column's zero value / false) as the fallthrough.
+	private void EmitTableLookup(TableData table, int[] keyColumns, ExpressionNode[]? keyExprs, int[]? keySlots, int valueColumn, bool has, int line)
+	{
+		// 1) constant folding
+		if (keyExprs != null && keyExprs.All(IsConstantExpression))
+		{
+			var keys = keyExprs.Select(e => EvaluateConstantExpression(e, "Table key")).ToArray();
+			int found = -1;
+			for (int r = 0; r < table.Rows.Count && found < 0; r++)
+			{
+				if (RowMatches(table, r, keyColumns, keys))
+					found = r;
+			}
+			if (has)
+				EmitLoadConstant(Value.FromBool(found >= 0), line);
+			else
+				EmitLoadConstant(found >= 0 ? table.Rows[found][valueColumn] : table.FallbackValue(valueColumn), line);
+			return;
+		}
+
+		// 2) keys into hidden temps (each evaluated exactly once)
+		if (keySlots == null)
+		{
+			keySlots = new int[keyExprs!.Length];
+			for (int i = 0; i < keyExprs.Length; i++)
+			{
+				EmitExpression(keyExprs[i]);
+				keySlots[i] = _nextSlot++;      // hidden, unnamed slot
+				Emit(CoreOpCode.StoreLocal, keySlots[i], line);
+			}
+		}
+
+		// 3) compare chain over the rows
+		var endJumps = new List<int>();
+		for (int r = 0; r < table.Rows.Count; r++)
+		{
+			var nextJumps = new List<int>();
+			for (int i = 0; i < keyColumns.Length; i++)
+			{
+				Emit(CoreOpCode.LoadLocal, keySlots[i], line);
+				if (keyColumns[i] < 0)
+					Emit(CoreOpCode.LoadConstInt, r, line);
+				else
+					EmitLoadConstant(table.Rows[r][keyColumns[i]], line);
+				Emit(CoreOpCode.Equal, 0, line);
+				nextJumps.Add(EmitPlaceholder(CoreOpCode.JumpIfFalse, line));
+			}
+
+			// matched: push the arm's value and leave the chain
+			EmitLoadConstant(has ? Value.FromBool(true) : table.Rows[r][valueColumn], line);
+			endJumps.Add(EmitPlaceholder(CoreOpCode.Jump, line));
+
+			foreach (var jump in nextJumps)
+				Patch(jump, _ops.Count - jump);
+		}
+
+		// 4) no row matched
+		EmitLoadConstant(has ? Value.FromBool(false) : table.FallbackValue(valueColumn), line);
+
+		foreach (var jump in endJumps)
+			Patch(jump, _ops.Count - jump);
+	}
+
+	private static bool RowMatches(TableData table, int row, int[] keyColumns, Value[] keys)
+	{
+		for (int i = 0; i < keyColumns.Length; i++)
+		{
+			var cell = keyColumns[i] < 0 ? Value.FromInt(row) : table.Rows[row][keyColumns[i]];
+			if (!cell.Equals(keys[i]))
+				return false;
+		}
+		return true;
+	}
+
+	// Shared tail of a counted loop over local 'varSlot': condition
+	// 'var < LIMIT' (LIMIT pushed by emitLimit), body, increment (the 'continue'
+	// target), back-jump, and break/continue/exit patching.
+	private void EmitCountedLoopTail(int varSlot, Action emitLimit, BlockNode? body, int line)
+	{
+		// 2) condition: i < LIMIT
+		int conditionIp = _ops.Count;
+		Emit(CoreOpCode.LoadLocal, varSlot, line);
+		emitLimit();
+		Emit(CoreOpCode.LessThan, 0, line);
+		int exitPlaceholder = EmitPlaceholder(CoreOpCode.JumpIfFalse, line);
+
+		var ctx = new LoopContext
+		{
+			ConditionIp = conditionIp,
+			ExitPlaceholder = exitPlaceholder
+		};
+		_loopStack.Push(ctx);
+
+		// 3) body
+		EmitBlock(body);
+
+		// 4) increment ('continue' target): i = i + 1
+		ctx.ContinueTargetIp = _ops.Count;
+		Emit(CoreOpCode.LoadLocal, varSlot, line);
+		Emit(CoreOpCode.LoadConstInt, 1, line);
+		Emit(CoreOpCode.Add, 0, line);
+		Emit(CoreOpCode.StoreLocal, varSlot, line);
+		Emit(CoreOpCode.Jump, conditionIp - _ops.Count, line);
+
+		// 5) patch exits
+		_loopStack.Pop();
+		int loopEndIp = _ops.Count;
+		Patch(exitPlaceholder, loopEndIp - exitPlaceholder);
+		foreach (var brPos in ctx.BreakPlaceholders)
+		{
+			Patch(brPos, loopEndIp - brPos);
+		}
+		foreach (var contPos in ctx.ContinuePlaceholders)
+		{
+			Patch(contPos, ctx.ContinueTargetIp - contPos);
 		}
 	}
 
@@ -992,9 +1315,10 @@ public sealed class BytecodeCompiler<TCommandOp> where TCommandOp : struct, Enum
 		}
 	}
 
-	// Compile-time evaluation of a parameter default: literal, negated number
-	// literal, or a '^' constant (resolved via the globals compiled in step 2).
-	private Value EvaluateConstantExpression(ExpressionNode node)
+	// Compile-time evaluation of a constant expression (parameter defaults, table
+	// cells, folded table keys): literal, negated number literal, or a '^' constant
+	// (resolved via the globals compiled in step 2).
+	private Value EvaluateConstantExpression(ExpressionNode node, string what = "Parameter default")
 	{
 		return node switch
 		{
@@ -1003,9 +1327,12 @@ public sealed class BytecodeCompiler<TCommandOp> where TCommandOp : struct, Enum
 				Value.FromInt(-ParseLiteral(negLiteral).Int),
 			IdentifierNode { Type: IdentifierType.Constant } id when _globals.TryGetValue(id.Name, out var constValue) =>
 				constValue,
-			_ => throw new InvalidOperationException("Parameter default must be a literal or a '^' constant"),
+			_ => throw new InvalidOperationException($"{what} must be a literal or a '^' constant"),
 		};
 	}
+
+	private static bool IsConstantExpression(ExpressionNode node) =>
+		Symbols.ConstantExpressions.IsConstant(node);
 
 	private void EmitBlock(BlockNode? block)
 	{

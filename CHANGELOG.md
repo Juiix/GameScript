@@ -2,6 +2,28 @@
 
 All notable changes to GameScript will be documented in this file.
 
+## [2.4.0]
+
+**Feature release — constant tables.** One language feature, `table`, replacing data-in-code ladders (tier → outputs assignment blocks, menu-id ladders, name/jingle switches, desktop/mobile twin branches) with declared rows of constants. Additive parser/compiler work: no new opcodes, no VM changes; every table access lowers to the compare-chain / counted-loop bytecode the 2.1 `switch` and `for` emitters already produce.
+
+### Language
+- **`table NAME([key] TYPE col, ...)`** — a top-level declaration (anywhere a `func` may appear) with one indented row of comma-separated constants per line (`^const` or `int`/`string`/`bool` literals; cell types must match their column; every row has the header's arity; at least one row). Columns are `int`, `string`, or `bool`. Table names share the func/command/trigger namespace and are visible wherever funcs are. The `//` comment above the declaration is the table's doc.
+- **Keys.** With no modifier, the leading column(s) are the key: a table's *key width* is the smallest number of leading columns whose values are unique across rows, so `smith_tier[bar]` keys on column 0 while `choice_ui[mobile, three]` keys on the leading pair. Positional lookups pass at least the key width and at most the column count. Marking extra columns `key` (contextual — not a reserved word) makes them independently lookup-able via `t[name: k]`; each `key` column must be unique on its own. Two identical rows are an error.
+- **Lookups.** `t[k].col` / `t[a, b].col` / `t[name: k].col` (column type), `t.has(...)` (`bool`, same key forms), `t.at(i).col` (positional, 0-based), `t.count` (`int`), and `for r in t` (positional iteration; `r.col` is the cursor's only valid use — same function-flat scoping and `break`/`continue` rules as `for … in a..b`; a later `for` may reuse the cursor name only over the same table). A missing key or out-of-range index yields the column's zero value (`0`, `""`, `false`) unless the table declares a `default:` row (same syntax as `switch`; not counted by `count`, not reachable via `at`, its key cells are ignored). `count`, `has` and `at` are reserved column names. A bare `t[k]` / `t.at(i)` is a row, not a value — select a column.
+- **Codegen.** No runtime tables: each access compiles to a compare chain over the rows (keys evaluated once into hidden temps), `for r in t` to a counted loop with each `r.col` a positional chain on the hidden index. Lookups whose keys are all constants — and `.count` — fold to the cell value at compile time. Tables above 64 rows warn (compare chains, not hash lookups).
+- **Diagnostics.** Column type/arity/constness, key uniqueness, lookup arity vs. key width, per-key type, named lookups only on `key` columns, unknown table/column, table used as a value, cursor misuse, and a warning when an all-constant key matches no row (suppressed by a `default:` row).
+
+### Language (breaking)
+- New reserved word: `table` — content using it as an identifier must rename. (`key` is contextual and stays usable as a name.)
+- `[`, `]` are now tokens (previously "Unexpected character"), and a `.` glued to an identifier, `)` or `]` (`t.count`, `t[k].col`) is a member-access operator rather than the start of a dot-prefixed command; `.cmd` after whitespace or at line start is unchanged.
+
+### Tooling
+- Language server: tables in outline/workspace symbols, hover (`table name(key int id, ...)` + doc comment), go-to-definition on table names and on columns (jumps to the header column), member completion after `t.` / `t[k].` / `t.at(i).` / `r.` (columns, or `count`/`has`/`at` on the table itself), semantic tokens for table names (type) and columns (new `property` token type). Columns are deliberately not renameable/referenceable this wave.
+- Both TextMate grammars color `table` declarations, the `key` modifier, `.count/.has/.at`, and `.col` member reads.
+
+### Embedding
+- `BytecodeCompiler.Compile(constants, contexts, methods, tables)` — new overload taking every `ProgramNode.Tables` of the compile root; the 3-argument overload still exists and compiles content without tables. `ProgramNode` now exposes `Declarations` (source order), `Methods`, and `Tables`; `IdentifierType` gains `Table`/`Column`; `TypeKind` gains `TableRow`.
+
 ## [2.3.0]
 
 ### Added

@@ -3,6 +3,7 @@ using GameScript.Language.Index;
 using GameScript.Language.Symbols;
 using GameScript.LanguageServer.Caches;
 using GameScript.LanguageServer.Extensions;
+using OmniSharp.Extensions.LanguageServer.Protocol;
 using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Protocol.Document;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
@@ -31,15 +32,29 @@ internal sealed class DefinitionHandler(
 		}
 
 		// 2. Get identifier under cursor
-		var identifierNode = rootData.Root.FindNodeAtPosition<IdentifierNode>(request.Position.Line, request.Position.Character);
-		if (identifierNode == null)
+		var (node, parent) = rootData.Root.FindNodeAndParentAtPosition(request.Position.Line, request.Position.Character);
+		var localIndex = rootData.GetLocalIndex(request.Position.Line, request.Position.Character);
+
+		// table columns jump to the column's declaration in the table header
+		if (node != null && node.IsColumnIdentifier())
+		{
+			var (_, column) = rootData.ResolveColumn(node, parent, localIndex, _projects.GetProject(filePath).Symbols);
+			if (column == null)
+				return null;
+			return new LocationOrLocationLinks(new Location
+			{
+				Uri = DocumentUri.FromFileSystemPath(column.FilePath),
+				Range = column.Range.ConvertRange()
+			});
+		}
+
+		if (node is not IdentifierNode identifierNode)
 		{
 			return null;
 		}
 
 		// 3. Lookup local scope/symbol
 		SymbolInfo? symbol = null;
-		var localIndex = rootData.GetLocalIndex(request.Position.Line, request.Position.Character);
 		if (localIndex != null)
 		{
 			symbol = localIndex.GetSymbol(identifierNode.Name);

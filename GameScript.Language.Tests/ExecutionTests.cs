@@ -733,4 +733,255 @@ public class ExecutionTests
 		host.Start(program, "main");
 		Assert.Equal(new[] { "7", "{literal} 8", "tail 7" }, host.Context.Printed);
 	}
+
+	// ---------------------------------------------------------------
+	// 2.4: constant tables
+	// ---------------------------------------------------------------
+
+	private const string SkillsConst = """
+		int ^skill_attack = 0
+		int ^skill_defense = 1
+		int ^skill_mining = 2
+		int ^jingle_melee = 100
+		int ^jingle_gather = 101
+		""";
+
+	private const string SkillTable = """
+		// skill id -> display name and level-up jingle
+		table skill(key int id, key string name, int jingle)
+		    ^skill_attack,  "Attack",  ^jingle_melee
+		    ^skill_defense, "Defense", ^jingle_melee
+		    ^skill_mining,  "Mining",  ^jingle_gather
+		""";
+
+	[Fact]
+	public void Table_Keyed_Lookup_By_Variable()
+	{
+		var (host, program) = Build(SkillTable + """
+
+			func main(int s)
+			    print(skill[s].name)
+			    print(int_to_str(skill[s].jingle))
+			""",
+			("skills.const", SkillsConst));
+		host.Start(program, "main", Value.FromInt(2));
+		Assert.Equal(new[] { "Mining", "101" }, host.Context.Printed);
+	}
+
+	[Fact]
+	public void Table_Missing_Key_Yields_Zero_Values()
+	{
+		var (host, program) = Build(SkillTable + """
+
+			func main(int s)
+			    print("[" + skill[s].name + "]")
+			    print(int_to_str(skill[s].jingle))
+			""",
+			("skills.const", SkillsConst));
+		host.Start(program, "main", Value.FromInt(42));
+		Assert.Equal(new[] { "[]", "0" }, host.Context.Printed);
+	}
+
+	[Fact]
+	public void Table_Constant_Key_Folds_To_The_Cell()
+	{
+		var (host, program) = Build(SkillTable + """
+
+			func main()
+			    print(skill[^skill_defense].name)
+			    print(skill[1].name)
+			    print(int_to_str(skill[name: "Mining"].jingle))
+			    print(death_msg[7].text)
+			""",
+			("skills.const", SkillsConst),
+			("death.gs", """
+				table death_msg(int i, string text)
+				    0, "slain"
+				    default: 0, "defeated"
+				"""));
+		host.Start(program, "main");
+		Assert.Equal(new[] { "Defense", "Defense", "101", "defeated" }, host.Context.Printed);
+
+		// folded: main is a straight line of pushes/prints, no compare chain
+		var main = program.Methods.Single(m => m.Name == "main");
+		Assert.DoesNotContain((ushort)CoreOpCode.Equal, main.Ops);
+	}
+
+	[Fact]
+	public void Table_Named_Key_Reverse_Lookup()
+	{
+		var (host, program) = Build(SkillTable + """
+
+			func main(string n)
+			    print(int_to_str(skill[name: n].id))
+			    print(int_to_str(skill[id: 2].jingle))
+			""",
+			("skills.const", SkillsConst));
+		host.Start(program, "main", Value.FromString("Defense"));
+		Assert.Equal(new[] { "1", "101" }, host.Context.Printed);
+	}
+
+	[Fact]
+	public void Table_Has_Count_And_At()
+	{
+		var (host, program) = Build(SkillTable + """
+
+			func main(int s)
+			    if skill.has(s): print("yes")
+			    if not skill.has(s + 77): print("no")
+			    if skill.has(name: "Mining"): print("named")
+			    print(int_to_str(skill.count))
+			    print(skill.at(1).name)
+			    print(skill.at(-1).name + "|" + skill.at(3).name)
+			""",
+			("skills.const", SkillsConst));
+		host.Start(program, "main", Value.FromInt(0));
+		Assert.Equal(new[] { "yes", "no", "named", "3", "Defense", "|" }, host.Context.Printed);
+	}
+
+	[Fact]
+	public void Table_Compound_Key_Uses_Leading_Columns()
+	{
+		var (host, program) = Build("""
+			table choice_ui(bool mobile, bool three, int menu, int title)
+			    false, false, 10, 11
+			    false, true,  20, 21
+			    true,  false, 30, 31
+			    true,  true,  40, 41
+
+			func main(bool m, bool three)
+			    print(int_to_str(choice_ui[m, three].menu))
+			    print(int_to_str(choice_ui[true, true].title))
+			""");
+		host.Start(program, "main", Value.FromBool(true), Value.FromBool(false));
+		Assert.Equal(new[] { "30", "41" }, host.Context.Printed);
+	}
+
+	[Fact]
+	public void Table_Default_Row_Replaces_Zero_Values()
+	{
+		var (host, program) = Build("""
+			table death_msg(int i, string text)
+			    0, "You have been slain!"
+			    1, "You died."
+			    default: 0, "You were defeated."
+
+			func main(int i)
+			    print(death_msg[i].text)
+			    print(death_msg.at(9).text)
+			    print(int_to_str(death_msg.count))
+			    if not death_msg.has(5): print("no row")
+			""");
+		host.Start(program, "main", Value.FromInt(7));
+		Assert.Equal(new[] { "You were defeated.", "You were defeated.", "2", "no row" }, host.Context.Printed);
+	}
+
+	[Fact]
+	public void Table_For_In_Iterates_Rows_With_Break_And_Continue()
+	{
+		var (host, program) = Build("""
+			table smith_slot(int idx, int lv, string text)
+			    0, 5,  "sword"
+			    1, 10, "helm"
+			    2, 15, "armor"
+			    3, 20, "legs"
+
+			func main()
+			    for s in smith_slot
+			        if s.idx == 1: continue
+			        if s.lv > 15: break
+			        print(s.text + int_to_str(s.lv))
+			    print(int_to_str(smith_slot.count))
+			""");
+		host.Start(program, "main");
+		Assert.Equal(new[] { "sword5", "armor15", "4" }, host.Context.Printed);
+	}
+
+	[Fact]
+	public void Table_Discarded_Lookup_Does_Not_Leak_Stack()
+	{
+		var (host, program) = Build(SkillTable + """
+
+			func main(int s)
+			    for i in 0..1000
+			        skill.has(s)
+			        skill[s].name
+			    print("ok")
+			""",
+			("skills.const", SkillsConst));
+		host.Start(program, "main", Value.FromInt(1));
+		Assert.Equal(new[] { "ok" }, host.Context.Printed);
+	}
+
+	[Fact]
+	public void Table_Declared_In_Another_File_Is_Visible()
+	{
+		var (host, program) = Build("""
+			func main()
+			    print(skill[^skill_mining].name)
+			    for s in skill
+			        print(s.name)
+			""",
+			("skills.const", SkillsConst),
+			("tables.gs", SkillTable));
+		host.Start(program, "main");
+		Assert.Equal(new[] { "Mining", "Attack", "Defense", "Mining" }, host.Context.Printed);
+	}
+
+	[Fact]
+	public void Table_Key_Expression_Is_Evaluated_Once()
+	{
+		var (host, program) = Build(SkillTable + """
+
+			func pick() returns int
+			    print("eval")
+			    return 2
+
+			func main()
+			    print(skill[pick()].name)
+			""",
+			("skills.const", SkillsConst));
+		host.Start(program, "main");
+		Assert.Equal(new[] { "eval", "Mining" }, host.Context.Printed);
+	}
+
+	[Fact]
+	public void Table_Worked_Example_Set_Smith_Bar()
+	{
+		// the design doc's §5 rewrite, condensed to observable prints
+		var (host, program) = Build("""
+			table smith_tier(int bar, int sword, int helm)
+			    ^item_bronze_bar, ^item_bronze_sword, ^item_bronze_helm
+			    ^item_iron_bar,   ^item_iron_sword,   ^item_iron_helm
+
+			table smith_slot(int idx, int lv, int lv_m)
+			    0, 1000, 2000
+			    1, 1001, 2001
+
+			func tier_output(int bar, int idx) returns int
+			    switch idx
+			        case 0: return smith_tier[bar].sword
+			        default: return smith_tier[bar].helm
+
+			func set_smith_bar(int bar, bool m)
+			    for s in smith_slot
+			        int item = tier_output(bar, s.idx)
+			        int lv = s.lv
+			        if m: lv = s.lv_m
+			        print(int_to_str(lv) + ":" + int_to_str(item))
+
+			func main()
+			    set_smith_bar(^item_iron_bar, true)
+			""",
+			("items.const", """
+				int ^item_bronze_bar = 1
+				int ^item_bronze_sword = 2
+				int ^item_bronze_helm = 3
+				int ^item_iron_bar = 4
+				int ^item_iron_sword = 5
+				int ^item_iron_helm = 6
+				"""));
+		host.Start(program, "main");
+		Assert.Equal(new[] { "2000:5", "2001:6" }, host.Context.Printed);
+	}
 }

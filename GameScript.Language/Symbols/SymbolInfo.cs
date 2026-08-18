@@ -18,7 +18,10 @@ namespace GameScript.Language.Symbols
 		FileRange fileRange,
 		string? internalName = null,
 		int defaultCount = 0,
-		List<string?>? paramDefaultLabels = null)
+		List<string?>? paramDefaultLabels = null,
+		IReadOnlyList<TableColumnInfo>? columns = null,
+		IReadOnlyList<IReadOnlyList<TableCell>>? rows = null,
+		IReadOnlyList<TableCell>? defaultRow = null)
 	{
 		public IdentifierType IdentifierType { get; } = identifierType;
 		public string Name { get; } = name;
@@ -47,7 +50,22 @@ namespace GameScript.Language.Symbols
 		/// </summary>
 		public List<string?>? ParamDefaultLabels { get; } = paramDefaultLabels;
 
-		public string Signature { get; } = CreateSignature(identifierType, name, type, typeNames, paramTypes, paramNames, paramDefaultLabels);
+		/// <summary>Table symbols only: the declared columns, in order.</summary>
+		public IReadOnlyList<TableColumnInfo>? Columns { get; } = columns;
+
+		/// <summary>
+		/// Table symbols only: the data rows as written (literal or '^' constant
+		/// cells; unresolved — see <see cref="TableShape"/>). The default row is
+		/// separate in <see cref="DefaultRow"/>.
+		/// </summary>
+		public IReadOnlyList<IReadOnlyList<TableCell>>? Rows { get; } = rows;
+
+		/// <summary>Table symbols only: the optional 'default:' row's cells.</summary>
+		public IReadOnlyList<TableCell>? DefaultRow { get; } = defaultRow;
+
+		public bool IsTable => IdentifierType == IdentifierType.Table;
+
+		public string Signature { get; } = CreateSignature(identifierType, name, type, typeNames, paramTypes, paramNames, paramDefaultLabels, columns);
 
 		/// <summary>Number of declared parameters (methods only; 0 otherwise).</summary>
 		public int Arity => ParamTypes == null ? 0 :
@@ -71,7 +89,8 @@ namespace GameScript.Language.Symbols
 			IdentifierType == IdentifierType.Command ||
 			IdentifierType == IdentifierType.TriggerDeclaration ||
 			IdentifierType == IdentifierType.Constant ||
-			IdentifierType == IdentifierType.Context;
+			IdentifierType == IdentifierType.Context ||
+			IdentifierType == IdentifierType.Table;
 		public string PrefixedName => $"{GetPrefix(IdentifierType)}{Name}";
 
 		private static string CreateSignature(
@@ -81,11 +100,31 @@ namespace GameScript.Language.Symbols
 			List<string>? typeNames,
 			TypeInfo? paramTypes,
 			List<string>? paramNames,
-			List<string?>? paramDefaultLabels)
+			List<string?>? paramDefaultLabels,
+			IReadOnlyList<TableColumnInfo>? columns)
 		{
 			Span<char> buffer = stackalloc char[64];
 			var vsb = new ValueStringBuilder(buffer);
-			if ((identifierType & IdentifierType.Method) != IdentifierType.Unknown)
+			if (identifierType == IdentifierType.Table)
+			{
+				// table name(int a, key string b)
+				vsb.Append("table ");
+				vsb.Append(name);
+				vsb.Append('(');
+				if (columns != null)
+				{
+					for (int i = 0; i < columns.Count; i++)
+					{
+						if (i > 0) vsb.Append(", ");
+						if (columns[i].IsKey) vsb.Append("key ");
+						vsb.Append(columns[i].Type.Name);
+						vsb.Append(' ');
+						vsb.Append(columns[i].Name);
+					}
+				}
+				vsb.Append(')');
+			}
+			else if ((identifierType & IdentifierType.Method) != IdentifierType.Unknown)
 			{
 				if (identifierType != IdentifierType.Trigger)
 				{
@@ -144,6 +183,7 @@ namespace GameScript.Language.Symbols
 				IdentifierType.Command => "command",
 				IdentifierType.Label => "label",
 				IdentifierType.TriggerDeclaration => "trigger",
+				IdentifierType.Table => "table",
 				IdentifierType.Local => "local",
 				IdentifierType.Context => "context",
 				IdentifierType.Constant => "constant",

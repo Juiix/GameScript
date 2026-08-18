@@ -66,15 +66,24 @@ namespace GameScript.LanguageServer.Extensions
 				i--;
 
 			// walk back over dot prefixes for command calls (e.g. .test, ..test)
+			var nameStart = i;
 			while (i >= 0 && text[i] == '.')
 				i--;
 
 			identifierType = i >= 0 ? GetIdentifierType(text[i]) : IdentifierType.Unknown;
 
-			// if we walked back over dots, this is a command regardless of what precedes
 			var prefix = text[(i + 1)..offset];
 			if (prefix.Length > 0 && prefix[0] == '.')
-				identifierType = IdentifierType.Command;
+			{
+				// a single dot glued to an identifier char, ')' or ']' is a table
+				// member access ('t.co|', 't[k].|', 'r.|'); the caller resolves the
+				// target's columns. Otherwise it is a dot-prefixed command.
+				var singleDot = nameStart - i == 1;
+				var lead = i >= 0 ? text[i] : '\0';
+				identifierType = singleDot && (char.IsLetterOrDigit(lead) || lead == '_' || lead == ')' || lead == ']')
+					? IdentifierType.Column
+					: IdentifierType.Command;
+			}
 
 			return prefix;
 		}
@@ -86,6 +95,11 @@ namespace GameScript.LanguageServer.Extensions
 		public static string? GetSymbolName(this AstNode astNode) => astNode switch
 		{
 			MethodDefinitionNode m => m.Name.Name,
+			TableDefinitionNode t => t.Name.Name,
+			// table columns are not symbols: they resolve against their table, and a
+			// column may legitimately share a func/local's name
+			IdentifierNode { Type: IdentifierType.Column } => null,
+			IdentifierDeclarationNode { Type: IdentifierType.Column } => null,
 			IdentifierNode i => i.Name,
 			// an engine-op binding name is a host identifier, not a script symbol —
 			// rename/references/highlight must not treat it as one
