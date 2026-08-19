@@ -22,6 +22,7 @@
 		Range,
 		OpenBracket,
 		CloseBracket,
-		Dot
+		Dot,
+		Ellipsis
 	}
 }

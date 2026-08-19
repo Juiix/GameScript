@@ -21,9 +21,16 @@ namespace GameScript.Language.Symbols
 		List<string?>? paramDefaultLabels = null,
 		IReadOnlyList<TableColumnInfo>? columns = null,
 		IReadOnlyList<IReadOnlyList<TableCell>>? rows = null,
-		IReadOnlyList<TableCell>? defaultRow = null)
+		IReadOnlyList<TableCell>? defaultRow = null,
+		bool isVariadic = false)
 	{
 		public IdentifierType IdentifierType { get; } = identifierType;
+
+		/// <summary>
+		/// Trigger declarations only: 'trigger NAME(...)'. Handlers may declare any
+		/// int/string/bool parameter list; the prefix rule does not apply.
+		/// </summary>
+		public bool IsVariadic { get; } = isVariadic;
 		public string Name { get; } = name;
 		public TypeInfo? Type { get; } = type;
 		public List<string>? TypeNames { get; } = typeNames;
@@ -65,7 +72,7 @@ namespace GameScript.Language.Symbols
 
 		public bool IsTable => IdentifierType == IdentifierType.Table;
 
-		public string Signature { get; } = CreateSignature(identifierType, name, type, typeNames, paramTypes, paramNames, paramDefaultLabels, columns);
+		public string Signature { get; } = CreateSignature(identifierType, name, type, typeNames, paramTypes, paramNames, paramDefaultLabels, columns, isVariadic);
 
 		/// <summary>Number of declared parameters (methods only; 0 otherwise).</summary>
 		public int Arity => ParamTypes == null ? 0 :
@@ -78,7 +85,7 @@ namespace GameScript.Language.Symbols
 		/// Canonical parameter-type signature, e.g. "()", "(int)", "(int,string)".
 		/// Return types deliberately excluded — they don't participate in overload identity.
 		/// </summary>
-		public string ParamSignature => ParamTypes == null ? "()" :
+		public string ParamSignature => IsVariadic ? "(...)" : ParamTypes == null ? "()" :
 			ParamTypes.Kind == TypeKind.Tuple ? ParamTypes.Name : $"({ParamTypes.Name})";
 
 		/// <summary>Name + ParamSignature; unique per overload.</summary>
@@ -101,7 +108,8 @@ namespace GameScript.Language.Symbols
 			TypeInfo? paramTypes,
 			List<string>? paramNames,
 			List<string?>? paramDefaultLabels,
-			IReadOnlyList<TableColumnInfo>? columns)
+			IReadOnlyList<TableColumnInfo>? columns,
+			bool isVariadic = false)
 		{
 			Span<char> buffer = stackalloc char[64];
 			var vsb = new ValueStringBuilder(buffer);
@@ -134,7 +142,11 @@ namespace GameScript.Language.Symbols
 				vsb.Append(name);
 
 				vsb.Append('(');
-				if (paramTypes != null)
+				if (isVariadic)
+				{
+					vsb.Append("...");
+				}
+				else if (paramTypes != null)
 				{
 					AppendTypes(ref vsb, paramTypes, paramNames, paramDefaultLabels);
 				}

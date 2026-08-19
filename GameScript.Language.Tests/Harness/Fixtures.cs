@@ -29,5 +29,7 @@ public static class Fixtures
 		trigger mn_text(string text)
 		// NPC script-queue slot 1; args from npc_queue(1, delay, ...)
 		trigger npc_queue_1(int arg0, int arg1)
+		// Chat command; handlers declare their own int/string/bool params
+		trigger slash(...)
 		""";
 }

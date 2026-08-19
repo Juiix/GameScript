@@ -321,6 +321,45 @@ public class AnalysisTests
 	}
 
 	[Fact]
+	public void Variadic_Handlers_Pick_Their_Own_Params()
+	{
+		var errors = ErrorsFor("""
+			slash tele(int x, int y)
+			    return
+
+			slash give(string item, int count, bool noted)
+			    return
+
+			slash pos
+			    return
+			""");
+		Assert.Empty(errors);
+	}
+
+	[Fact]
+	public void Variadic_Handler_With_Label_Param_Is_Reported()
+	{
+		var errors = ErrorsFor("""
+			slash broken(func callback)
+			    return
+			""");
+		Assert.Contains(errors, e => e.Contains("may only declare int/string/bool"));
+	}
+
+	[Fact]
+	public void Variadic_Trigger_Declaration_Signature_Renders_Ellipsis()
+	{
+		var compilation = new TestCompilation()
+			.AddFile("core.gs", Fixtures.CoreGs);
+		compilation.Analyze();
+		var symbol = compilation.Symbols.GetSymbols("slash")
+			.Single(s => s.IdentifierType == GameScript.Language.Ast.IdentifierType.TriggerDeclaration);
+		Assert.True(symbol.IsVariadic);
+		Assert.Equal("(...)", symbol.ParamSignature);
+		Assert.Equal("trigger slash(...)", symbol.Signature);
+	}
+
+	[Fact]
 	public void Handler_With_Param_Type_Mismatch_Is_Reported()
 	{
 		var errors = ErrorsFor("""

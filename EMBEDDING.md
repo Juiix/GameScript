@@ -124,6 +124,7 @@ BytecodeProgramMetadata meta = result.Metadata;  // per-method line/file maps, l
 - Constant declarations are folded into the constant pool at compile time — there is no init step to run.
 - Constant tables produce no bytecode of their own: each access site compiles to a compare chain over the table's rows (all-constant keys fold to the cell), so a table only costs where it is read.
 - `func` and trigger-handler methods compile to bytecode; `command` declarations resolve to your opcode enum, and `trigger` declarations produce no bytecode (they only validate handler headers).
+- Every `BytecodeMethod` carries `ParamTypes` (2.4.2+): one `ValueType` per parameter, aligned with locals `0..ParamCount-1` (`func`/label refs report as `Int`). Hosts binding arguments by position — e.g. handlers of a variadic `trigger NAME(...)` — read it to decide how to parse each argument. If you persist bytecode yourself, serialize it; a `null` `ParamTypes` means "unknown" (pre-2.4.2 programs).
 - A call in tail position (`return f(...)`, or a call as the final statement of a void func) compiles to the `TailCall` opcode — the VM replaces the current frame instead of pushing one, so state-machine chains never grow the stack.
 - Keep `meta` if you want stack traces or debugging — it maps every instruction back to a file and line, and names every local and context slot.
 

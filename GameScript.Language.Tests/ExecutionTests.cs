@@ -76,6 +76,43 @@ public class ExecutionTests
 	}
 
 	[Fact]
+	public void Compiled_Methods_Carry_Param_Types()
+	{
+		var (_, program) = Build("""
+			func mixed(int a, string b, bool c, func d)
+			    return
+
+			slash give(string item, int count)
+			    return
+
+			slash pos
+			    return
+			""");
+		var mixed = program.Methods.Single(m => m.Name == "mixed");
+		Assert.Equal(new[] { ValueType.Int, ValueType.String, ValueType.Bool, ValueType.Int }, mixed.ParamTypes);
+
+		var give = program.Methods.Single(m => m.Name == "slash give");
+		Assert.Equal(new[] { ValueType.String, ValueType.Int }, give.ParamTypes);
+		Assert.Equal(2, give.ParamCount);
+
+		var pos = program.Methods.Single(m => m.Name == "slash pos");
+		Assert.NotNull(pos.ParamTypes);
+		Assert.Empty(pos.ParamTypes!);
+	}
+
+	[Fact]
+	public void Variadic_Handler_Runs_With_Host_Bound_Args()
+	{
+		var (host, program) = Build("""
+			slash give(string item, int count)
+			    print(item)
+			    print(int_to_str(count))
+			""");
+		host.Start(program, "slash give", Value.FromString("sword"), Value.FromInt(5));
+		Assert.Equal(new[] { "sword", "5" }, host.Context.Printed);
+	}
+
+	[Fact]
 	public void Recursion()
 	{
 		var (host, program) = Build("""

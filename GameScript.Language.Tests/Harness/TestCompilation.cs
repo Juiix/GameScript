@@ -25,6 +25,7 @@ public sealed class TestCompilation
 	public List<FileError> AnalysisErrors { get; } = [];
 	public IEnumerable<FileError> AllErrors => ParseErrors.Concat(AnalysisErrors);
 	public Dictionary<CallExpressionNode, Symbols.SymbolInfo> ResolvedCalls { get; } = [];
+	public GlobalSymbolTable Symbols => _symbols;
 
 	public TestCompilation AddFile(string filePath, string source)
 	{

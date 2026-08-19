@@ -69,6 +69,21 @@ namespace GameScript.Language.Visitors
 				return;
 			}
 
+			// Variadic trigger ('trigger kind(...)'): handlers pick their own parameter list,
+			// bound by position by the host — only int/string/bool are host-parseable.
+			if (decl.IsVariadic)
+			{
+				if (node.Parameters == null)
+					return;
+				foreach (var param in node.Parameters)
+				{
+					var typeName = param.Type.Name;
+					if (typeName is not ("int" or "string" or "bool"))
+						Error($"Parameter '{param.Name.Name}' must be int, string or bool: handlers of variadic trigger '{kind}(...)' may only declare int/string/bool parameters.", param);
+				}
+				return;
+			}
+
 			var paramCount = node.Parameters?.Count ?? 0;
 			if (paramCount > decl.Arity)
 			{

@@ -230,9 +230,27 @@ public ref struct AstParser
 
 		/* ───── parameters ───── */
 		List<ParameterNode>? parameters = null;
+		var isVariadic = false;
+		OperatorNode? ellipsis = null;
 		if (Match(TokenType.OpenParen))
 		{
-			parameters = ParseParameterList();
+			// variadic trigger declaration: 'trigger NAME(...)' — handlers pick their own params
+			if (Match(TokenType.Ellipsis))
+			{
+				ellipsis = new OperatorNode("...", _filePath, PreviousRange);
+				if (idType == IdentifierType.TriggerDeclaration)
+					isVariadic = true;
+				else
+					Error("'...' is only allowed on trigger declarations ('trigger NAME(...)')", PreviousRange);
+				if (_current.Type != TokenType.CloseParen)
+					Error("'...' must be the only thing between the parentheses", CurrentRange);
+				while (_current.Type != TokenType.CloseParen && _current.Type != TokenType.EndOfLine && _current.Type != TokenType.EndOfFile)
+					Advance();
+			}
+			else
+			{
+				parameters = ParseParameterList();
+			}
 			Expect(TokenType.CloseParen, "Expected ')' after parameters", ")".AsSpan());
 
 			// trigger headers must omit '()' entirely when there are no parameters
@@ -281,12 +299,13 @@ public ref struct AstParser
 			?? (AstNode?)returns?.LastOrDefault()
 			?? (AstNode?)returnsKw
 			?? (AstNode?)parameters?.LastOrDefault()
+			?? (AstNode?)ellipsis
 			?? (AstNode?)nameNode;
 
 		return new MethodDefinitionNode(
 			kwNode, returnsKw, returns, nameNode, parameters, body, _filePath,
 			new FileRange(start, lastNode?.FileRange.End ?? start),
-			bindingOp, bindingName);
+			bindingOp, bindingName, isVariadic);
 	}
 
 	// table NAME([key] TYPE col, ...)

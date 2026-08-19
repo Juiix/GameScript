@@ -182,6 +182,14 @@ public sealed class BytecodeCompiler<TCommandOp> where TCommandOp : struct, Enum
 			};
 	}
 
+	/// <summary>Maps a declared GameScript type name to its runtime slot type (label/func refs are ints).</summary>
+	private static ValueType ToValueType(string typeName) => typeName switch
+	{
+		"string" => ValueType.String,
+		"bool" => ValueType.Bool,
+		_ => ValueType.Int,
+	};
+
 	private void CompileTables(IEnumerable<TableDefinitionNode> tables)
 	{
 		foreach (var table in tables)
@@ -192,12 +200,7 @@ public sealed class BytecodeCompiler<TCommandOp> where TCommandOp : struct, Enum
 			for (int c = 0; c < columns.Count; c++)
 			{
 				columnNames[c] = columns[c].Name.Name;
-				columnTypes[c] = columns[c].Type.Name switch
-				{
-					"string" => ValueType.String,
-					"bool" => ValueType.Bool,
-					_ => ValueType.Int,
-				};
+				columnTypes[c] = ToValueType(columns[c].Type.Name);
 			}
 
 			var rows = new List<Value[]>();
@@ -290,13 +293,17 @@ public sealed class BytecodeCompiler<TCommandOp> where TCommandOp : struct, Enum
 
 		// 4) Bake into method
 		var name = methodNode.SymbolName;
+		var paramTypes = new ValueType[paramCount];
+		for (int i = 0; i < paramCount; i++)
+			paramTypes[i] = ToValueType(methodNode.Parameters![i].Type.Name);
 		var method = new BytecodeMethod(
 			name,
 			[.. _ops],
 			[.. _operands],
 			paramCount,
 			_nextSlot - paramCount,
-			methodNode.ReturnTypes?.Count ?? 0);
+			methodNode.ReturnTypes?.Count ?? 0,
+			paramTypes);
 
 		var localNames = new string[_nextSlot];
 		foreach (var (localName, slot) in _localSlots)

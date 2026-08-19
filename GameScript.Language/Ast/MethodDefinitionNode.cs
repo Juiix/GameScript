@@ -14,9 +14,16 @@ namespace GameScript.Language.Ast
 		string filePath,
 		in FileRange fileRange,
 		OperatorNode? bindingOperator = null,
-		IdentifierDeclarationNode? bindingName = null) : AstNode(filePath, in fileRange)
+		IdentifierDeclarationNode? bindingName = null,
+		bool isVariadic = false) : AstNode(filePath, in fileRange)
 	{
 		public KeywordNode Keyword { get; } = keyword;
+
+		/// <summary>
+		/// Trigger declarations only: declared as 'trigger NAME(...)'. Handlers of a variadic
+		/// trigger declare their own int/string/bool parameters, which the host binds by position.
+		/// </summary>
+		public bool IsVariadic { get; } = isVariadic;
 		public KeywordNode? ReturnsKeyword { get; } = returnsKeyword;
 		public List<ReturnTypeNode>? ReturnTypes { get; } = returnTypes;
 		public IdentifierDeclarationNode Name { get; } = name;

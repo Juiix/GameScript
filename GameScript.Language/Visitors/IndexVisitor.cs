@@ -80,7 +80,8 @@ namespace GameScript.Language.Visitors
 				node.Parameters?.Count(x => x.Default != null) ?? 0,
 				node.Parameters?.Any(x => x.Default != null) == true
 					? node.Parameters.Select(x => DefaultLabel(x.Default)).ToList()
-					: null
+					: null,
+				isVariadic: node.IsVariadic
 			);
 
 			_fileIndex.AddSymbol(symbol);

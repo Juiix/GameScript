@@ -2,6 +2,17 @@
 
 All notable changes to GameScript will be documented in this file.
 
+## [2.4.2]
+
+**Feature release — variadic triggers and typed parameters in bytecode.** Lets a host dispatch raw input (chat commands) to handlers that each declare their own parameter list, parsing arguments by the handler's compiled signature.
+
+### Language
+- **`trigger NAME(...)`** — a *variadic* trigger declaration. Handlers of a variadic kind may declare any parameter list of `int`, `string` and `bool` (or none); the prefix rule does not apply. Other parameter types are an error ("may only declare int/string/bool parameters"). `...` anywhere else — on a `func`, `command`, or handler, or mixed with named parameters — is a parse error. `...` is a new token (`Ellipsis`); `..` remains the range operator.
+
+### Embedding
+- `BytecodeMethod.ParamTypes` (`ValueType[]?`) — the declared type of each parameter, aligned with locals `0..ParamCount-1`; `func`/label refs report as `Int`. Populated by the compiler for every method; the constructor's new trailing `paramTypes` argument defaults to `null` ("unknown") so hand-built or legacy programs still construct. Hosts that serialize bytecode should persist it.
+- `MethodDefinitionNode.IsVariadic` / `SymbolInfo.IsVariadic`; `SymbolInfo.ParamSignature` and `.Signature` render `(...)` for variadic declarations (hover/outline pick this up unchanged).
+
 ## [2.4.1]
 
 ### Fixed

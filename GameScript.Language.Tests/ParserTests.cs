@@ -355,6 +355,55 @@ public class ParserTests
 	}
 
 	// ---------------------------------------------------------------
+	// 2.4.2: variadic trigger declarations
+	// ---------------------------------------------------------------
+
+	[Fact]
+	public void Parses_Variadic_Trigger_Declaration()
+	{
+		var (root, errors) = ParseProgram("trigger slash(...)");
+		Assert.Empty(errors);
+		var method = Assert.Single(root.Methods!);
+		Assert.Equal(IdentifierType.TriggerDeclaration, method.Name.Type);
+		Assert.True(method.IsVariadic);
+		Assert.Null(method.Parameters);
+	}
+
+	[Fact]
+	public void Non_Variadic_Trigger_Declaration_Is_Not_Variadic()
+	{
+		var (root, _) = ParseProgram("trigger mn_text(string text)");
+		Assert.False(Assert.Single(root.Methods!).IsVariadic);
+	}
+
+	[Fact]
+	public void Ellipsis_On_Func_Is_An_Error()
+	{
+		var (_, errors) = ParseProgram("""
+			func f(...)
+			    return
+			""");
+		Assert.Contains(errors, e => e.Message.Contains("only allowed on trigger declarations"));
+	}
+
+	[Fact]
+	public void Ellipsis_On_Handler_Is_An_Error()
+	{
+		var (_, errors) = ParseProgram("""
+			slash tele(...)
+			    return
+			""");
+		Assert.Contains(errors, e => e.Message.Contains("only allowed on trigger declarations"));
+	}
+
+	[Fact]
+	public void Ellipsis_Mixed_With_Params_Is_An_Error()
+	{
+		var (_, errors) = ParseProgram("trigger slash(..., int x)");
+		Assert.Contains(errors, e => e.Message.Contains("only thing between the parentheses"));
+	}
+
+	// ---------------------------------------------------------------
 	// 2.1: default parameter values
 	// ---------------------------------------------------------------
 

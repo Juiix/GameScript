@@ -239,6 +239,14 @@ namespace GameScript.Language.Lexer
 			if (ch == '.' && _column + 1 < _text.Length && _text[_column + 1] == '.')
 			{
 				int start = _column;
+				// '...' ellipsis (variadic trigger declaration) wins over '..'
+				if (_column + 2 < _text.Length && _text[_column + 2] == '.')
+				{
+					_column += 3;
+					return new Token(TokenType.Ellipsis,
+									 _text.Slice(start, 3),
+									 CurrentRange(pos));
+				}
 				_column += 2;
 				return new Token(TokenType.Range,
 								 _text.Slice(start, 2),

@@ -180,6 +180,25 @@ public class TokenizerTests
 	}
 
 	[Fact]
+	public void Ellipsis_Token_Inside_Parens()
+	{
+		var tokens = LexNoLayout("trigger slash(...)");
+		Assert.Equal(new[] {
+			(TokenType.Keyword, "trigger"),
+			(TokenType.Identifier, "slash"),
+			(TokenType.OpenParen, "("),
+			(TokenType.Ellipsis, "..."),
+			(TokenType.CloseParen, ")") }, tokens);
+	}
+
+	[Fact]
+	public void Two_Dots_Are_Still_A_Range()
+	{
+		var tokens = LexNoLayout("a..b");
+		Assert.Equal((TokenType.Range, ".."), tokens[1]);
+	}
+
+	[Fact]
 	public void Newlines_Inside_Parens_Are_Joined()
 	{
 		// implicit line joining: no EndOfLine/Indent/Dedent tokens inside '(...)'

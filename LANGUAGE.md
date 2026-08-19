@@ -435,6 +435,24 @@ The compiler validates handler headers against the declarations:
 - Trigger names share the global namespace with funcs and commands but are
   never callable, so a trigger may not share a name with either.
 
+**Variadic triggers.** A kind declared as `trigger NAME(...)` lets each handler
+declare its *own* parameter list — the host binds arguments by position from
+the handler's compiled signature (`BytecodeMethod.ParamTypes`) rather than from
+the declaration. Only `int`, `string` and `bool` parameters are allowed, since
+those are the types a host can parse from raw input. The typical use is chat
+commands, where the command line is split according to the handler it targets:
+
+```gamescript
+// Chat command "/name args…"; handlers pick their own params
+trigger slash(...)
+
+slash tele(int x, int y)
+    p_teleport(x, y, p_plane())
+
+slash give(string item, int count)
+    inv_add(^inv_backpack, di_lookup(item), count)
+```
+
 ---
 
 ## 6 Expressions & Operators
