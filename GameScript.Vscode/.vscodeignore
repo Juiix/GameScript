@@ -2,3 +2,6 @@
 src
 tsconfig.json
 .gitignore
+package-lock.json
+**/*.map
+**/*.d.ts

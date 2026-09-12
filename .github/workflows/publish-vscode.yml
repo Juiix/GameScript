@@ -47,7 +47,7 @@ jobs:
       working-directory: Scripts
       run: ./build-lsp.sh
 
-    # ── Package VS Code extension ────────────────────────────────────
+    # ── Package VS Code extension (one VSIX per platform) ────────────
     - name: Install vsce
       run: npm install -g @vscode/vsce
 
@@ -55,16 +55,24 @@ jobs:
       working-directory: GameScript.Vscode
       run: npm ci
 
-    - name: Package
-      id: pkg
+    - name: Compile extension
       working-directory: GameScript.Vscode
+      run: npm run compile
+
+    - name: Package
+      working-directory: Scripts
       run: |
-        npx vsce package --out vscode-extension.vsix
-        echo "vsix_path=$(pwd)/vscode-extension.vsix" >> "$GITHUB_OUTPUT"
+        chmod +x ./package-vscode.sh
+        ./package-vscode.sh "$GITHUB_WORKSPACE/vsix"
+
+    - name: Upload VSIXs as workflow artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: vsix
+        path: vsix/*.vsix
 
     # ── Publish to VS Code Marketplace ───────────────────────────────
     - name: Publish
-      working-directory: GameScript.Vscode
       env:
         VSCE_PAT: ${{ secrets.VSCE_TOKEN }}
-      run: npx vsce publish --packagePath "${{ steps.pkg.outputs.vsix_path }}" --pat "$VSCE_PAT"
+      run: npx vsce publish --packagePath vsix/*.vsix --pat "$VSCE_PAT"

@@ -13,6 +13,23 @@
       <DebugType>embedded</DebugType>
     </PropertyGroup>
 
+    <!--
+      Size trimming for the self-contained builds the editor extensions ship
+      (build-lsp.sh / publish-visualstudio.yml pass "-\-self-contained true").
+      Must live here rather than on the dotnet CLI: a global -p:PublishTrimmed
+      flows into GameScript.Bytecode (netstandard2.1) and fails with NETSDK1124.
+      Partial trim mode only trims assemblies that opt in (BCL, Microsoft.Extensions),
+      so OmniSharp / Newtonsoft.Json / MediatR reflection is untouched.
+      ~71 MB -> ~14 MB on disk per platform; ~30 MB -> ~9 MB zipped.
+    -->
+    <PropertyGroup Condition="'$(SelfContained)' == 'true'">
+      <PublishTrimmed>true</PublishTrimmed>
+      <TrimMode>partial</TrimMode>
+      <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+      <InvariantGlobalization>true</InvariantGlobalization>
+      <UseSystemResourceKeys>true</UseSystemResourceKeys>
+    </PropertyGroup>
+
     <ItemGroup>
       <PackageReference Include="FuzzySharp" Version="2.0.2" />
       <PackageReference Include="Microsoft.Extensions.Hosting" Version="9.0.3" />

@@ -2,6 +2,14 @@
 
 All notable changes to GameScript will be documented in this file.
 
+## [2.5.1]
+
+**Tooling release — much smaller editor extensions.** No language, compiler, or VM change.
+
+### Tooling
+- VS Code: the marketplace now serves one platform-specific VSIX per OS/arch (`win32-x64`, `win32-arm64`, `darwin-x64`, `darwin-arm64`, `linux-x64`, `linux-arm64`) instead of a single package carrying all six language-server builds. Download size drops roughly 20×. `Scripts/package-vscode.sh` produces the per-platform packages from the folders `build-lsp.sh` publishes.
+- Language server: self-contained publishes are now IL-trimmed (`TrimMode=partial`, invariant globalization, compressed single file) — about 15 MB on disk per platform instead of 71 MB. Applies to both the VS Code and Visual Studio extensions. Linux builds no longer need a system ICU library.
+
 ## [2.5.0]
 
 **Feature release — named types, typed declarations, `.gs`-only sources.** Named types are aliases over a root type (`type item : int`) so content ids stop being interchangeable integers: `mn_open_dialogue(^item_bronze_sword)` becomes a compile error once the command is declared `(menu m)`, table columns become checkable, and hosts can emit typed constants straight from their content index. Named types erase at codegen — no new opcodes, no VM or `ScriptState` change. Alongside: constants, contexts, and types become ordinary top-level declarations of the one `.gs` grammar, retiring the `.const`/`.context` extensions.
