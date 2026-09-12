@@ -46,8 +46,10 @@ internal sealed class RenameHandler(
 
 		var project = _projects.GetProject(filePath);
 		var localIndex = rootData.GetLocalIndex(request.Position.Line, request.Position.Character);
-		var localSymbol = localIndex?.GetSymbol(symbolName);
-		var symbol = localSymbol ?? project.Symbols.GetSymbol(symbolName);
+		// a named type is never local (a local may shadow its name) and is looked up by kind
+		var isType = astNode.IsTypeReference();
+		var localSymbol = isType ? null : localIndex?.GetSymbol(symbolName);
+		var symbol = localSymbol ?? (isType ? project.Symbols.FindTypeSymbol(symbolName) : project.Symbols.GetSymbol(symbolName));
 		if (symbol == null)
 		{
 			return null;
@@ -99,32 +101,25 @@ internal sealed class RenameHandler(
 		};
 	}
 
-	private static TextEdit GetEdit(SymbolInfo symbol, string newName)
+	private static TextEdit GetEdit(SymbolInfo symbol, string newName) =>
+		GetEdit(symbol.FileRange, symbol.Name, newName);
+
+	private static TextEdit GetEdit(ReferenceInfo reference, string newName) =>
+		GetEdit(reference.FileRange, reference.Name, newName);
+
+	// The range of a '^const' / '@ctx' / '.@ctx' / '.cmd' occurrence includes its
+	// mark(s) while the symbol name does not; a bare occurrence (func, local, table,
+	// type) has no prefix at all. Whatever the prefix, it is exactly the range's
+	// surplus over the name, and it is kept.
+	private static TextEdit GetEdit(FileRange range, string name, string newName)
 	{
-		var range = symbol.FileRange;
-		if ((symbol.IdentifierType & IdentifierType.Variable) != IdentifierType.Unknown)
-		{
-			var newStart = range.Start.AddColumn(1); // ignore prefix
-			range = new FileRange(newStart, range.End);
-		}
+		var prefixLength = Math.Max(0, range.End.Position - range.Start.Position - name.Length);
+		var editRange = new FileRange(range.Start.AddColumn(prefixLength), range.End);
 
 		return new TextEdit
 		{
 			NewText = newName,
-			Range = range.ConvertRange()
-		};
-	}
-
-	private static TextEdit GetEdit(ReferenceInfo reference, string newName)
-	{
-		var range = reference.FileRange;
-		var newStart = range.Start.AddColumn(1); // ignore prefix
-		range = new FileRange(newStart, range.End);
-
-		return new TextEdit
-		{
-			NewText = newName,
-			Range = range.ConvertRange()
+			Range = editRange.ConvertRange()
 		};
 	}
 

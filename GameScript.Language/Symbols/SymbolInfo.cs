@@ -97,7 +97,8 @@ namespace GameScript.Language.Symbols
 			IdentifierType == IdentifierType.TriggerDeclaration ||
 			IdentifierType == IdentifierType.Constant ||
 			IdentifierType == IdentifierType.Context ||
-			IdentifierType == IdentifierType.Table;
+			IdentifierType == IdentifierType.Table ||
+			IdentifierType == IdentifierType.Type;
 		public string PrefixedName => $"{GetPrefix(IdentifierType)}{Name}";
 
 		private static string CreateSignature(
@@ -113,7 +114,15 @@ namespace GameScript.Language.Symbols
 		{
 			Span<char> buffer = stackalloc char[64];
 			var vsb = new ValueStringBuilder(buffer);
-			if (identifierType == IdentifierType.Table)
+			if (identifierType == IdentifierType.Type)
+			{
+				// type item : int
+				vsb.Append("type ");
+				vsb.Append(name);
+				vsb.Append(" : ");
+				vsb.Append(type?.Underlying?.Name ?? "?");
+			}
+			else if (identifierType == IdentifierType.Table)
 			{
 				// table name(int a, key string b)
 				vsb.Append("table ");
@@ -196,6 +205,7 @@ namespace GameScript.Language.Symbols
 				IdentifierType.Label => "label",
 				IdentifierType.TriggerDeclaration => "trigger",
 				IdentifierType.Table => "table",
+				IdentifierType.Type => "type",
 				IdentifierType.Local => "local",
 				IdentifierType.Context => "context",
 				IdentifierType.Constant => "constant",

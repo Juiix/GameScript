@@ -76,6 +76,10 @@ namespace GameScript.Language.Ast
 		// a table column: the header declaration, a '.col' member, or a '[col: k]'
 		// key selector. Not a symbol — resolved against the owning table's columns.
 		Column = 1 << 12,
+		// a named-type declaration ('type item : int') or a cast callee ('item(x)');
+		// shares the func/command/trigger/table namespace, never a value, never callable
+		// except as a one-argument cast. Locals and parameters may shadow a type name.
+		Type = 1 << 13,
 
 		Variable = Local | Context | Constant,
 		Method = Func | Label | Command | Trigger | TriggerDeclaration,

@@ -86,13 +86,11 @@ internal sealed class ParsingService
 	{
 		var parser = new AstParser(filePath, source);
 		var extension = Path.GetExtension(filePath.AsSpan());
-		AstNode node = extension switch
-		{
-			".context" => parser.ParseContexts(),
-			".const" => parser.ParseConstants(),
-			".gs" => parser.ParseProgram(),
-			_ => throw new InvalidOperationException($"Unsupported extension: {extension}")
-		};
+		if (!extension.Equals(".gs", StringComparison.OrdinalIgnoreCase))
+			throw new InvalidOperationException($"Unsupported extension: {extension}");
+
+		// one grammar: constants, contexts, types, tables and methods are all top-level declarations
+		AstNode node = parser.ParseProgram();
 
 		if (parser.Errors is { Count: > 0 })
 			errors.AddRange(parser.Errors);

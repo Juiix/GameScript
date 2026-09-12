@@ -10,8 +10,6 @@
 ;----------------------------------------
 [$RootKey$\TextMate]
 "*.gs"="source.gamescript"
-"*.const"="source.gamescript"
-"*.context"="source.gamescript"
 "*.menu"="source.objectdef"
 "*.npc" ="source.objectdef"
 "*.item"="source.objectdef"
@@ -38,10 +36,6 @@
 ; Associate icons with file extensions
 ;----------------------------------------
 [$RootKey$\ShellFileAssociations\.gs]
-"DefaultIconMoniker"="KnownMonikers.ClassFile"
-[$RootKey$\ShellFileAssociations\.const]
-"DefaultIconMoniker"="KnownMonikers.ClassFile"
-[$RootKey$\ShellFileAssociations\.context]
 "DefaultIconMoniker"="KnownMonikers.ClassFile"
 [$RootKey$\ShellFileAssociations\.item]
 "DefaultIconMoniker"="KnownMonikers.ComponentFile"

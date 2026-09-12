@@ -12,7 +12,8 @@ namespace GameScript.Language.Tests.Harness;
 /// <summary>
 /// Drives the full front-end pipeline (parse -> index -> analyze -> compile) over
 /// in-memory sources, mirroring how ContentBuilder's ScriptBuilder wires the
-/// visitors. File "paths" are virtual; the extension selects the parse entry point.
+/// visitors. File "paths" are virtual; every file parses as .gs (constants, contexts
+/// and types are ordinary top-level declarations).
 /// </summary>
 public sealed class TestCompilation
 {
@@ -30,12 +31,7 @@ public sealed class TestCompilation
 	public TestCompilation AddFile(string filePath, string source)
 	{
 		var parser = new AstParser(filePath, source);
-		AstNode root = System.IO.Path.GetExtension(filePath) switch
-		{
-			".const" => parser.ParseConstants(),
-			".context" => parser.ParseContexts(),
-			_ => parser.ParseProgram(),
-		};
+		AstNode root = parser.ParseProgram();
 		if (parser.Errors is { Count: > 0 })
 			ParseErrors.AddRange(parser.Errors);
 
@@ -85,14 +81,15 @@ public sealed class TestCompilation
 			throw new InvalidOperationException(
 				"Cannot compile with errors:\n" + string.Join("\n", errors.Select(FormatError)));
 
-		var roots = _files.Select(x => x.Root).ToArray();
-		var constants = roots.OfType<ConstantsNode>().SelectMany(x => x.Definitions ?? []);
-		var contexts = roots.OfType<ContextsNode>().SelectMany(x => x.Definitions ?? []);
-		var methods = roots.OfType<ProgramNode>().SelectMany(x => x.Methods ?? []);
-		var tables = roots.OfType<ProgramNode>().SelectMany(x => x.Tables ?? []);
+		var roots = _files.Select(x => x.Root).OfType<ProgramNode>().ToArray();
+		var constants = roots.SelectMany(x => x.Constants ?? []);
+		var contexts = roots.SelectMany(x => x.Contexts ?? []);
+		var methods = roots.SelectMany(x => x.Methods ?? []);
+		var tables = roots.SelectMany(x => x.Tables ?? []);
+		var types = roots.SelectMany(x => x.Types ?? []);
 
 		var compiler = new BytecodeCompiler<TestOp>(ResolvedCalls);
-		return compiler.Compile(constants, contexts, methods, tables);
+		return compiler.Compile(constants, contexts, methods, tables, types);
 	}
 
 	public static string FormatError(FileError error) =>

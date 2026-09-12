@@ -1,6 +1,6 @@
 # GameScript — Language Reference
 
-> **Scope** This guide covers writing GameScript 2.4: files, types, methods, constant tables, operators, control flow, and common patterns.
+> **Scope** This guide covers writing GameScript 2.5: files, types (named types included), methods, constant tables, operators, control flow, and common patterns.
 >
 > Embedding the compiler/VM in a C# game? See **[EMBEDDING.md](EMBEDDING.md)**.
 >
@@ -24,15 +24,16 @@
 
 ## 1 Files & the Global Namespace
 
-| Extension  | Allowed content                | Purpose                                  |
-| ---------- | ------------------------------ | ---------------------------------------- |
-| `.gs`      | Method and table declarations  | Funcs, commands, triggers, tables        |
-| `.const`   | **Only** constant declarations | Compile-time values (`^name`)            |
-| `.context` | **Only** context declarations  | Host-backed variable slots (`@name`)     |
+| Extension  | Content                                                                 |
+| ---------- | ----------------------------------------------------------------------- |
+| `.gs`      | Every declaration: named types, constants (`^name`), context variables (`@name`), tables, funcs, commands, triggers, handlers |
 
-Mixing categories in the same file is a parser error.
+Declarations may be mixed in one file in any order — a `hit_type.gs` can hold
+`type hit_type : int`, its constants, and a table keyed on them. (Before 2.5,
+constants and contexts lived in separate `.const`/`.context` files; those are
+now plain `.gs` files — rename them.)
 
-**There are no imports.** All files in a project share one global namespace: any `func`, `^constant`, or `@context` variable is visible from every script. Projects typically organize by feature folder and generate `.const` files as symbol tables for game data (item IDs, menu IDs, sounds, …).
+**There are no imports.** All files in a project share one global namespace: any `func`, `^constant`, `@context` variable, table, or named type is visible from every script. Projects typically organize by feature folder and generate `.gs` files as symbol tables for game data (one `type` per content kind plus its typed constants: item IDs, menu IDs, sounds, …).
 
 **Sub-projects**: a workspace may hold several independent script projects (e.g. `content/server/` and `content/client/`, each with its own core.gs). Place a `gamescript.json` marker file in each project's root folder — the editor tooling then treats each subtree as its own namespace, so identically-named commands/funcs across projects don't conflict. Files outside every marker belong to the workspace root's default project.
 
@@ -83,10 +84,10 @@ command kill_player()
 
 Only two marks exist; everything else is a bare identifier resolved by declaration:
 
-| Mark   | Kind        | Declared in   | Example                      |
-| ------ | ----------- | ------------- | ---------------------------- |
-| `^`    | Constant    | `.const`      | `^max_level`                 |
-| `@`    | Context var | `.context`    | `@tutorial_progress`         |
+| Mark   | Kind        | Declared by (top level)  | Example                      |
+| ------ | ----------- | ------------------------ | ---------------------------- |
+| `^`    | Constant    | `TYPE ^name = literal`   | `^max_level`                 |
+| `@`    | Context var | `TYPE @name = slot`      | `@tutorial_progress`         |
 
 Locals, params, funcs, commands, and triggers are bare identifiers: `count`,
 `skill_name(skill)`, `queue(close_gate, 10)`. The compiler resolves bare names
@@ -99,15 +100,16 @@ Convention: `snake_case` for funcs/commands/triggers/constants/context vars, `ca
 
 `func` `command` `trigger` `table` `return` `returns` `if` `else` `while`
 `switch` `case` `default` `for` `in` `break` `continue` `and` `or` `not`
-`true` `false` — these cannot be used as identifiers. (`key` is contextual:
-it only means "key column" inside a `table` header and is otherwise a normal
-name.)
+`true` `false` — these cannot be used as identifiers. (`key` and `type` are
+contextual: `key` only means "key column" inside a `table` header, and `type`
+only opens a declaration on a top-level line of the form `type NAME : root`;
+both are otherwise normal names, so `int type = npc_type()` stays legal.)
 
 ### Literals
 
 ```gamescript
 int    a = 42
-int    b = -7          // negative literals allowed, including in .const files
+int    b = -7          // negative literals allowed, including in constant declarations
 int    c = 0x1f        // hex
 bool   d = true
 string e = "Hello"
@@ -140,29 +142,105 @@ GameScript has three scalar value types and a special `func` type for method ref
 
 The type checker is strict in script, but the **runtime boundary is forgiving**: values crossing between script and host coerce between `bool` and `int` (`true` = `1`, non-zero = `true`). In particular, a host can back a `bool @context` variable with int storage.
 
+### Named types
+
+A *named type* is an alias over `int` or `string` that the compiler keeps
+distinct, so content ids stop being interchangeable integers:
+
+```gamescript
+// The id of an item definition
+type item : int
+type menu : int
+type title : string
+
+item ^item_iron_sword = 42
+menu ^menu_hud = 3
+
+command mn_open(menu m)
+command inv_count(int inv, item id) returns int
+```
+
+- `type NAME : int|string` is a top-level declaration (anywhere a `func` or
+  `table` may appear). `type` is contextual: only a top-level line of exactly
+  this shape declares one; elsewhere `type` is an ordinary identifier.
+- Type names share the func/command/trigger/table namespace, but a **local or
+  parameter may shadow a type name** — inside that method the name is the local
+  (and `item(x)` there is a call on the local, not a cast).
+- The `//` comment above the declaration is the type's doc (hover text).
+
+**Assignability.** A named type widens to its root implicitly; the reverse,
+and any named-to-named conversion, needs a cast:
+
+| From → To                       | Rule                                    |
+| ------------------------------- | --------------------------------------- |
+| `item` → `int`                  | implicit — a typed id is still a number |
+| `int` → `item`                  | cast: `item(x)`                         |
+| `item` → `menu`                 | cast: `menu(x)` — the roots must match  |
+| literal `0` / `""` → any named  | implicit — the "none" id                |
+
+So `mn_open(^item_iron_sword)` is a compile error, while an `int` parameter
+keeps accepting `^item_iron_sword` — hosts can retype declarations one at a
+time. Default parameter values, tuple destructuring (`(item a, int b) = f()`),
+`switch` cases, table cells and table keys all follow the same rule.
+
+**Operators.** `==`/`!=` compare a named type with itself or with its root
+(`if held != 0`); two different named types never compare. Arithmetic and
+ordering widen to the root and yield the root — `menu + 1` is an `int` — so
+`x += 1` and `x++` on a named-typed variable are errors: write
+`x = menu(x + 1)`. String interpolation prints the root value.
+
+**Casts.** `NAME(expr)` — the type name applied as a one-argument call; the
+argument's root must be the type's root. A cast compiles to nothing and is not
+a constant expression: `case` values, table cells and default values must be
+`^constants` or literals.
+
+**Overloads.** An exact named-type match outranks one that needs widening, so
+a typed overload may sit beside an `int` one. A bare `0`/`""` converts to every
+named type: `f(0)` against `f(item)` and `f(menu)` alone is ambiguous (with an
+`int` overload present, `int` wins).
+
+Named types erase at codegen: no runtime tag, no new opcodes, and the host sees
+the same `Value` slots as before.
+
 ---
 
 ## 4 Declarations
 
-### Constants (`.const`)
+### Named types (`type`)
 
-Compile-time literals — `int` (decimal, hex, or negative), `bool`, or `string`:
+```gamescript
+// One per content kind — typically generated by the host next to its constants
+type item : int
+type provider : string
+```
+
+See [Named types](#named-types) for the rules. Root types are `int` and
+`string` only.
+
+### Constants
+
+Compile-time literals — `int` (decimal, hex, or negative), `bool`, `string`,
+or a named type (the literal fits the root):
 
 ```gamescript
 int ^tutorial_killed_rat = 10
 int ^temperature_min = -40
 int ^color_mask = 0xff00ff
 string ^example_message = "Hello, world"
+item ^item_iron_sword = 42
+provider ^provider_google = "google"
 ```
 
-### Context variables (`.context`)
+### Context variables
 
-Context variables map to per-player (or per-entity) slots provided by the host. The initializer is the **slot ID**, not a default value:
+Context variables map to per-player (or per-entity) slots provided by the host. The initializer is the **slot ID**, not a default value — whatever the declared type, named types included:
 
 ```gamescript
 int @tutorial_progress = 1
 // A skill value determining the player's damage output
 int @skill_strength = 4
+// The item currently held (an item id, slot 1030)
+item @held_item = 1030
 ```
 
 ### Local variables (`.gs` bodies)
@@ -178,6 +256,7 @@ string first, last
 ```
 
 Locals may not shadow a func, command, or table name — pick a different name.
+They *may* shadow a named type (`int item = inv_get_item(...)` is fine).
 
 ### Constant tables (`table`)
 
@@ -203,10 +282,13 @@ func tier_sword(int bar) returns int
     return smith_tier[bar].sword          // keyed lookup on the first column
 ```
 
-- Column types are `int`, `string`, or `bool`.
+- Column types are `int`, `string`, `bool`, or a named type
+  (`table smith_tier(item bar, item sword, ...)`).
 - Cells are `^const` or `int`/`string`/`bool` literals — no expressions, no
-  variables. A cell's type must match its column; every row has the header's
-  arity; a table needs at least one row.
+  variables. A cell's type must match its column (a named-type column takes
+  constants of that type or the zero literal); every row has the header's
+  arity; a table needs at least one row. Key arguments follow the same
+  assignability rule, and `for r in t` cursors read typed cells.
 - Table names share the func/command/trigger namespace and are visible
   wherever funcs declared in the same compile root are visible.
 - The `//` comment above the declaration is the table's doc (hover text).
@@ -638,7 +720,10 @@ command suspend_for_int() returns int
 Funcs and commands may **overload**: same name, different parameter signatures
 (count or types). Call sites resolve by argument count and types; a call that
 matches no overload — or would be ambiguous — is a compile error. Return types
-do not participate in overload resolution.
+do not participate in overload resolution. An exact named-type match outranks
+one that needs widening, so `f(item)` may sit beside `f(int)` and
+`f(^item_iron_sword)` picks the typed one; the call's result type is that
+overload's return type.
 
 Each command overload binds to its own engine op. By default the binding is the
 declared name; `= internal_name` binds explicitly, which lets one script name

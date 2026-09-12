@@ -34,9 +34,7 @@ public class PositionLookupTests
 		AstNode Add(string path, string text)
 		{
 			var parser = new AstParser(path, text);
-			AstNode root = path.EndsWith(".context") ? parser.ParseContexts()
-				: path.EndsWith(".const") ? parser.ParseConstants()
-				: parser.ParseProgram();
+			AstNode root = parser.ParseProgram();
 			Assert.Empty(parser.Errors ?? []);
 			var fileIndex = new FileIndex();
 			var visitor = new IndexVisitor(fileIndex, new VisitorContext(types, symbols, path));
@@ -48,8 +46,8 @@ public class PositionLookupTests
 		}
 
 		Add("core.gs", "// Prints\ncommand print(string value)");
-		Add("player.context", "int @hp = 3");
-		Add("skills.const", "int ^max_level = 99");
+		Add("player.gs", "int @hp = 3");
+		Add("skills.gs", "int ^max_level = 99");
 		var root = Add("test.gs", Source);
 		return (root, symbols, locals);
 	}
@@ -126,11 +124,11 @@ public class PositionLookupTests
 		root.Accept(indexVisitor);
 		symbols.AddFile("test.gs", fileIndex.FileSymbols);
 
-		var constParser = new AstParser("fx.const", "int ^fx_level_up = 1");
-		var constRoot = constParser.ParseConstants();
+		var constParser = new AstParser("fx.gs", "int ^fx_level_up = 1");
+		var constRoot = constParser.ParseProgram();
 		var constIndex = new FileIndex();
-		constRoot.Accept(new IndexVisitor(constIndex, new VisitorContext(types, symbols, "fx.const")));
-		symbols.AddFile("fx.const", constIndex.FileSymbols);
+		constRoot.Accept(new IndexVisitor(constIndex, new VisitorContext(types, symbols, "fx.gs")));
+		symbols.AddFile("fx.gs", constIndex.FileSymbols);
 
 		// line 17 = the message(...) line; '{after}' starts at col 74, 'after' at 75
 		var messageLine = source.Split('\n')[17];

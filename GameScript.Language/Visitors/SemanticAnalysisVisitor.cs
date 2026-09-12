@@ -22,8 +22,35 @@ namespace GameScript.Language.Visitors
 		// this set is being misused as a value.
 		private readonly HashSet<AstNode> _tableTargets = [];
 
+		// Likewise the callee of every call: a type name is legal there (a cast,
+		// 'item(x)') and nowhere else in expression position.
+		private readonly HashSet<AstNode> _castCallees = [];
+
 		/// <summary>Row-count threshold above which a table warns (lookups are compare chains).</summary>
 		public const int LargeTableRowCount = 64;
+
+		// ---------------------------------------------------------------
+		// named types
+		// ---------------------------------------------------------------
+
+		public override void Visit(TypeDefinitionNode node)
+		{
+			var name = node.Name.Name;
+			if (_context.Types.GetPrimitive(name) != null)
+				Error($"'{name}' is a built-in type and cannot be redeclared.", node.Name);
+
+			var root = node.Underlying.Name;
+			if (root is not ("int" or "string"))
+				Error($"The root type of '{name}' must be 'int' or 'string'; '{root}' is not allowed.", node.Underlying);
+
+			base.Visit(node);
+		}
+
+		public override void Visit(CallExpressionNode node)
+		{
+			_castCallees.Add(node.FunctionName);
+			base.Visit(node);
+		}
 
 		public override void Visit(MethodDefinitionNode node)
 		{
@@ -113,8 +140,10 @@ namespace GameScript.Language.Visitors
 			var seenColumns = new HashSet<string>();
 			foreach (var column in columns)
 			{
-				if (column.Type.Name is not ("int" or "string" or "bool"))
-					Error($"Table columns must be 'int', 'string' or 'bool'; column '{column.Name.Name}' is '{column.Type.Name}'.", column.Type);
+				// unknown type names are reported by type analysis ('Undefined type')
+				var columnType = _context.Types.GetType(column.Type.Name);
+				if (columnType != null && columnType.RootKind is not (TypeKind.Int or TypeKind.String or TypeKind.Bool))
+					Error($"Table columns must be 'int', 'string', 'bool' or a named type; column '{column.Name.Name}' is '{column.Type.Name}'.", column.Type);
 				if (MemberExpressionNode.IsReservedMemberName(column.Name.Name))
 					Error($"'{column.Name.Name}' is a reserved table member ('count', 'has', 'at'); pick another column name.", column.Name);
 				else if (!seenColumns.Add(column.Name.Name))
@@ -316,6 +345,12 @@ namespace GameScript.Language.Visitors
 			if (symbol == null)
 			{
 				Error($"'{node.Name}' is not declared.", node);
+			}
+			else if (node.Type == IdentifierType.Type)
+			{
+				if (!_castCallees.Contains(node))
+					Error($"'{node.Name}' is a type, not a value; write {node.Name}(expr) to cast.", node);
+				return;
 			}
 			else if (node.Type == IdentifierType.Table)
 			{

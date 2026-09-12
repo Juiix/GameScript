@@ -85,9 +85,15 @@ internal sealed class HoverHandler(
 		{
 			MethodDefinitionNode methodDefinitionNode => CreateMethodHover(methodDefinitionNode.SymbolName, symbols),
 			TableDefinitionNode tableDefinitionNode => CreateTableHover(tableDefinitionNode.Name.Name, symbols),
+			TypeDefinitionNode typeDefinitionNode => CreateTypeHover(typeDefinitionNode.Name.Name, astNode, symbols, cast: false),
+			// a named type in type position ('item x', 'returns item', a column type)
+			TypeNode typeNode => CreateTypeHover(typeNode.Name, astNode, symbols, cast: false),
+			// a cast callee ('item(x)')
+			IdentifierNode { Type: IdentifierType.Type } castCallee => CreateTypeHover(castCallee.Name, astNode, symbols, cast: parent is CallExpressionNode),
 			IdentifierNode identifierNode => GetHover(identifierNode.Type, identifierNode.Name, localIndex, symbols),
 			IdentifierDeclarationNode { Type: IdentifierType.EngineOp } engineOp
 				when parent is MethodDefinitionNode boundMethod => CreateEngineOpHover(engineOp, boundMethod),
+			IdentifierDeclarationNode { Type: IdentifierType.Type } typeName => CreateTypeHover(typeName.Name, astNode, symbols, cast: false),
 			IdentifierDeclarationNode identifierDeclarationNode => parent switch
 			{
 				MethodDefinitionNode parentMethod => CreateMethodHover(parentMethod.SymbolName, symbols),
@@ -98,13 +104,44 @@ internal sealed class HoverHandler(
 		};
 	}
 
+	// hovering a named type: its declaration + doc, and what the name does at this site
+	private static Hover? CreateTypeHover(string typeName, AstNode site, ISymbolIndex symbols, bool cast)
+	{
+		var symbol = symbols.FindTypeSymbol(typeName);
+		if (symbol == null)
+			return null;    // a built-in type, or undeclared
+
+		var root = symbol.Type?.Underlying?.Name ?? "?";
+		var builder = new StringBuilder();
+		if (!string.IsNullOrEmpty(symbol.Summary))
+			builder.AppendLine(symbol.Summary);
+		builder.AppendLine();
+		builder.AppendLine("```gamescript");
+		builder.AppendLine(symbol.Signature);
+		builder.AppendLine("```");
+		builder.AppendLine();
+		builder.AppendLine(cast
+			? $"Cast: converts an `{root}` value (or another `{root}`-rooted named type) to `{typeName}`. Compiles to nothing."
+			: $"Named type over `{root}`: widens to `{root}` implicitly; `{typeName}(expr)` converts to it.");
+
+		return new Hover
+		{
+			Contents = new MarkedStringsOrMarkupContent(new MarkupContent
+			{
+				Kind = MarkupKind.Markdown,
+				Value = builder.ToString()
+			}),
+			Range = site.FileRange.ConvertRange()
+		};
+	}
+
 	private static Hover? CreateTableHover(string tableName, ISymbolIndex symbols)
 	{
 		var symbol = TableAccess.GetTable(symbols, tableName);
 		if (symbol == null)
 			return null;
 
-		var md = CreateFromSymbol(symbol);
+		var md = CreateFromSymbol(symbol, symbols);
 		return new Hover
 		{
 			Contents = new MarkedStringsOrMarkupContent(md),
@@ -133,6 +170,11 @@ internal sealed class HoverHandler(
 		{
 			return CreateTableHover(name, symbols);
 		}
+		else if (identifierType == IdentifierType.Type)
+		{
+			var typeSymbol = symbols.FindTypeSymbol(name);
+			return typeSymbol == null ? null : CreateTypeHover(name, new TypeNode(name, typeSymbol.FilePath, typeSymbol.FileRange), symbols, cast: false);
+		}
 		else if ((identifierType & IdentifierType.Method) != IdentifierType.Unknown)
 		{
 			return CreateMethodHover(name, symbols);
@@ -151,7 +193,7 @@ internal sealed class HoverHandler(
 		if (symbol == null)
 			return null;
 
-		var md = CreateFromSymbol(symbol);
+		var md = CreateFromSymbol(symbol, symbols);
 		return new Hover
 		{
 			Contents = new MarkedStringsOrMarkupContent(md),
@@ -165,7 +207,7 @@ internal sealed class HoverHandler(
 		if (symbol == null)
 			return null;
 
-		var md = CreateFromSymbol(symbol);
+		var md = CreateFromSymbol(symbol, symbols);
 		return new Hover
 		{
 			Contents = new MarkedStringsOrMarkupContent(md),
@@ -173,7 +215,7 @@ internal sealed class HoverHandler(
 		};
 	}
 
-	private static MarkupContent CreateFromSymbol(SymbolInfo symbol)
+	private static MarkupContent CreateFromSymbol(SymbolInfo symbol, ISymbolIndex symbols)
 	{
 		var builder = new StringBuilder();
 		if (!string.IsNullOrEmpty(symbol.Summary))
@@ -191,6 +233,15 @@ internal sealed class HoverHandler(
 			builder.AppendLine(symbol.Signature);
 		}
 		builder.AppendLine("```");
+
+		// a typed constant / context / local / parameter: show the named type and its root
+		if (symbol.Type is { IsNamed: true } named)
+		{
+			// the symbol's type may be an index-time placeholder; the root lives on the declaration
+			var root = named.Underlying?.Name ?? symbols.FindTypeSymbol(named.Name)?.Type?.Underlying?.Name;
+			builder.AppendLine();
+			builder.AppendLine(root != null ? $"Type: `{named.Name}` (`{root}`)" : $"Type: `{named.Name}`");
+		}
 
 		var md = new MarkupContent
 		{

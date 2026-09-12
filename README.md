@@ -6,17 +6,22 @@
 
 ## Language at a Glance
 
-GameScript has three scalar types (`bool`, `int`, `string`), a `func` reference type, and a mark-based identifier system that makes every symbol's role visible at a glance:
+GameScript has three scalar types (`bool`, `int`, `string`), a `func` reference type, named types over `int`/`string` that keep content ids distinct, and a mark-based identifier system that makes every symbol's role visible at a glance — all in one `.gs` grammar:
 
 ```gamescript
-// constants (.const)
-int ^npc_knight = 2
+// named types — aliases over a root type; erase at codegen
+type npc : int
 
-// context variables (.context) — backed by a host-provided slot
+// constants (typed or plain)
+npc ^npc_knight = 2
+int ^max_level = 99
+
+// context variables — backed by a host-provided slot
 bool @logged_in = 0
 
-// methods (.gs)
+// methods
 command print(string value)           // host-implemented opcode, no body
+command npc_spawn(npc kind, int coord) // takes an npc id — ^max_level is a compile error here
 
 // trigger kinds — one per engine dispatch point (core.gs)
 trigger mn_button_1
@@ -27,7 +32,7 @@ func greet(string name, string suffix = "!")   // trailing params may default
 mn_button_1 login:submit              // trigger handler — UI event entry point
     greet("adventurer")               // final statement → tail transfer
 
-// constant tables (.gs) — rows of constants with keyed lookup, no runtime cost
+// constant tables — rows of constants with keyed lookup, no runtime cost
 table skill(key int id, key string name, int jingle)
     ^skill_attack, "Attack", ^jingle_melee
     ^skill_mining, "Mining", ^jingle_gather
@@ -44,12 +49,13 @@ func level_up(int s)
 | handler     | *(kind)*   | ❌        | Event entry point; cannot be called from script    |
 | `table`     | `table`    | —        | Compile-time constant rows; `t[k].col`, `t.at(i)`, `t.count`, `for r in t` |
 
-| Symbol       | Mark   | Declared in   |
-| ------------ | ------ | ------------- |
-| Local var    | —      | `.gs`         |
-| Constant     | `^`    | `.const`      |
-| Context var  | `@`    | `.context`    |
-| Table        | —      | `.gs`         |
+| Symbol       | Mark   | Declared by                       |
+| ------------ | ------ | --------------------------------- |
+| Local var    | —      | `TYPE name` inside a func         |
+| Constant     | `^`    | `TYPE ^name = literal` (top level) |
+| Context var  | `@`    | `TYPE @name = slot` (top level)   |
+| Named type   | —      | `type NAME : int\|string` (top level) |
+| Table        | —      | `table NAME(...)` (top level)     |
 
 **Learn more:**
 
@@ -85,7 +91,7 @@ func level_up(int s)
 
 The **VS Code extension** (`GameScript.Vscode`) bundles the language server and provides:
 
-- Semantic syntax highlighting for `.gs`, `.const`, and `.context` files
+- Semantic syntax highlighting for `.gs` files, named types and casts included
 - Completions, hover tooltips, and real-time diagnostics
 - Sub-projects: a `gamescript.json` marker scopes its folder as an isolated project (e.g. `content/server` and `content/client` with separate core.gs command sets)
 - Go to Definition, Find All References, Document Highlights

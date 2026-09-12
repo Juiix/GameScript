@@ -42,9 +42,10 @@ internal sealed class ReferencesHandler(
 			return null;
 		}
 
-		// if local symbol is found, return local references
+		// if local symbol is found, return local references (a named type is never
+		// local, even when a local of the same name shadows it here)
 		var localIndex = rootData.GetLocalIndex(request.Position.Line, request.Position.Character);
-		var localSymbol = localIndex?.GetSymbol(symbolName);
+		var localSymbol = astNode.IsTypeReference() ? null : localIndex?.GetSymbol(symbolName);
 		var references = localSymbol != null ?
 			localIndex?.GetReferences(symbolName) ?? [] :
 			_projects.GetProject(filePath).References.GetReferences(symbolName);

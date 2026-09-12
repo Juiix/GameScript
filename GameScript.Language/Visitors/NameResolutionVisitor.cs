@@ -6,9 +6,11 @@ namespace GameScript.Language.Visitors
 {
 	/// <summary>
 	/// Classifies bare identifiers (parsed as IdentifierType.Unknown) against the
-	/// local and global symbol tables: locals/params first, then funcs/commands.
-	/// Runs immediately after indexing and before every other analysis visitor —
-	/// they (and the compiler) rely on IdentifierNode.Type being resolved.
+	/// local and global symbol tables: locals/params first, then funcs/commands,
+	/// tables and named types. Runs immediately after indexing and before every
+	/// other analysis visitor — they (and the compiler) rely on IdentifierNode.Type
+	/// being resolved. Because locals win, a local or parameter may shadow a type
+	/// name; 'item(x)' is a cast only where no local 'item' is in scope.
 	/// Unresolvable names stay Unknown and are reported by SemanticAnalysisVisitor.
 	/// </summary>
 	public sealed class NameResolutionVisitor(
@@ -30,7 +32,7 @@ namespace GameScript.Language.Visitors
 
 			foreach (var symbol in _context.Symbols.GetSymbols(node.Name))
 			{
-				if (symbol.IsCallable() || symbol.IsTable)
+				if (symbol.IsCallable() || symbol.IsTable || symbol.IdentifierType == IdentifierType.Type)
 				{
 					node.ResolveType(symbol.IdentifierType);
 					return;

@@ -112,6 +112,7 @@ namespace GameScript.LanguageServer.Extensions
 
 				IdentifierType.Table => SymbolKind.Struct,
 				IdentifierType.Column => SymbolKind.Field,
+				IdentifierType.Type => SymbolKind.Class,
 
 				_ => default
 			};

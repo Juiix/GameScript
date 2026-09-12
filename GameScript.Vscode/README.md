@@ -8,7 +8,7 @@ Bring the full power of the **GameScript** language into Visual Studio Code. The
 
 | Feature                         | Description                                                                                  |
 | ------------------------------- | -------------------------------------------------------------------------------------------- |
-| **Syntax Highlighting**         | Semantic colour-coding for keywords, types, literals, operators, and comments across `.gs`, `.const`, and `.context` files. |
+| **Syntax Highlighting**         | Semantic colour-coding for keywords, types (named types and casts included), literals, operators, and comments in `.gs` files. |
 | **Completions**                 | Context-aware completions for functions, labels, commands, variables, constants, and context vars. |
 | **Diagnostics**                 | Real-time error squiggles for parse errors, undefined symbols, type mismatches, and semantic rule violations. |
 | **Hover Tooltips**              | Hover any symbol to see its full signature and any doc-comment attached to its declaration.  |
@@ -28,10 +28,8 @@ Bring the full power of the **GameScript** language into Visual Studio Code. The
 
 | Extension           | Content                    |
 | ------------------- | -------------------------- |
-| `.gs`               | Method definitions (funcs, commands, triggers, handlers) and constant tables |
+| `.gs`               | All declarations: named types, constants, context variables, constant tables, and methods (funcs, commands, triggers, handlers) — rename legacy `.const`/`.context` files to `.gs` |
 | `gamescript.json`   | Project marker — makes its folder an isolated sub-project |
-| `.const`            | Constant declarations      |
-| `.context`          | Context variable declarations |
 | `.varp` `.item` `.npc` `.menu` `.obj` `.tile` | Object Definition files (syntax highlighting only) |
 
 ---

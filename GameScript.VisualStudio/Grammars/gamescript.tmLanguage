@@ -14,14 +14,13 @@
     <key>fileTypes</key>
     <array>
       <string>gs</string>
-      <string>const</string>
-      <string>context</string>
     </array>
 
     <!-- ──────────────── patterns ───────────────── -->
     <key>patterns</key>
     <array>
       <dict><key>include</key><string>#comment</string></dict>
+      <dict><key>include</key><string>#type-declaration</string></dict>
       <dict><key>include</key><string>#table-declaration</string></dict>
       <dict><key>include</key><string>#method-declaration</string></dict>
       <dict><key>include</key><string>#member-access</string></dict>
@@ -253,6 +252,30 @@
                   <dict><key>name</key><string>entity.name.tag.op-binding.gamescript</string></dict>
                 </dict>
               </dict>
+              <dict>
+                <key>comment</key>
+                <string>'TYPE name' parameter pairs — any type name, named types included</string>
+                <key>match</key>
+                <string>\b(?!returns\b)([A-Za-z_][\w]*)\s+([A-Za-z_][\w]*)\b(?=\s*(?:,|\)|=))</string>
+                <key>captures</key>
+                <dict>
+                  <key>1</key>
+                  <dict><key>name</key><string>storage.type.gamescript</string></dict>
+                  <key>2</key>
+                  <dict><key>name</key><string>variable.parameter.gamescript</string></dict>
+                </dict>
+              </dict>
+              <dict>
+                <key>comment</key>
+                <string>single return type after 'returns' (tuple element types are colored by semantic tokens)</string>
+                <key>match</key>
+                <string>(?&lt;=\breturns\s)([A-Za-z_][\w]*)\b</string>
+                <key>captures</key>
+                <dict>
+                  <key>1</key>
+                  <dict><key>name</key><string>storage.type.gamescript</string></dict>
+                </dict>
+              </dict>
               <dict><key>include</key><string>#variables</string></dict>
               <dict><key>include</key><string>#types</string></dict>
               <dict><key>include</key><string>#strings</string></dict>
@@ -262,7 +285,32 @@
         </array>
       </dict>
 
-      <!-- table declaration: table NAME([key] TYPE col, ...) — key is a contextual column modifier -->
+      <!-- type declaration: type NAME : int|string — 'type' is contextual: only a top-level 'type NAME :' line declares -->
+      <key>type-declaration</key>
+      <dict>
+        <key>patterns</key>
+        <array>
+          <dict>
+            <key>name</key>
+            <string>meta.type.declaration.gamescript</string>
+            <key>match</key>
+            <string>^(type)\\s+([A-Za-z_][\\w]*)\\s*(:)\\s*([A-Za-z_][\\w]*)?</string>
+            <key>captures</key>
+            <dict>
+              <key>1</key>
+              <dict><key>name</key><string>keyword.declaration.gamescript</string></dict>
+              <key>2</key>
+              <dict><key>name</key><string>entity.name.type.gamescript</string></dict>
+              <key>3</key>
+              <dict><key>name</key><string>punctuation.separator.type.gamescript</string></dict>
+              <key>4</key>
+              <dict><key>name</key><string>storage.type.gamescript</string></dict>
+            </dict>
+          </dict>
+        </array>
+      </dict>
+
+      <!-- table declaration: table NAME([key] TYPE col, ...) — key is a contextual column modifier; TYPE may be a named type -->
       <key>table-declaration</key>
       <dict>
         <key>patterns</key>
@@ -289,7 +337,20 @@
                 <key>name</key>
                 <string>storage.modifier.key.gamescript</string>
                 <key>match</key>
-                <string>\bkey\b(?=\s+(?:int|bool|string)\b)</string>
+                <string>\bkey\b(?=\s+[A-Za-z_][\w]*\s+[A-Za-z_][\w]*)</string>
+              </dict>
+              <dict>
+                <key>comment</key>
+                <string>'TYPE column' pairs — any type name, named types included</string>
+                <key>match</key>
+                <string>\b(?!key\b)([A-Za-z_][\w]*)\s+([A-Za-z_][\w]*)\b(?=\s*(?:,|\)))</string>
+                <key>captures</key>
+                <dict>
+                  <key>1</key>
+                  <dict><key>name</key><string>storage.type.gamescript</string></dict>
+                  <key>2</key>
+                  <dict><key>name</key><string>variable.other.member.gamescript</string></dict>
+                </dict>
               </dict>
               <dict><key>include</key><string>#types</string></dict>
               <dict><key>include</key><string>#variables</string></dict>
@@ -298,7 +359,7 @@
         </array>
       </dict>
 
-      <!-- variable declaration -->
+      <!-- variable declaration: 'TYPE name', 'TYPE ^const' or 'TYPE @context' — TYPE is any identifier (named types included), so statement keywords are excluded explicitly -->
       <key>variable-declaration</key>
       <dict>
         <key>patterns</key>
@@ -307,7 +368,7 @@
             <key>name</key>
             <string>meta.variable.declaration.gamescript</string>
             <key>match</key>
-            <string>^(\\s*)(int|bool|string|func)\\s+((?:@|\\^)?[A-Za-z_][\\w]*)</string>
+            <string>^(\\s*)(?!(?:if|else|return|while|switch|case|default|for|in|break|continue|and|or|not|command|trigger|table|type)\\b)([A-Za-z_][\\w]*)\\s+((?:@|\\^)?[A-Za-z_][\\w]*)\\b(?=\\s*(?:=|,|$))</string>
             <key>captures</key>
             <dict>
               <key>2</key>
@@ -353,7 +414,7 @@
         </array>
       </dict>
 
-      <!-- method call -->
+      <!-- method call: a cast 'item(x)' is lexically a call; the language server's semantic tokens recolor the callee as a type -->
       <key>method-call</key>
       <dict>
         <key>patterns</key>

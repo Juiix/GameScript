@@ -40,23 +40,27 @@ namespace GameScript.LanguageServer.Handlers
 			}
 
 
-			var symbolName = rootData.Root.FindNodeAtPosition(request.Position.Line, request.Position.Character)?.GetSymbolName();
-			if (symbolName == null)
+			var astNode = rootData.Root.FindNodeAtPosition(request.Position.Line, request.Position.Character);
+			var symbolName = astNode?.GetSymbolName();
+			if (astNode == null || symbolName == null)
 			{
 				return null;
 			}
 
-			// load symbol & references (check local first)
+			// load symbol & references (check local first; a named type is never local,
+			// even when a local of the same name shadows it here)
 			IEnumerable<ReferenceInfo>? references = null;
 			var localIndex = rootData.GetLocalIndex(request.Position.Line, request.Position.Character);
-			var symbol = localIndex?.GetSymbol(symbolName);
+			var isType = astNode.IsTypeReference();
+			var symbol = isType ? null : localIndex?.GetSymbol(symbolName);
 			if (symbol != null) // is local
 			{
 				references = localIndex?.GetReferences(symbolName);
 			}
 			else // is a project-level symbol
 			{
-				symbol = _projects.GetProject(filePath).Symbols.GetSymbol(symbolName);
+				var projectSymbols = _projects.GetProject(filePath).Symbols;
+				symbol = isType ? projectSymbols.FindTypeSymbol(symbolName) : projectSymbols.GetSymbol(symbolName);
 				references = rootData.Index.FileIndex.GetReferences(symbolName);
 			}
 

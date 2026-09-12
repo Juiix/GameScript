@@ -23,6 +23,31 @@ namespace GameScript.Language.Visitors
 			base.Visit(node);
 		}
 
+		// Named types share the flat global namespace with funcs/commands/triggers/tables
+		// and are never values, so any other global symbol with the same name is a
+		// conflict. (Locals and parameters may shadow a type name — see CheckLocalCollision.)
+		public override void Visit(TypeDefinitionNode node)
+		{
+			var name = node.Name.Name;
+			if (!InvalidSymbolName(name))
+			{
+				foreach (var symbol in _context.Symbols.GetSymbols(name))
+				{
+					if (symbol.FilePath.Equals(node.Name.FilePath) &&
+						symbol.FileRange == node.Name.FileRange)
+					{
+						continue;   // self
+					}
+					if (symbol.IdentifierType == IdentifierType.Type)
+						Error($"Type '{name}' is already defined in this context.", node.Name);
+					else
+						Error($"Type '{name}' conflicts with {symbol.IdentifierType} '{name}'. Type names share the func/command/trigger/table namespace; rename one.", node.Name);
+					break;
+				}
+			}
+			base.Visit(node);
+		}
+
 		public override void Visit(MethodDefinitionNode node)
 		{
 			// Triggers stay name-unique (their SymbolName embeds the trigger keyword);
@@ -114,7 +139,7 @@ namespace GameScript.Language.Visitors
 		{
 			foreach (var symbol in _context.Symbols.GetSymbols(node.SymbolName))
 			{
-				if (symbol.IsCallable() || symbol.IsTable)
+				if (symbol.IsCallable() || symbol.IsTable || symbol.IdentifierType == IdentifierType.Type)
 				{
 					Error($"Trigger '{node.SymbolName}' conflicts with {symbol.IdentifierType} '{node.SymbolName}'. Triggers are never callable; rename one.", node.Name);
 					return;
@@ -183,6 +208,8 @@ namespace GameScript.Language.Visitors
 						Error($"{node.Name.Type} '{symbolName}' conflicts with trigger '{symbolName}'. Triggers are never callable; rename one.", node.Name);
 					else if (other.IsTable)
 						Error($"{node.Name.Type} '{symbolName}' conflicts with table '{symbolName}'. Tables share the func/command/trigger namespace; rename one.", node.Name);
+					else if (other.IdentifierType == IdentifierType.Type)
+						Error($"{node.Name.Type} '{symbolName}' conflicts with type '{symbolName}'. Type names share the func/command/trigger/table namespace; rename one.", node.Name);
 					else
 						Error($"'{symbolName}' is already defined in this context.", node.Name);
 					return;

@@ -53,7 +53,10 @@ var server = await LanguageServer.From(options =>
 		services.AddSingleton<WorkspaceService>();
 
 		// index — symbol/reference tables live per sub-project inside ProjectRegistry;
-		// only the (immutable) type index is process-wide
+		// only the (immutable) primitive type index is process-wide. Named types
+		// ('type item : int') are ordinary per-project symbols; VisitorContext wraps
+		// this index in a ProjectTypeIndex that resolves them through the project's
+		// symbol table.
 		services.AddSingleton<GlobalTypeIndex>();
 		services.AddSingleton<ITypeIndex, GlobalTypeIndex>(x => x.GetRequiredService<GlobalTypeIndex>());
 

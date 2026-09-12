@@ -325,7 +325,7 @@ public class ExecutionTests
 			func main()
 			    print(int_to_str(^max_level + 1))
 			""",
-			("skills.const", "int ^max_level = 99"));
+			("skills.gs", "int ^max_level = 99"));
 		host.Start(program, "main");
 		Assert.Equal(new[] { "100" }, host.Context.Printed);
 	}
@@ -338,7 +338,7 @@ public class ExecutionTests
 			    @hp = @hp + 5
 			    print(int_to_str(@hp))
 			""",
-			("player.context", "int @hp = 3"));
+			("player.gs", "int @hp = 3"));
 		host.Start(program, "main");
 		// context slot 3 starts at default (0) in the test context; +5 = 5
 		Assert.Equal(new[] { "5" }, host.Context.Printed);
@@ -629,7 +629,7 @@ public class ExecutionTests
 			        case ^skill_attack: print("attack")
 			        case ^skill_mining: print("mining")
 			""",
-			("skills.const", "int ^skill_attack = 0\nint ^skill_mining = 1"));
+			("skills.gs", "int ^skill_attack = 0\nint ^skill_mining = 1"));
 		host.Start(program, "main");
 		Assert.Equal(new[] { "mining" }, host.Context.Printed);
 	}
@@ -700,7 +700,7 @@ public class ExecutionTests
 			func main()
 			    report()
 			""",
-			("anims.const", "int ^anim_still = 7"));
+			("anims.gs", "int ^anim_still = 7"));
 		host.Start(program, "main");
 		Assert.Equal(new[] { "699" }, host.Context.Printed);
 	}
@@ -800,7 +800,7 @@ public class ExecutionTests
 			    print(skill[s].name)
 			    print(int_to_str(skill[s].jingle))
 			""",
-			("skills.const", SkillsConst));
+			("skills.gs", SkillsConst));
 		host.Start(program, "main", Value.FromInt(2));
 		Assert.Equal(new[] { "Mining", "101" }, host.Context.Printed);
 	}
@@ -814,7 +814,7 @@ public class ExecutionTests
 			    print("[" + skill[s].name + "]")
 			    print(int_to_str(skill[s].jingle))
 			""",
-			("skills.const", SkillsConst));
+			("skills.gs", SkillsConst));
 		host.Start(program, "main", Value.FromInt(42));
 		Assert.Equal(new[] { "[]", "0" }, host.Context.Printed);
 	}
@@ -830,7 +830,7 @@ public class ExecutionTests
 			    print(int_to_str(skill[name: "Mining"].jingle))
 			    print(death_msg[7].text)
 			""",
-			("skills.const", SkillsConst),
+			("skills.gs", SkillsConst),
 			("death.gs", """
 				table death_msg(int i, string text)
 				    0, "slain"
@@ -853,7 +853,7 @@ public class ExecutionTests
 			    print(int_to_str(skill[name: n].id))
 			    print(int_to_str(skill[id: 2].jingle))
 			""",
-			("skills.const", SkillsConst));
+			("skills.gs", SkillsConst));
 		host.Start(program, "main", Value.FromString("Defense"));
 		Assert.Equal(new[] { "1", "101" }, host.Context.Printed);
 	}
@@ -871,7 +871,7 @@ public class ExecutionTests
 			    print(skill.at(1).name)
 			    print(skill.at(-1).name + "|" + skill.at(3).name)
 			""",
-			("skills.const", SkillsConst));
+			("skills.gs", SkillsConst));
 		host.Start(program, "main", Value.FromInt(0));
 		Assert.Equal(new[] { "yes", "no", "named", "3", "Defense", "|" }, host.Context.Printed);
 	}
@@ -945,7 +945,7 @@ public class ExecutionTests
 			        skill[s].name
 			    print("ok")
 			""",
-			("skills.const", SkillsConst));
+			("skills.gs", SkillsConst));
 		host.Start(program, "main", Value.FromInt(1));
 		Assert.Equal(new[] { "ok" }, host.Context.Printed);
 	}
@@ -959,7 +959,7 @@ public class ExecutionTests
 			    for s in skill
 			        print(s.name)
 			""",
-			("skills.const", SkillsConst),
+			("skills.gs", SkillsConst),
 			("tables.gs", SkillTable));
 		host.Start(program, "main");
 		Assert.Equal(new[] { "Mining", "Attack", "Defense", "Mining" }, host.Context.Printed);
@@ -977,7 +977,7 @@ public class ExecutionTests
 			func main()
 			    print(skill[pick()].name)
 			""",
-			("skills.const", SkillsConst));
+			("skills.gs", SkillsConst));
 		host.Start(program, "main");
 		Assert.Equal(new[] { "eval", "Mining" }, host.Context.Printed);
 	}
@@ -1010,7 +1010,7 @@ public class ExecutionTests
 			func main()
 			    set_smith_bar(^item_iron_bar, true)
 			""",
-			("items.const", """
+			("items.gs", """
 				int ^item_bronze_bar = 1
 				int ^item_bronze_sword = 2
 				int ^item_bronze_helm = 3

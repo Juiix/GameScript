@@ -93,6 +93,8 @@ internal sealed class CompletionHandler(
 				IdentifierType.Command => CompletionItemKind.Function,
 
 				IdentifierType.Table => CompletionItemKind.Struct,
+				// named types: offered in type positions and as cast callees ('item(')
+				IdentifierType.Type => CompletionItemKind.Class,
 
 				_ => default
 			},

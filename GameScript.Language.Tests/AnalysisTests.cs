@@ -231,7 +231,7 @@ public class AnalysisTests
 			func main()
 			    print(int_to_str(hp))
 			""",
-			("player.context", "int @hp = 3"));
+			("player.gs", "int @hp = 3"));
 		Assert.Contains(errors, e => e.Contains("'@' mark"));
 	}
 
@@ -242,7 +242,7 @@ public class AnalysisTests
 			func main()
 			    print(int_to_str(@max_level))
 			""",
-			("skills.const", "int ^max_level = 99"));
+			("skills.gs", "int ^max_level = 99"));
 		Assert.Contains(errors, e => e.Contains("'^' mark"));
 	}
 
@@ -549,7 +549,7 @@ public class AnalysisTests
 			        case ^skill_attack: return
 			        case 0: return
 			""",
-			("skills.const", "int ^skill_attack = 0"));
+			("skills.gs", "int ^skill_attack = 0"));
 		Assert.Contains(errors, e => e.Contains("Duplicate case value '0'"));
 	}
 
@@ -719,7 +719,7 @@ public class AnalysisTests
 			        case ^neg_one: return
 			        case ^neg_two: return
 			""",
-			("n.const", "int ^neg_one = -1\nint ^neg_two = -2"));
+			("n.gs", "int ^neg_one = -1\nint ^neg_two = -2"));
 		Assert.Empty(errors);
 	}
 
@@ -736,7 +736,7 @@ public class AnalysisTests
 			    for r in skill
 			        print(r.name + int_to_str(r.jingle))
 			""",
-			("skills.const", SkillsConst));
+			("skills.gs", SkillsConst));
 		Assert.Empty(errors);
 	}
 
@@ -750,7 +750,7 @@ public class AnalysisTests
 			func main()
 			    return
 			""");
-		Assert.Contains(errors, e => e.Contains("Table columns must be 'int', 'string' or 'bool'"));
+		Assert.Contains(errors, e => e.Contains("Table columns must be 'int', 'string', 'bool' or a named type"));
 	}
 
 	[Fact]
@@ -797,7 +797,7 @@ public class AnalysisTests
 			    ^skill_attack, "x"
 			    0, "y"
 			""",
-			("skills.const", SkillsConst));
+			("skills.gs", SkillsConst));
 		Assert.Contains(errors, e => e.Contains("Duplicate key 0 in 'key' column 'a' of table 't'"));
 	}
 
@@ -839,7 +839,7 @@ public class AnalysisTests
 			func main(string s)
 			    print(skill[s].name)
 			""",
-			("skills.const", SkillsConst));
+			("skills.gs", SkillsConst));
 		Assert.Contains(errors, e => e.Contains("Key 1 of 'skill' must be 'int' (column 'id'), not 'string'"));
 	}
 
@@ -851,7 +851,7 @@ public class AnalysisTests
 			    print(skill[jingle: j].name)
 			    print(skill[bogus: j].name)
 			""",
-			("skills.const", SkillsConst));
+			("skills.gs", SkillsConst));
 		Assert.Contains(errors, e => e.Contains("'jingle' is not a key column of table 'skill'"));
 		Assert.Contains(errors, e => e.Contains("Table 'skill' has no column 'bogus'"));
 	}
@@ -865,7 +865,7 @@ public class AnalysisTests
 			    skill[s]
 			    skill.at(0)
 			""",
-			("skills.const", SkillsConst));
+			("skills.gs", SkillsConst));
 		Assert.Contains(errors, e => e.Contains("Table 'skill' has no column 'nope'"));
 		Assert.Contains(errors, e => e.Contains("A table lookup yields a row; select a column"));
 		Assert.Contains(errors, e => e.Contains("'at' yields a row; select a column"));
@@ -881,7 +881,7 @@ public class AnalysisTests
 			    string c = skill.at(n).name
 			    string d = skill.name
 			""",
-			("skills.const", SkillsConst));
+			("skills.gs", SkillsConst));
 		Assert.Contains(errors, e => e.Contains("'count' is a property; write skill.count without parentheses"));
 		Assert.Contains(errors, e => e.Contains("'has' takes the key(s) to test"));
 		Assert.Contains(errors, e => e.Contains("'at' takes an 'int' row index, not 'string'"));
@@ -895,7 +895,7 @@ public class AnalysisTests
 			func main()
 			    print(skill)
 			""",
-			("skills.const", SkillsConst));
+			("skills.gs", SkillsConst));
 		Assert.Contains(errors, e => e.Contains("Table 'skill' cannot be used as a value"));
 	}
 
@@ -909,7 +909,7 @@ public class AnalysisTests
 			        r = r
 			        r.name = "x"
 			""",
-			("skills.const", SkillsConst));
+			("skills.gs", SkillsConst));
 		Assert.Contains(errors, e => e.Contains("'r' is a table row cursor; read a column with r.column"));
 		Assert.Contains(errors, e => e.Contains("Left-hand side of assignment must be an assignable variable"));
 	}
@@ -933,7 +933,7 @@ public class AnalysisTests
 			    for i in skill
 			        return
 			""",
-			("skills.const", SkillsConst));
+			("skills.gs", SkillsConst));
 		Assert.Contains(errors, e => e.Contains("'r' is already a row cursor of 'skill'; it cannot iterate 'other'"));
 		Assert.Contains(errors, e => e.Contains("'i' is already an int loop variable; a row cursor cannot reuse it"));
 	}
@@ -1011,7 +1011,7 @@ public class AnalysisTests
 			func main(int s)
 			    print(skill[s].name)
 			""",
-			("skills.const", SkillsConst),
+			("skills.gs", SkillsConst),
 			("tables.gs", SkillTable));
 		Assert.Empty(errors);
 	}
@@ -1037,7 +1037,7 @@ public class AnalysisTests
 			    print(skill[name: "Nope"].name)
 			    print(dm[42].text)
 			""",
-			("skills.const", SkillsConst));
+			("skills.gs", SkillsConst));
 		Assert.Contains(errors, e => e.Contains("No row of 'skill' has key (42)"));
 		Assert.Contains(errors, e => e.Contains("No row of 'skill' has key (\"Nope\")"));
 		Assert.DoesNotContain(errors, e => e.Contains("No row of 'dm'"));

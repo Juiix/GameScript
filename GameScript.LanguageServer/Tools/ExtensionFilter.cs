@@ -1,13 +1,15 @@
-﻿namespace GameScript.LanguageServer.Tools
+namespace GameScript.LanguageServer.Tools
 {
 	/// <summary>
-	/// Provides a quick check for whether a file path refers to a
-	/// GameScript-related source file (e.g., <c>.gs</c>, <c>.const</c> or <c>.context</c>).
+	/// Provides a quick check for whether a file path refers to a GameScript source
+	/// file (<c>.gs</c> — constants, contexts and types are ordinary top-level
+	/// declarations since 2.5, so the legacy <c>.const</c>/<c>.context</c> extensions
+	/// are no longer source kinds) or to an object-definition data file.
 	/// </summary>
 	internal static class ExtensionFilter
 	{
 		private static readonly HashSet<string> _ext =
-			new(StringComparer.OrdinalIgnoreCase) { ".gs", ".const", ".context" };
+			new(StringComparer.OrdinalIgnoreCase) { ".gs" };
 
 		private static readonly HashSet<string> _objectDefExt =
 			new(StringComparer.OrdinalIgnoreCase)

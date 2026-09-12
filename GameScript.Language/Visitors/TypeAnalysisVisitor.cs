@@ -12,7 +12,10 @@ namespace GameScript.Language.Visitors
 		VisitorContext context) : AnalysisVisitorBase(localIndexes)
 	{
 		private readonly VisitorContext _context = context;
-		private readonly InferredTypeVisitor _inferredTypeVisitor = new(context);
+		private InferredTypeVisitor? _inferredTypeVisitor;
+
+		// created lazily: it reads ResolvedCalls, which a field initializer cannot reference
+		private InferredTypeVisitor InferredTypes => _inferredTypeVisitor ??= new(_context, ResolvedCalls);
 
 		/// <summary>
 		/// The overload chosen for each call site. Populated during analysis and
@@ -33,7 +36,7 @@ namespace GameScript.Language.Visitors
 					var initializerType = GetInferredType(initializer);
 					if (initializerType != null &&
 						varType != null &&
-						!initializerType.Equals(varType))
+						!TypeRules.IsAssignable(initializer, initializerType, varType))
 					{
 						Error($"Type mismatch, cannot assign '{initializerType}' to '{varType}'", FileRange.Combine(varName.FileRange, initializer.FileRange));
 					}
@@ -54,7 +57,7 @@ namespace GameScript.Language.Visitors
 			var defaultType = GetInferredType(node.Default);
 			if (paramType != null &&
 				defaultType != null &&
-				!defaultType.Equals(paramType))
+				!TypeRules.IsAssignable(node.Default, defaultType, paramType))
 			{
 				Error($"Type mismatch, cannot assign '{defaultType}' default to '{paramType}' parameter '{node.Name.Name}'", node.Default);
 			}
@@ -64,11 +67,13 @@ namespace GameScript.Language.Visitors
 		{
 			base.Visit(node);
 
+			// a typed constant ('item ^x = 42') is where typed ids come from: the literal
+			// need only fit the root
 			var constantType = _context.Types.GetType(node.Type.Name);
 			var initializerType = GetInferredType(node.Initializer);
 			if (initializerType != null &&
 				constantType != null &&
-				!initializerType.Equals(constantType))
+				!TypeRules.IsAssignable(node.Initializer, initializerType, constantType.Root))
 			{
 				Error($"Type mismatch, cannot assign '{initializerType}' to '{constantType}'", node.Initializer);
 			}
@@ -101,7 +106,7 @@ namespace GameScript.Language.Visitors
 				{
 					var expressionType = GetInferredType(node.Expression);
 					if (expressionType != null &&
-						!expressionType.Equals(returnType))
+						!TypeRules.IsAssignable(node.Expression, expressionType, returnType))
 					{
 						Error($"Cannot return '{expressionType}', expected '{returnType}'", node);
 					}
@@ -136,13 +141,13 @@ namespace GameScript.Language.Visitors
 			base.Visit(node);
 
 			var startType = GetInferredType(node.Start);
-			if (startType != null && startType.Kind != TypeKind.Int)
+			if (startType != null && startType.RootKind != TypeKind.Int)
 			{
 				Error("For-loop range bounds must be 'int'", node.Start);
 			}
 
 			var endType = GetInferredType(node.End);
-			if (endType != null && endType.Kind != TypeKind.Int)
+			if (endType != null && endType.RootKind != TypeKind.Int)
 			{
 				Error("For-loop range bounds must be 'int'", node.End);
 			}
@@ -154,7 +159,7 @@ namespace GameScript.Language.Visitors
 
 			var subjectType = GetInferredType(node.Subject);
 			if (subjectType != null &&
-				subjectType.Kind is not (TypeKind.Int or TypeKind.String or TypeKind.Bool))
+				subjectType.RootKind is not (TypeKind.Int or TypeKind.String or TypeKind.Bool))
 			{
 				Error("Switch subject must be an 'int', 'string' or 'bool' expression", node.Subject);
 				subjectType = null;    // suppress per-case mismatch noise
@@ -171,10 +176,12 @@ namespace GameScript.Language.Visitors
 
 				foreach (var value in caseNode.Values)
 				{
+					// cases follow assignability to the subject: a typed constant widens onto
+					// an int subject; a named subject takes its own constants or the zero literal
 					var valueType = GetInferredType(value);
 					if (subjectType != null &&
 						valueType != null &&
-						!valueType.Equals(subjectType))
+						!TypeRules.IsAssignable(value, valueType, subjectType))
 					{
 						Error($"Case value type '{valueType}' does not match the switch subject type '{subjectType}'", value);
 						continue;
@@ -268,7 +275,7 @@ namespace GameScript.Language.Visitors
 			{
 				var columnType = _context.Types.GetType(columns[c].Type.Name);
 				var cellType = GetInferredType(row.Cells[c]);
-				if (columnType != null && cellType != null && !cellType.Equals(columnType))
+				if (columnType != null && cellType != null && !TypeRules.IsAssignable(row.Cells[c], cellType, columnType))
 				{
 					Error($"Cell {c + 1} of {label} in table '{table.Name.Name}' is '{cellType}' but column '{columns[c].Name.Name}' is '{columnType}'.", row.Cells[c]);
 				}
@@ -355,7 +362,7 @@ namespace GameScript.Language.Visitors
 				else
 				{
 					var indexType = GetInferredType(node.Arguments[0]);
-					if (indexType != null && indexType.Kind != TypeKind.Int)
+					if (indexType != null && indexType.RootKind != TypeKind.Int)
 						Error($"'at' takes an 'int' row index, not '{indexType}'.", node.Arguments[0]);
 				}
 				return;
@@ -442,8 +449,9 @@ namespace GameScript.Language.Visitors
 			for (int i = 0; i < keyColumns.Count; i++)
 			{
 				var column = shape.Columns[keyColumns[i]];
+				var columnType = _context.Types.Resolve(column.Type);    // null: undefined column type, reported at the header
 				var argType = GetInferredType(args[i]);
-				if (argType != null && !argType.Equals(column.Type))
+				if (argType != null && columnType != null && !TypeRules.IsAssignable(args[i], argType, columnType))
 					Error($"Key {i + 1} of '{tableName}' must be '{column.Type}' (column '{column.Name}'), not '{argType}'.", args[i]);
 
 				var value = ConstantExpressions.IsConstant(args[i]) ? ExtractConstantValue(args[i]) : null;
@@ -472,24 +480,34 @@ namespace GameScript.Language.Visitors
 
 			if ((node.Operator & BinaryOperator.Logical) != BinaryOperator.Unknown)
 			{
-				if (leftType.Kind != TypeKind.Bool)
+				if (leftType.RootKind != TypeKind.Bool)
 					Error($"Left operand of '{node.OperatorNode.Operator}' must be 'bool' type.", node.Left);
-				if (rightType.Kind != TypeKind.Bool)
+				if (rightType.RootKind != TypeKind.Bool)
 					Error($"Right operand of '{node.OperatorNode.Operator}' must be 'bool' type.", node.Right);
 				return;
 			}
 
-			var isStringAdd = node.Operator == BinaryOperator.Add &&
-				(leftType.Kind == TypeKind.String || rightType.Kind == TypeKind.String);
+			// '==' / '!=': the same type, or a named type against its root; two
+			// different named types never compare
+			if (node.Operator is BinaryOperator.EqualTo or BinaryOperator.NotEqualTo)
+			{
+				if (!TypeRules.AreComparable(leftType, rightType))
+					Error($"Type mismatch, cannot compare '{leftType}' and '{rightType}'", node);
+				return;
+			}
 
-			if (!isStringAdd && leftType != rightType)
+			// arithmetic and ordering operate on the roots (named types widen)
+			var isStringAdd = node.Operator == BinaryOperator.Add &&
+				(leftType.RootKind == TypeKind.String || rightType.RootKind == TypeKind.String);
+
+			if (!isStringAdd && !leftType.Root.Equals(rightType.Root))
 			{
 				Error($"Type mismatch, cannot operate '{leftType}' and '{rightType}'", node);
 			}
 
 			if (!isStringAdd &&
 				(node.Operator & BinaryOperator.Relational) == BinaryOperator.Unknown &&
-				leftType?.Kind != TypeKind.Int)
+				leftType.RootKind != TypeKind.Int)
 			{
 				Error($"'{node.OperatorNode.Operator}' can only be used with 'int' type.", node);
 			}
@@ -502,15 +520,17 @@ namespace GameScript.Language.Visitors
 
 			var operandType = GetInferredType(node.Operand);
 			if (node.Operator == UnaryOperator.Not &&
-				operandType?.Kind != TypeKind.Bool)
+				operandType?.RootKind != TypeKind.Bool)
 			{
 				Error("'!' operator can only be used on 'bool' types.", node);
 			}
 
-			if ((node.Operator & UnaryOperator.Numeric) != UnaryOperator.Unknown &&
-				operandType?.Kind != TypeKind.Int)
+			if ((node.Operator & UnaryOperator.Numeric) != UnaryOperator.Unknown)
 			{
-				Error($"'{node.OperatorNode.Operator}' can only be used with 'int' type.", node);
+				if (operandType?.RootKind != TypeKind.Int)
+					Error($"'{node.OperatorNode.Operator}' can only be used with 'int' type.", node);
+				else if (operandType.IsNamed)
+					Error($"'{node.OperatorNode.Operator}' yields '{operandType.Root}' and cannot be stored back into '{operandType}'; write x = {operandType}(x + 1).", node);
 			}
 		}
 
@@ -526,34 +546,82 @@ namespace GameScript.Language.Visitors
 				return; // type check error
 			}
 
-			var isStringAdd = node.Operator == AssignmentOperator.Add &&
-				leftType?.Kind == TypeKind.String;
+			if (node.Operator == AssignmentOperator.Assign)
+			{
+				if (!TypeRules.IsAssignable(node.Right, rightType, leftType))
+					Error($"Type mismatch, cannot assign '{rightType}' to '{leftType}'", node);
+				return;
+			}
 
-			if (!isStringAdd && leftType != rightType)
+			// compound operators compute on the root, so the result no longer has the
+			// named type of the target
+			if (leftType.IsNamed)
+			{
+				Error($"'{node.OperatorNode.Operator}' yields '{leftType.Root}' and cannot be stored back into '{leftType}'; write x = {leftType}(x {node.OperatorNode.Operator.TrimEnd('=')} ...).", node);
+				return;
+			}
+
+			var isStringAdd = node.Operator == AssignmentOperator.Add &&
+				leftType.RootKind == TypeKind.String;
+
+			if (!isStringAdd && !leftType.Root.Equals(rightType.Root))
 			{
 				Error($"Type mismatch, cannot operate '{leftType}' and '{rightType}'", node);
 			}
 
-			if (!isStringAdd &&
-				node.Operator != AssignmentOperator.Assign &&
-				leftType?.Kind != TypeKind.Int)
+			if (!isStringAdd && leftType.RootKind != TypeKind.Int)
 			{
 				Error($"'{node.OperatorNode.Operator}' can only be used with 'int' type.", node);
 			}
 		}
+
+		// 'NAME(expr)' where NAME is a named type: exactly one argument whose root is the
+		// type's root. Compiles to nothing.
+		private void CastCheck(CallExpressionNode node)
+		{
+			var name = node.FunctionName.Name;
+			var target = _context.Types.GetType(name);
+			if (target is not { IsNamed: true, Underlying: not null })
+				return;    // the declaration itself is in error (reported there)
+
+			if (node.Arguments == null || node.Arguments.Count != 1)
+			{
+				Error($"Cast to '{name}' takes exactly one argument: {name}(expr).", node);
+				return;
+			}
+
+			var argType = GetInferredType(node.Arguments[0]);
+			if (argType != null && !TypeRules.CanCast(argType, target))
+			{
+				Error($"Cannot cast '{argType}' to '{name}'; '{name}' is a named type over '{target.Underlying}'.", node.Arguments[0]);
+			}
+		}
+
 		// For call expressions, look up the function symbol for the function name,
 		// then assign the return type from the function signature.
 		public override void Visit(CallExpressionNode node)
 		{
 			base.Visit(node);
 
+			if (node.FunctionName.Type == IdentifierType.Type)
+			{
+				CastCheck(node);
+				return;
+			}
+
 			var name = node.FunctionName.Name;
-			var argTypes = node.Arguments?.Select(GetInferredType).ToList() ?? [];
-			var resolved = _context.Symbols.ResolveCallable(name, argTypes, out var status);
+			var args = node.Arguments?
+				.Select(x => new CallArgument(GetInferredType(x), TypeRules.IsZeroLiteral(x)))
+				.ToList() ?? [];
+			var argTypes = args.Select(x => x.Type).ToList();
+			var resolved = _context.Symbols.ResolveCallable(name, args, _context.Types, out var status);
 			switch (status)
 			{
 				case CallableResolutionStatus.NotFound:
-					// unknown symbols are reported by the semantic pass
+					// unknown symbols are reported by the semantic pass; a local that
+					// shadows a type name is a plain variable here, not a cast
+					if (node.FunctionName.Type == IdentifierType.Local)
+						Error($"'{name}' is a local variable here and cannot be called.", node.FunctionName);
 					break;
 
 				case CallableResolutionStatus.Match:
@@ -564,9 +632,12 @@ namespace GameScript.Language.Visitors
 					var viaDefaults = _context.Symbols.GetSymbols(name).Any(x =>
 						x.IsCallable() && x.DefaultCount > 0 &&
 						argTypes.Count >= x.RequiredArity && argTypes.Count < x.Arity);
+					var viaZero = args.Any(x => x.IsZeroLiteral);
 					Error(viaDefaults
 						? $"Ambiguous call to '{name}': omitted defaulted parameters make more than one overload applicable. Pass the arguments explicitly."
-						: $"Ambiguous call to '{name}': multiple overloads match.", node);
+						: viaZero
+							? $"Ambiguous call to '{name}': multiple overloads match (a bare 0 / \"\" converts to every named type; cast it)."
+							: $"Ambiguous call to '{name}': multiple overloads match.", node);
 					break;
 
 				case CallableResolutionStatus.NoOverloadMatches:
@@ -608,10 +679,12 @@ namespace GameScript.Language.Visitors
 			base.Visit(node);
 
 			var operandType = GetInferredType(node.Operand);
-			if ((node.Operator & UnaryOperator.Numeric) != UnaryOperator.Unknown &&
-				operandType?.Kind != TypeKind.Int)
+			if ((node.Operator & UnaryOperator.Numeric) != UnaryOperator.Unknown)
 			{
-				Error($"'{node.OperatorNode.Operator}' can only be used with 'int' type.", node);
+				if (operandType?.RootKind != TypeKind.Int)
+					Error($"'{node.OperatorNode.Operator}' can only be used with 'int' type.", node);
+				else if (operandType.IsNamed)
+					Error($"'{node.OperatorNode.Operator}' yields '{operandType.Root}' and cannot be stored back into '{operandType}'; write x = {operandType}(x + 1).", node);
 			}
 		}
 
@@ -628,7 +701,7 @@ namespace GameScript.Language.Visitors
 		private void ConditionExpressionCheck(ExpressionNode expression)
 		{
 			var conditionType = GetInferredType(expression);
-			if (conditionType?.Kind != TypeKind.Bool)
+			if (conditionType?.RootKind != TypeKind.Bool)
 			{
 				Error("Condition expression must resolve to a bool", expression);
 			}
@@ -636,9 +709,10 @@ namespace GameScript.Language.Visitors
 
 		private TypeInfo? GetInferredType(ExpressionNode expression)
 		{
-			_inferredTypeVisitor.LocalIndex = LocalIndex;
-			expression.Accept(_inferredTypeVisitor);
-			return _inferredTypeVisitor.InferredType;
+			var inferred = InferredTypes;
+			inferred.LocalIndex = LocalIndex;
+			expression.Accept(inferred);
+			return inferred.InferredType;
 		}
 
 		private TypeInfo? GetInferredType(List<ExpressionNode>? expressions)

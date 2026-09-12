@@ -42,7 +42,11 @@ namespace GameScript.LanguageServer.Handlers
 			}
 
 			var localIndex = rootData.GetLocalIndex(request.Position.Line, request.Position.Character);
-			var symbol = localIndex?.GetSymbol(symbolName) ?? _projects.GetProject(filePath).Symbols.GetSymbol(symbolName);
+			var projectSymbols = _projects.GetProject(filePath).Symbols;
+			// a named type is never local (a local may shadow its name)
+			var symbol = astNode.IsTypeReference()
+				? projectSymbols.FindTypeSymbol(symbolName)
+				: localIndex?.GetSymbol(symbolName) ?? projectSymbols.GetSymbol(symbolName);
 			if (symbol == null)
 			{
 				return null;

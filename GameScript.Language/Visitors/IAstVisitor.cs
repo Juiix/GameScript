@@ -24,6 +24,7 @@ namespace GameScript.Language.Visitors
 		void Visit(TableDefinitionNode node);
 		void Visit(TableColumnNode node);
 		void Visit(TableRowNode node);
+		void Visit(TypeDefinitionNode node);
 
 		// Statement nodes
 		void Visit(IfStatementNode node);

@@ -17,7 +17,8 @@ internal sealed class DidSaveTextDocumentHandler(
 		CancellationToken cancellationToken)
 	{
 		var filePath = request.TextDocument.Uri.GetNormalizedFilePath();
-		_fileProcessingService.Queue(filePath);
+		if (Tools.ExtensionFilter.IsGameScript(filePath))
+			_fileProcessingService.Queue(filePath);
 
 		return Unit.Value;
 	}

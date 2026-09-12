@@ -26,8 +26,8 @@
 The toolchain is a straight pipeline:
 
 ```
-.gs / .const / .context  →  parse  →  (index & analyze)  →  compile  →  run
-       source              AstParser    visitors            BytecodeCompiler   ScriptRunner
+.gs source  →  parse  →  (index & analyze)  →  compile  →  run
+               AstParser   visitors            BytecodeCompiler   ScriptRunner
 ```
 
 | Package                     | Role                                                                    |
@@ -52,13 +52,18 @@ if (parser.Errors.Count > 0)
         Console.WriteLine(e);
 ```
 
-Each file type has its own entry point:
+There is one grammar and one entry point (2.5+): constants, context variables and
+named types are top-level declarations like methods and tables, in any order and
+in any file.
 
-| Extension  | Entry point        | Returns         | Node list                |
-| ---------- | ------------------ | --------------- | ------------------------ |
-| `.gs`      | `ParseProgram()`   | `ProgramNode`   | `.Methods`, `.Tables` (`.Declarations` in source order) |
-| `.const`   | `ParseConstants()` | `ConstantsNode` | `.Definitions`           |
-| `.context` | `ParseContexts()`  | `ContextsNode`  | `.Definitions`           |
+| Entry point      | Returns       | Node lists                                                        |
+| ---------------- | ------------- | ----------------------------------------------------------------- |
+| `ParseProgram()` | `ProgramNode` | `.Methods`, `.Tables`, `.Constants`, `.Contexts`, `.Types` (`.Declarations` in source order) |
+
+`ParseConstants()` / `ParseContexts()` remain for one release as `[Obsolete]`
+filtered views over `ParseProgram()` (they report any other declaration as an
+error); stop routing by extension and rename legacy `.const`/`.context` files to
+`.gs`.
 
 Every AST node stores its `FilePath` and `FileRange` for diagnostics.
 
@@ -114,13 +119,15 @@ Collect the parsed nodes from **all** files, then compile them together in one c
 // call site to the overload chosen during analysis. Required whenever any name
 // is overloaded; merge the per-file dictionaries into one.
 var compiler = new BytecodeCompiler<ServerOpCode>(resolvedCalls);
-var result   = compiler.Compile(constantNodes, contextNodes, methodNodes, tableNodes);
+var result   = compiler.Compile(constantNodes, contextNodes, methodNodes, tableNodes, typeNodes);
 
 BytecodeProgram         prog = result.Program;   // methods + constant pool
 BytecodeProgramMetadata meta = result.Metadata;  // per-method line/file maps, local names, context slot names
 ```
 
+- Every argument is the concatenation of the matching `ProgramNode` list across the root: `.Constants`, `.Contexts`, `.Methods`, `.Tables`, `.Types`.
 - `tableNodes` is every `ProgramNode.Tables` entry across the root (2.4+). The 3-argument `Compile(constants, contexts, methods)` overload still exists for content without tables; a table that is *used* but not passed is a compile error.
+- `typeNodes` is every `ProgramNode.Types` entry (2.5+). Named types erase to their root at codegen — no new opcodes, the same `Value` slots — and the list only tells the compiler which root each name erases to (a `string`-rooted type erases to `String` in `ParamTypes` and table fallbacks). The 4-argument overload still compiles content that declares no types.
 - Constant declarations are folded into the constant pool at compile time — there is no init step to run.
 - Constant tables produce no bytecode of their own: each access site compiles to a compare chain over the table's rows (all-constant keys fold to the cell), so a table only costs where it is read.
 - `func` and trigger-handler methods compile to bytecode; `command` declarations resolve to your opcode enum, and `trigger` declarations produce no bytecode (they only validate handler headers).
@@ -218,7 +225,7 @@ runner.Run(state);   // resumes right after the suspending command
 
 ## 7 Context Variables (`IScriptContext`)
 
-`@context` variables are backed by host storage, keyed by the slot ID from the `.context` declaration:
+`@context` variables are backed by host storage, keyed by the slot ID from the `TYPE @name = slot` declaration (the declared type may be a named type; the slot is still an `int`):
 
 ```csharp
 public sealed class MyCtx : IScriptContext
@@ -268,10 +275,15 @@ Pair frame data with `BytecodeProgramMetadata` (`LineNumbers`, `FilePath`, `Loca
 ### 9.1 Global indexes
 
 ```csharp
-var types      = new GlobalTypeIndex();
+var types      = new GlobalTypeIndex();     // the built-in types only
 var symbols    = new GlobalSymbolTable();
 var references = new GlobalReferenceTable();
 ```
+
+Named types (`type item : int`) are ordinary symbols in `symbols`; `VisitorContext`
+wraps `types` in a `ProjectTypeIndex` that also answers them. The index pass records
+a named type by name only and the analysis passes resolve it through the symbol
+table, so files may be indexed in any order (and in parallel).
 
 ### 9.2 Per-file indexing
 
@@ -316,7 +328,7 @@ static void VisitAst<T>(AstNode n, T v, List<FileError> errs) where T : IAstVisi
 | `NameResolutionVisitor`    | Classifies bare identifiers against symbol tables    |
 | `SymbolAnalysisVisitor`    | Duplicate declarations, local/global name collisions |
 | `SemanticAnalysisVisitor`  | Control flow, mark rules, break/continue scope, table shape (row arity, constant cells, >64-row warning), table/cursor misuse |
-| `TypeAnalysisVisitor`      | Type inference, overload resolution, assignments, table cell types, key uniqueness / key width, lookup arity and key types |
+| `TypeAnalysisVisitor`      | Type inference, overload resolution (exact match outranks widening), named-type assignability and casts, table cell types, key uniqueness / key width, lookup arity and key types |
 
 All visitors collect `FileError` instances for easy aggregation and reporting.
 Table key uniqueness is checked at analysis time (not indexing) because cells

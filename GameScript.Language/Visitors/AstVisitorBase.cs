@@ -109,6 +109,11 @@ namespace GameScript.Language.Visitors
 			Visit((AstNode)node);
 		}
 
+		public virtual void Visit(TypeDefinitionNode node)
+		{
+			Visit((AstNode)node);
+		}
+
 		public virtual void Visit(TableRowNode node)
 		{
 			Visit((AstNode)node);

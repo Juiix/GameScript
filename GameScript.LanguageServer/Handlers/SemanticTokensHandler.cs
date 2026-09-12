@@ -168,7 +168,8 @@ namespace GameScript.LanguageServer.Handlers
 			{
 				IdentifierType.Func or IdentifierType.Label or IdentifierType.Command or IdentifierType.Trigger or IdentifierType.TriggerDeclaration => 1,
 				IdentifierType.Local or IdentifierType.Constant or IdentifierType.Context => 2,
-				IdentifierType.Table => 7,
+				// named types: the declaration name and cast callees ('item(x)')
+				IdentifierType.Table or IdentifierType.Type => 7,
 				IdentifierType.EngineOp => 8,
 				IdentifierType.Column => 9,
 				_ => 0,

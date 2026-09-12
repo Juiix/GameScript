@@ -17,6 +17,44 @@ namespace GameScript.Language.Visitors
 
 		public Dictionary<MethodDefinitionNode, LocalIndex> LocalIndexes => _localIndexes;
 
+		// Named types are recorded by name only at index time (files index in any
+		// order, in parallel in the LSP); analysis resolves the placeholder through the
+		// symbol table. Every use of a named type is also a reference to its 'type'
+		// declaration, so find-references / rename / dependency re-analysis see it.
+		public override void Visit(TypeNode node)
+		{
+			if (InvalidSymbolName(node.Name) || _context.Types.GetPrimitive(node.Name) != null)
+				return;
+
+			_fileIndex.AddReference(new ReferenceInfo(node.Name, node.FilePath, node.FileRange));
+		}
+
+		public override void Visit(TypeDefinitionNode node)
+		{
+			if (InvalidSymbolName(node.Name.Name))
+				return;
+
+			// the root is always a primitive, so it resolves here; an invalid root
+			// (reported by semantic analysis) leaves the alias unresolved
+			var rootName = node.Underlying.Name;
+			var root = rootName is "int" or "string" ? _context.Types.GetPrimitive(rootName) : null;
+
+			var symbol = new SymbolInfo(
+				IdentifierType.Type,
+				node.Name.Name,
+				new TypeInfo(node.Name.Name, TypeKind.Named, null, root),
+				null,
+				null,
+				null,
+				node.Name.Summary,
+				null,
+				_context.FilePath,
+				node.Name.FileRange
+			);
+
+			_fileIndex.AddSymbol(symbol);
+		}
+
 		public override void Visit(ConstantDefinitionNode node)
 		{
 			if (InvalidSymbolName(node.Name.Name))
@@ -25,7 +63,7 @@ namespace GameScript.Language.Visitors
 			var symbol = new SymbolInfo(
 				IdentifierType.Constant,
 				node.Name.Name,
-				_context.Types.GetType(node.Type.Name),
+				_context.Types.GetTypeOrPlaceholder(node.Type.Name),
 				null,
 				null,
 				null,
@@ -36,6 +74,7 @@ namespace GameScript.Language.Visitors
 			);
 
 			_fileIndex.AddSymbol(symbol);
+			node.Type.Accept(this);
 		}
 
 		public override void Visit(ContextDefinitionNode node)
@@ -46,7 +85,7 @@ namespace GameScript.Language.Visitors
 			var symbol = new SymbolInfo(
 				IdentifierType.Context,
 				node.Name.Name,
-				_context.Types.GetType(node.Type.Name),
+				_context.Types.GetTypeOrPlaceholder(node.Type.Name),
 				null,
 				null,
 				null,
@@ -57,6 +96,7 @@ namespace GameScript.Language.Visitors
 			);
 
 			_fileIndex.AddSymbol(symbol);
+			node.Type.Accept(this);
 		}
 
 		public override void Visit(MethodDefinitionNode node)
@@ -68,9 +108,9 @@ namespace GameScript.Language.Visitors
 			var symbol = new SymbolInfo(
 				node.Name.Type,
 				node.SymbolName,
-				_context.Types.GetTuple(node.ReturnTypes?.Select(x => x.Type.Name)),
+				_context.Types.GetTuple(node.ReturnTypes?.Select(x => x.Type.Name), placeholders: true),
 				node.ReturnTypes?.Select(x => x.Name?.Name ?? string.Empty).ToList(),
-				_context.Types.GetTuple(node.Parameters?.Select(x => x.Type.Name)),
+				_context.Types.GetTuple(node.Parameters?.Select(x => x.Type.Name), placeholders: true),
 				node.Parameters?.Select(x => x.Name.Name).ToList(),
 				node.Name.Summary,
 				null,
@@ -97,7 +137,8 @@ namespace GameScript.Language.Visitors
 		public override void Visit(VariableDefinitionNode node)
 		{
 			// Build symbols for the declared variables.
-			var varType = _context.Types.GetType(node.VarType.Name);
+			var varType = _context.Types.GetTypeOrPlaceholder(node.VarType.Name);
+			node.VarType.Accept(this);
 			foreach (var (varName, initializer) in node.Vars)
 			{
 				if (InvalidSymbolName(varName.Name))
@@ -129,7 +170,7 @@ namespace GameScript.Language.Visitors
 			var varSymbol = new SymbolInfo(
 				IdentifierType.Local,
 				node.Name.Name,
-				_context.Types.GetType(node.Type.Name),
+				_context.Types.GetTypeOrPlaceholder(node.Type.Name),
 				null,
 				null,
 				null,
@@ -140,6 +181,7 @@ namespace GameScript.Language.Visitors
 			);
 
 			_localIndex?.AddSymbol(varSymbol);
+			node.Type.Accept(this);
 		}
 
 		public override void Visit(ParameterNode node)
@@ -150,7 +192,7 @@ namespace GameScript.Language.Visitors
 			var paramSymbol = new SymbolInfo(
 				node.Name.Type,
 				node.Name.Name,
-				_context.Types.GetType(node.Type.Name),
+				_context.Types.GetTypeOrPlaceholder(node.Type.Name),
 				null,
 				null,
 				null,
@@ -161,6 +203,7 @@ namespace GameScript.Language.Visitors
 			);
 
 			_localIndex?.AddSymbol(paramSymbol);
+			node.Type.Accept(this);
 
 			// index references inside the default value ('^const' identifiers)
 			node.Default?.Accept(this);
@@ -236,7 +279,7 @@ namespace GameScript.Language.Visitors
 			{
 				columns.Add(new TableColumnInfo(
 					column.Name.Name,
-					_context.Types.GetType(column.Type.Name) ?? new TypeInfo(column.Type.Name, TypeKind.Int),
+					_context.Types.GetTypeOrPlaceholder(column.Type.Name),
 					column.IsKey,
 					_context.FilePath,
 					column.Name.FileRange));

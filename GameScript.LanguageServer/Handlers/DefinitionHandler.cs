@@ -48,6 +48,14 @@ internal sealed class DefinitionHandler(
 			});
 		}
 
+		// a named type (type position, cast callee, or its own declaration) jumps to
+		// its 'type' line; locals may shadow a type name, so never consult the local index
+		if (node != null && node.IsTypeReference())
+		{
+			var typeSymbol = _projects.GetProject(filePath).Symbols.FindTypeSymbol(node.GetSymbolName() ?? string.Empty);
+			return typeSymbol == null ? null : new LocationOrLocationLinks(typeSymbol.GetLocation());
+		}
+
 		if (node is not IdentifierNode identifierNode)
 		{
 			return null;

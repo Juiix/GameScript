@@ -54,7 +54,32 @@ internal sealed class SignatureHelpHandler(
 		var cursorOffset = rootData.GetOffset(line, character);
 		var activeParam = GetActiveParameterIndex(callExpr, cursorOffset);
 
+		// 'item(' is a cast: one argument of the type's root
+		if (symbol.IdentifierType == IdentifierType.Type)
+			return BuildCastSignatureHelp(symbol);
+
 		return BuildSignatureHelp(symbol, activeParam);
+	}
+
+	private static SignatureHelp BuildCastSignatureHelp(SymbolInfo type)
+	{
+		var root = type.Type?.Underlying?.Name ?? "?";
+		var parameter = new ParameterInformation { Label = new ParameterInformationLabel($"{root} value") };
+		var sigInfo = new SignatureInformation
+		{
+			Label = $"{type.Name}({root} value)",
+			Documentation = new StringOrMarkupContent(string.IsNullOrEmpty(type.Summary)
+				? $"Cast to the named type '{type.Name}' (over '{root}'). Compiles to nothing."
+				: $"{type.Summary}\n\nCast to '{type.Name}' (over '{root}'). Compiles to nothing."),
+			Parameters = new Container<ParameterInformation>(parameter),
+			ActiveParameter = 0
+		};
+		return new SignatureHelp
+		{
+			Signatures = new Container<SignatureInformation>(sigInfo),
+			ActiveSignature = 0,
+			ActiveParameter = 0
+		};
 	}
 
 	private static int GetActiveParameterIndex(CallExpressionNode callExpr, int cursorOffset)

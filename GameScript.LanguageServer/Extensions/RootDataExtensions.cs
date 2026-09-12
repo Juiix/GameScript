@@ -1,5 +1,6 @@
 ﻿using GameScript.Language.Ast;
 using GameScript.Language.Index;
+using GameScript.Language.Symbols;
 using GameScript.LanguageServer.Parsing;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 
@@ -96,6 +97,9 @@ namespace GameScript.LanguageServer.Extensions
 		{
 			MethodDefinitionNode m => m.Name.Name,
 			TableDefinitionNode t => t.Name.Name,
+			TypeDefinitionNode t => t.Name.Name,
+			// a type in type position ('item x', 'returns item', a column type)
+			TypeNode t => t.Name,
 			// table columns are not symbols: they resolve against their table, and a
 			// column may legitimately share a func/local's name
 			IdentifierNode { Type: IdentifierType.Column } => null,
@@ -107,6 +111,32 @@ namespace GameScript.LanguageServer.Extensions
 			IdentifierDeclarationNode d => d.Name,
 			_ => null
 		};
+
+		/// <summary>
+		/// A use of a named type: a type position, a cast callee ('item(x)'), or the
+		/// name on its 'type' declaration. Locals and parameters may shadow a type name,
+		/// so these must be resolved against the project's type symbols and never
+		/// against the local index.
+		/// </summary>
+		public static bool IsTypeReference(this AstNode astNode) => astNode switch
+		{
+			TypeNode => true,
+			IdentifierNode { Type: IdentifierType.Type } => true,
+			IdentifierDeclarationNode { Type: IdentifierType.Type } => true,
+			TypeDefinitionNode => true,
+			_ => false
+		};
+
+		/// <summary>The 'type NAME : root' declaration symbol of that name, or null (built-in types have none).</summary>
+		public static SymbolInfo? FindTypeSymbol(this ISymbolIndex symbols, string name)
+		{
+			foreach (var symbol in symbols.GetSymbols(name))
+			{
+				if (symbol.IdentifierType == IdentifierType.Type)
+					return symbol;
+			}
+			return null;
+		}
 
 		private static IdentifierType GetIdentifierType(char prefix)
 		{

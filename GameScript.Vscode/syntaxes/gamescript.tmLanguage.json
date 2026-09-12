@@ -3,6 +3,7 @@
   "scopeName": "source.gamescript",
   "patterns": [
     { "include": "#comment" },
+    { "include": "#type-declaration" },
     { "include": "#table-declaration" },
     { "include": "#method-declaration" },
     { "include": "#member-access" },
@@ -99,6 +100,19 @@
                 "2": { "name": "entity.name.tag.op-binding.gamescript" }
               }
             },
+            {
+              "comment": "'TYPE name' parameter pairs — any type name, named types included",
+              "match": "\\b(?!returns\\b)([A-Za-z_][\\w]*)\\s+([A-Za-z_][\\w]*)\\b(?=\\s*(?:,|\\)|=))",
+              "captures": {
+                "1": { "name": "storage.type.gamescript" },
+                "2": { "name": "variable.parameter.gamescript" }
+              }
+            },
+            {
+              "comment": "single return type after 'returns' (tuple element types are colored by semantic tokens)",
+              "match": "(?<=\\breturns\\s)([A-Za-z_][\\w]*)\\b",
+              "captures": { "1": { "name": "storage.type.gamescript" } }
+            },
             { "include": "#variables" },
             { "include": "#types" },
             { "include": "#strings" },
@@ -107,10 +121,25 @@
         }
       ]
     },
+    "type-declaration": {
+      "patterns": [
+        {
+          "comment": "type NAME : int|string — 'type' is contextual: only a top-level 'type NAME :' line declares a named type",
+          "name": "meta.type.declaration.gamescript",
+          "match": "^(type)\\s+([A-Za-z_][\\w]*)\\s*(:)\\s*([A-Za-z_][\\w]*)?",
+          "captures": {
+            "1": { "name": "keyword.declaration.gamescript" },
+            "2": { "name": "entity.name.type.gamescript" },
+            "3": { "name": "punctuation.separator.type.gamescript" },
+            "4": { "name": "storage.type.gamescript" }
+          }
+        }
+      ]
+    },
     "table-declaration": {
       "patterns": [
         {
-          "comment": "table NAME([key] TYPE col, ...) — 'key' is a contextual column modifier",
+          "comment": "table NAME([key] TYPE col, ...) — 'key' is a contextual column modifier; TYPE may be a named type",
           "name": "meta.table.declaration.gamescript",
           "begin": "^(\\s*)(table)\\s+([A-Za-z_][\\w]*)\\s*(?=\\(|$)",
           "beginCaptures": {
@@ -120,7 +149,15 @@
           },
           "end": "$",
           "patterns": [
-            { "name": "storage.modifier.key.gamescript", "match": "\\bkey\\b(?=\\s+(?:int|bool|string)\\b)" },
+            { "name": "storage.modifier.key.gamescript", "match": "\\bkey\\b(?=\\s+[A-Za-z_][\\w]*\\s+[A-Za-z_][\\w]*)" },
+            {
+              "comment": "'TYPE column' pairs — any type name, named types included",
+              "match": "\\b(?!key\\b)([A-Za-z_][\\w]*)\\s+([A-Za-z_][\\w]*)\\b(?=\\s*(?:,|\\)))",
+              "captures": {
+                "1": { "name": "storage.type.gamescript" },
+                "2": { "name": "variable.other.member.gamescript" }
+              }
+            },
             { "include": "#types" },
             { "include": "#variables" }
           ]
@@ -130,8 +167,9 @@
     "variable-declaration": {
       "patterns": [
         {
+          "comment": "'TYPE name', 'TYPE ^const' or 'TYPE @context' — TYPE is any identifier (named types included), so statement keywords are excluded explicitly",
           "name": "meta.variable.declaration.gamescript",
-          "match": "^(\\s*)(int|bool|string|func)\\s+([A-Za-z_][\\w]*)",
+          "match": "^(\\s*)(?!(?:if|else|return|while|switch|case|default|for|in|break|continue|and|or|not|command|trigger|table|type)\\b)([A-Za-z_][\\w]*)\\s+((?:@|\\^)?[A-Za-z_][\\w]*)\\b(?=\\s*(?:=|,|$))",
           "captures": {
             "2": { "name": "storage.type.gamescript" },
             "3": { "name": "variable.other.declared.gamescript" }
@@ -161,7 +199,11 @@
     },
     "method-call": {
       "patterns": [
-        { "name": "support.function.call.gamescript", "match": "\\.?[A-Za-z_][\\w]*(?::[A-Za-z_][\\w]*)?\\s*(?=\\()" }
+        {
+          "comment": "a cast 'item(x)' is lexically a call; the language server's semantic tokens recolor the callee as a type",
+          "name": "support.function.call.gamescript",
+          "match": "\\.?[A-Za-z_][\\w]*(?::[A-Za-z_][\\w]*)?\\s*(?=\\()"
+        }
       ]
     }
   },

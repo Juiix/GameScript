@@ -43,6 +43,8 @@ public sealed class BytecodeCompiler<TCommandOp> where TCommandOp : struct, Enum
 	private readonly List<int> _operands = [];
 	private readonly Dictionary<string, int> _localSlots = [];
 	private readonly Dictionary<string, int> _ctxSlots = [];
+	// named type → the runtime slot type its root erases to ('type item : int' → Int)
+	private readonly Dictionary<string, ValueType> _erasure = [];
 	private readonly Stack<LoopContext> _loopStack = [];
 	private int _nextSlot;
 	private int _currentReturnCount;
@@ -68,7 +70,28 @@ public sealed class BytecodeCompiler<TCommandOp> where TCommandOp : struct, Enum
 		IEnumerable<MethodDefinitionNode> methods,
 		IEnumerable<TableDefinitionNode> tables)
 	{
+		return Compile(constants, contexts, methods, tables, []);
+	}
+
+	/// <summary>
+	/// Compiles a whole content root, including its named-type declarations
+	/// (ProgramNode.Types). Named types erase to their root at codegen — no new
+	/// opcodes, the same Value slots — and <paramref name="types"/> only tells the
+	/// compiler which root each name erases to (a 'string'-rooted type erases to
+	/// String); content that declares no types compiles identically without them.
+	/// </summary>
+	public BytecodeCompilerResult Compile(
+		IEnumerable<ConstantDefinitionNode> constants,
+		IEnumerable<ContextDefinitionNode> contexts,
+		IEnumerable<MethodDefinitionNode> methods,
+		IEnumerable<TableDefinitionNode> tables,
+		IEnumerable<TypeDefinitionNode> types)
+	{
 		// Initialize data
+		_erasure.Clear();
+		foreach (var type in types)
+			_erasure[type.Name.Name] = ToPrimitiveValueType(type.Underlying.Name);
+
 		_methods.Clear();
 		_methodMetadata.Clear();
 		_methodIndex.Clear();
@@ -182,8 +205,11 @@ public sealed class BytecodeCompiler<TCommandOp> where TCommandOp : struct, Enum
 			};
 	}
 
-	/// <summary>Maps a declared GameScript type name to its runtime slot type (label/func refs are ints).</summary>
-	private static ValueType ToValueType(string typeName) => typeName switch
+	/// <summary>Maps a declared GameScript type name to its runtime slot type (named types erase to their root; label/func refs are ints).</summary>
+	private ValueType ToValueType(string typeName) =>
+		_erasure.TryGetValue(typeName, out var erased) ? erased : ToPrimitiveValueType(typeName);
+
+	private static ValueType ToPrimitiveValueType(string typeName) => typeName switch
 	{
 		"string" => ValueType.String,
 		"bool" => ValueType.Bool,
@@ -793,6 +819,10 @@ public sealed class BytecodeCompiler<TCommandOp> where TCommandOp : struct, Enum
 			// Function call: push args then Call
 			// ----------------------------------------
 			case CallExpressionNode call:
+				// a cast ('item(x)') compiles to its argument — named types erase
+				if (call.FunctionName.Type == IdentifierType.Type)
+					return EmitExpression(call.Arguments![0]);
+
 				// 1) resolve the target overload
 				var callName = call.FunctionName.Name;
 				if (!TryResolveCall(call, out var methodKey, out var resolvedSymbol))
@@ -1272,6 +1302,9 @@ public sealed class BytecodeCompiler<TCommandOp> where TCommandOp : struct, Enum
 	/// </summary>
 	private bool TryEmitTailCall(CallExpressionNode call)
 	{
+		if (call.FunctionName.Type == IdentifierType.Type)
+			return false;    // a cast is an expression, never a transfer
+
 		if (!TryResolveCall(call, out var key, out var resolved))
 			return false;
 

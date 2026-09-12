@@ -181,8 +181,10 @@ public class ParserTests
 		Assert.Contains(errors, e => e.Message.Contains("Use 'not' instead of '!'"));
 	}
 
+	// The obsolete entry points remain as filtered views over ParseProgram for one release.
+#pragma warning disable CS0618
 	[Fact]
-	public void Parses_Constants_File()
+	public void Obsolete_ParseConstants_Still_Parses_A_Constants_File()
 	{
 		var parser = new AstParser("skills.const", "int ^skill_attack = 0\nint ^skill_mining = 1");
 		var root = (ConstantsNode)parser.ParseConstants();
@@ -191,7 +193,7 @@ public class ParserTests
 	}
 
 	[Fact]
-	public void Parses_Contexts_File_With_At_Mark()
+	public void Obsolete_ParseContexts_Still_Parses_A_Contexts_File()
 	{
 		var parser = new AstParser("player.context", "int @platform = 4");
 		var root = (ContextsNode)parser.ParseContexts();
@@ -201,11 +203,70 @@ public class ParserTests
 	}
 
 	[Fact]
-	public void Context_File_With_Old_Percent_Mark_Is_An_Error()
+	public void Obsolete_ParseContexts_Rejects_Old_Percent_Mark()
 	{
 		var parser = new AstParser("player.context", "int %platform = 4");
 		parser.ParseContexts();
 		Assert.NotEmpty(parser.Errors!);
+	}
+
+	[Fact]
+	public void Obsolete_ParseConstants_Rejects_Other_Declarations()
+	{
+		var parser = new AstParser("skills.const", "int ^skill_attack = 0\nfunc main()\n    return");
+		var root = parser.ParseConstants();
+		Assert.Contains(parser.Errors!, e => e.Message.Contains("Only constant declarations are allowed here"));
+		Assert.Single(root.Definitions!);
+	}
+#pragma warning restore CS0618
+
+	[Fact]
+	public void Program_Accepts_Constants_Contexts_Types_And_Methods_In_Any_Order()
+	{
+		var (root, errors) = ParseProgram("""
+			int ^skill_attack = 0
+			// The id of an item definition
+			type item : int
+			func main()
+			    return
+			int @platform = 4
+			item ^item_sword = 7
+			""");
+		Assert.Empty(errors);
+		Assert.Equal(5, root.Declarations!.Count);
+		Assert.Equal(2, root.Constants!.Count);
+		Assert.Single(root.Contexts!);
+		Assert.Single(root.Methods!);
+		var type = Assert.Single(root.Types!);
+		Assert.Equal("item", type.Name.Name);
+		Assert.Equal(IdentifierType.Type, type.Name.Type);
+		Assert.Equal("int", type.Underlying.Name);
+		Assert.Equal("The id of an item definition", type.Name.Summary);
+		Assert.Equal("item", root.Constants[1].Type.Name);
+	}
+
+	[Fact]
+	public void Type_Without_Colon_Is_A_Trigger_Handler()
+	{
+		var (root, errors) = ParseProgram("type foo\n    return");
+		Assert.Empty(errors);
+		Assert.Empty(root.Types!);
+		var handler = Assert.Single(root.Methods!);
+		Assert.Equal("type", handler.Keyword.Keyword);
+		Assert.Equal("foo", handler.Name.Name);
+	}
+
+	[Fact]
+	public void Type_Is_Still_A_Valid_Parameter_And_Local_Name()
+	{
+		var (root, errors) = ParseProgram("""
+			func f(int type) returns int
+			    int other = type
+			    return other
+			""");
+		Assert.Empty(errors);
+		Assert.Empty(root.Types!);
+		Assert.Equal("type", Assert.Single(root.Methods!).Parameters![0].Name.Name);
 	}
 
 	[Fact]

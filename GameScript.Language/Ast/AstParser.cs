@@ -84,65 +84,40 @@ public ref struct AstParser
 			new FileRange(start, _previous.End));
 	}
 
+	/// <summary>
+	/// Filtered view over <see cref="ParseProgram"/> for legacy '.const' sources: every
+	/// declaration that is not a constant is reported as an error.
+	/// </summary>
+	[Obsolete("Constants are top-level declarations of the .gs grammar; parse with ParseProgram() and read ProgramNode.Constants.")]
 	public ConstantsNode ParseConstants()
 	{
-		var defs = new List<ConstantDefinitionNode>();
-
-		Advance(); // prime the tokenizer
-		var start = _current.Start;
-
-		while (true)
+		var program = ParseProgram();
+		foreach (var declaration in program.Declarations ?? [])
 		{
-			SkipEndOfLineTokens();
-
-			if (_current.Type == TokenType.EndOfFile)
-				break;
-
-			var lineStart = _current.Start;
-			defs.Add(ParseConstantDefinition());
-
-			// Only one statement per physical line
-			if (_current.Type is not (TokenType.EndOfLine or TokenType.Dedent or TokenType.EndOfFile) &&
-				_current.Start.Line == lineStart.Line)
-			{
-				Error("Only one statement per line is allowed.", _current.Range);
-			}
+			if (declaration is not ConstantDefinitionNode)
+				Error("Only constant declarations are allowed here", declaration.FileRange);
 		}
-
-		return new ConstantsNode(defs, _filePath,
-								 new FileRange(start, _previous.End));
+		return new ConstantsNode(program.Constants, _filePath, program.FileRange);
 	}
 
+	/// <summary>
+	/// Filtered view over <see cref="ParseProgram"/> for legacy '.context' sources: every
+	/// declaration that is not a context variable is reported as an error.
+	/// </summary>
+	[Obsolete("Context variables are top-level declarations of the .gs grammar; parse with ParseProgram() and read ProgramNode.Contexts.")]
 	public ContextsNode ParseContexts()
 	{
-		var defs = new List<ContextDefinitionNode>();
-
-		Advance(); // prime the tokenizer
-		var start = _current.Start;
-
-		while (true)
+		var program = ParseProgram();
+		foreach (var declaration in program.Declarations ?? [])
 		{
-			SkipEndOfLineTokens();
-
-			if (_current.Type == TokenType.EndOfFile)
-				break;
-
-			var lineStart = _current.Start;
-			defs.Add(ParseContextDefinition());
-
-			// Only one statement per physical line
-			if (_current.Type is not (TokenType.EndOfLine or TokenType.Dedent or TokenType.EndOfFile) &&
-				_current.Start.Line == lineStart.Line)
-			{
-				Error("Only one statement per line is allowed.", _current.Range);
-			}
+			if (declaration is not ContextDefinitionNode)
+				Error("Only context declarations are allowed here", declaration.FileRange);
 		}
-
-		return new ContextsNode(defs, _filePath,
-								 new FileRange(start, _previous.End));
+		return new ContextsNode(program.Contexts, _filePath, program.FileRange);
 	}
 
-	// Parses a top-level definition: a method (func/command/trigger/handler) or a table.
+	// Parses a top-level definition: a method (func/command/trigger/handler), a table,
+	// a constant, a context variable, or a named type.
 	private AstNode ParseDefinition()
 	{
 		if (CurrentIsKeyword("label"))
@@ -150,6 +125,19 @@ public ref struct AstParser
 
 		if (CurrentIsKeyword("table"))
 			return ParseTableDefinition();
+
+		// 'TYPE ^name = …', 'TYPE @name = …' and the contextual 'type NAME : root' all open
+		// with two identifiers, as does a trigger handler ('obj_op_1 furnace'); one token
+		// of lookahead tells them apart. The '^'/'@' mark is part of the identifier token.
+		if (_current.Type == TokenType.Identifier && PeekIsIdentifier())
+		{
+			if (_peek.Value.Length > 0 && _peek.Value[0] == '^')
+				return ParseConstantDefinition();
+			if (_peek.Value.Length > 0 && _peek.Value[0] == '@')
+				return ParseContextDefinition();
+			if (_current.Value.SequenceEqual("type".AsSpan()))
+				return ParseTypeDefinitionOrHandler();
+		}
 
 		var method = _current switch
 		{
@@ -191,16 +179,48 @@ public ref struct AstParser
 		};
 	}
 
+	// 'type NAME : root' — a named-type declaration. 'type' is contextual: the line must
+	// have exactly this shape, otherwise 'type foo' is a trigger handler of kind 'type'.
+	// The caller has already peeked NAME (an identifier).
+	private AstNode ParseTypeDefinitionOrHandler()
+	{
+		var summary = GetSummary();
+		var start = _current.Start;
+		var kwNode = new KeywordNode(_current.Value.ToString(), _filePath, CurrentRange);
+		Advance();                                        // 'type'; _current is now NAME
+
+		if (!PeekIs(TokenType.Colon))
+			return ParseMethodDefinitionRest(IdentifierType.Trigger, summary, start, kwNode);
+
+		var nameTok = Expect(TokenType.Identifier, "Expected a type name after 'type'", "?".AsSpan());
+		var nameNode = new IdentifierDeclarationNode(nameTok.Value.ToString(), IdentifierType.Type,
+													 summary, _filePath, PreviousRange);
+
+		var colonTok = Expect(TokenType.Colon, "Expected ':' after the type name", ":".AsSpan());
+		var colonNode = new OperatorNode(":", _filePath, colonTok.Range);
+
+		var rootTok = ExpectTypeIdentifier("Expected a root type ('int' or 'string') after ':'");
+		var rootNode = new TypeNode(rootTok.Value.ToString(), _filePath, PreviousRange);
+
+		return new TypeDefinitionNode(kwNode, nameNode, colonNode, rootNode, _filePath,
+									  new FileRange(start, _previous.End));
+	}
+
 	private MethodDefinitionNode ParseMethodDefinition(IdentifierType idType)
 	{
 		var summary = GetSummary();
 		var start = _current.Start;
 
-		// leading keyword (func / label / command / trigger)
-		var kwTok = _current;
-		var kwNode = new KeywordNode(_current.Value.ToString(), _filePath, kwTok.Range);
+		// leading keyword (func / label / command / trigger), or the handler's trigger kind
+		var kwNode = new KeywordNode(_current.Value.ToString(), _filePath, CurrentRange);
 		Advance();
 
+		return ParseMethodDefinitionRest(idType, summary, start, kwNode);
+	}
+
+	// Everything after the leading keyword / trigger kind of a method definition.
+	private MethodDefinitionNode ParseMethodDefinitionRest(IdentifierType idType, string? summary, FilePosition start, KeywordNode kwNode)
+	{
 		// method name
 		var nameTok = Expect(TokenType.Identifier, "Expected method name", "?".AsSpan());
 		var nameStart = _previous.Start;
