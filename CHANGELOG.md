@@ -2,9 +2,9 @@
 
 All notable changes to GameScript will be documented in this file.
 
-## [Unreleased]
+## [2.6.0]
 
-**Documentation and diagnostics.** A public-facing rewrite of the docs with a tutorial and a runnable sample, plus the compiler gaps the rewrite uncovered.
+**Feature release — documentation, samples, and diagnostics.** A public-facing rewrite of the docs with a tutorial and a runnable sample, plus the compiler gaps the rewrite uncovered. One language relaxation (`return f()` in void funcs) and stricter checks that turn runtime failures into compile errors; no VM change.
 
 ### Language
 - **`return f()` in a func with no `returns` clause** is now legal when `f` returns nothing too: it means "call `f`, then return" — a tail transfer when `f` is a script func — so a void func can hand off from the middle of a branch (`if offer >= price: return buy(^item_sword)`). Previously every `return` with an expression in such a func was rejected, which contradicted the reference's own examples. A callee that returns a value is still an error, with a message that says so.
