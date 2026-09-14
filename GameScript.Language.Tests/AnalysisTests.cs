@@ -1042,4 +1042,101 @@ public class AnalysisTests
 		Assert.Contains(errors, e => e.Contains("No row of 'skill' has key (\"Nope\")"));
 		Assert.DoesNotContain(errors, e => e.Contains("No row of 'dm'"));
 	}
+
+	// ------------------------------------------------------------------
+	// diagnostics surfaced by the documentation audit
+	// ------------------------------------------------------------------
+
+	[Fact]
+	public void Ordering_Operators_On_String_Or_Bool_Are_Reported()
+	{
+		var errors = ErrorsFor("""
+			func main()
+			    string a = "a"
+			    bool b = true
+			    if a < "b": print("lt")
+			    if b >= false: print("ge")
+			    if a == "a": print("eq")
+			""");
+		Assert.Contains(errors, e => e.Contains("'<' can only be used with 'int' type."));
+		Assert.Contains(errors, e => e.Contains("'>=' can only be used with 'int' type."));
+		Assert.DoesNotContain(errors, e => e.Contains("'=='"));
+	}
+
+	[Fact]
+	public void Not_On_Non_Bool_Names_The_Not_Operator()
+	{
+		var errors = ErrorsFor("""
+			func main()
+			    int x = 1
+			    if not x: print("no")
+			""");
+		Assert.Contains("'not' operator can only be used on 'bool' types.", errors);
+	}
+
+	[Fact]
+	public void Duplicate_Context_Slot_Is_Reported_Across_Files()
+	{
+		var errors = ErrorsFor("""
+			int @gold = 7
+			int @silver = 8
+
+			func main()
+			    print(int_to_str(@gold + @silver))
+			""",
+			("more.gs", """
+				// same slot as @gold, in another file
+				bool @flag = 7
+				"""));
+		Assert.Contains(errors, e => e.Contains("Context slot 7 is already used by '@gold'") ||
+			e.Contains("Context slot 7 is already used by '@flag'"));
+		Assert.DoesNotContain(errors, e => e.Contains("slot 8"));
+	}
+
+	[Fact]
+	public void Overloaded_Func_Cannot_Be_Used_As_A_Func_Reference()
+	{
+		var errors = ErrorsFor("""
+			func fire(int a)
+			    print(int_to_str(a))
+
+			func fire(string a)
+			    print(a)
+
+			func alone()
+			    print("alone")
+
+			func main()
+			    queue_strong(fire, 1)
+			    queue_strong(alone, 1)
+			    fire(1)
+			""");
+		Assert.Single(errors, e => e.Contains("'fire' is overloaded and cannot be used as a func reference"));
+		Assert.DoesNotContain(errors, e => e.Contains("'alone'"));
+	}
+
+	[Fact]
+	public void Return_Call_In_Void_Func_Requires_A_Void_Callee()
+	{
+		var errors = ErrorsFor("""
+			func done()
+			    print("done")
+
+			func ok()
+			    return done()
+
+			func ok_command()
+			    return print("bye")
+
+			func bad()
+			    return int_to_str(1)
+
+			func main()
+			    ok()
+			    ok_command()
+			    bad()
+			""");
+		Assert.Single(errors);
+		Assert.Contains("'return int_to_str(...)' is only allowed when 'int_to_str' returns nothing too", errors[0]);
+	}
 }

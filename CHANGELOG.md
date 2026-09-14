@@ -2,6 +2,27 @@
 
 All notable changes to GameScript will be documented in this file.
 
+## [Unreleased]
+
+**Documentation and diagnostics.** A public-facing rewrite of the docs with a tutorial and a runnable sample, plus the compiler gaps the rewrite uncovered.
+
+### Language
+- **`return f()` in a func with no `returns` clause** is now legal when `f` returns nothing too: it means "call `f`, then return" — a tail transfer when `f` is a script func — so a void func can hand off from the middle of a branch (`if offer >= price: return buy(^item_sword)`). Previously every `return` with an expression in such a func was rejected, which contradicted the reference's own examples. A callee that returns a value is still an error, with a message that says so.
+- The ordering operators `<`, `>`, `<=`, `>=` now require `int` operands (named types widen). They previously compiled on `string`/`bool` and failed at runtime with an `InvalidCastException`.
+- Two `@context` declarations naming the same slot id are now an error (`Context slot 7 is already used by '@gold'`), across files; they silently aliased one host value before.
+- Using an overloaded func name as a `func` value (`queue(fire, 1)` when `fire` has two overloads) is now a diagnostic instead of an exception thrown by the compiler.
+- The `not`-on-non-bool message names `not` instead of `!`.
+
+### Tooling
+- Visual Studio extension colours `.palette` files like the VS Code extension already did.
+
+### Docs
+- New **TUTORIAL.md** — a step-by-step introduction that builds `samples/hello` — and **`samples/`**: a `hello` script project to open in the editor and a `HelloHost` console app (~150 lines) that compiles and runs it; `EMBEDDING.md` links to it as the canonical minimal host. CI builds and runs the sample.
+- `LANGUAGE.md`: migration notes moved out (see the breaking sections below); new sections on how a script runs, scoping, uninitialized locals, operand and integer rules, return paths, `func` values, doc-comment adjacency, and handler subjects.
+- `EMBEDDING.md`: reordered to match execution order (analysis before compilation), obsolete overloads dropped, `BytecodeCompilerResult` named correctly.
+- `README.md`, `CONTRIBUTING.md`, and both extension READMEs corrected (build commands, test suite, supported versions); `GUIDE.md` removed.
+- `DocSamplesTests` parses every ```` ```gamescript ```` fence in the root Markdown files and analyzes `samples/hello`, so the docs can't silently drift from the compiler.
+
 ## [2.5.1]
 
 **Tooling release — much smaller editor extensions.** No language, compiler, or VM change.

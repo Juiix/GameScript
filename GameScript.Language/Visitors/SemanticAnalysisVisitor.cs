@@ -226,6 +226,33 @@ namespace GameScript.Language.Visitors
 			{
 				Error("Context variable declaration expects an ID number assignment.", node.Initializer);
 			}
+			else
+			{
+				CheckDuplicateContextSlot(node);
+			}
+		}
+
+		// Two context variables declared on the same slot id silently alias one host
+		// value — almost always a copy-paste slip. Slots are global, so the check
+		// spans every indexed file; both declarations report.
+		private void CheckDuplicateContextSlot(ContextDefinitionNode node)
+		{
+			var slot = ConstantExpressions.ParseInlineValue(node.Initializer);
+			if (slot == null)
+				return;
+
+			foreach (var other in _context.Symbols.Symbols.ToList())
+			{
+				if (other.IdentifierType != IdentifierType.Context ||
+					other.LiteralValue == null ||
+					!Equals(other.LiteralValue, slot))
+					continue;
+				if (other.FilePath.Equals(node.Name.FilePath) &&
+					other.FileRange == node.Name.FileRange)
+					continue;   // self
+				Error($"Context slot {slot} is already used by '@{other.Name}'; each context variable needs its own slot.", node.Initializer);
+				return;
+			}
 		}
 
 		public override void Visit(WhileStatementNode node)
@@ -384,6 +411,17 @@ namespace GameScript.Language.Visitors
 						Error($"{symbol.IdentifierType} '{symbol.Name}' must be referenced without a mark", node);
 						break;
 				}
+			}
+
+			// a bare func name used as a value ('queue(explode, 5)') is a method
+			// reference; it must pick out exactly one method, so overloaded names
+			// cannot be referenced (the callee of a call is resolved by its arguments)
+			if (node.Type is IdentifierType.Func or IdentifierType.Label &&
+				symbol != null &&
+				!_castCallees.Contains(node) &&
+				_context.Symbols.GetSymbols(node.Name).Count(x => x.IsCallable()) > 1)
+			{
+				Error($"'{node.Name}' is overloaded and cannot be used as a func reference; a reference must name a single func.", node);
 			}
 
 			if (node.DotPrefix > 0 && node.Type != IdentifierType.Context)

@@ -27,3 +27,25 @@ jobs:
 
       - name: 🧪 Test
         run: dotnet test GameScript.Language.Tests/GameScript.Language.Tests.csproj --configuration Release
+
+  sample-host:
+    runs-on: ubuntu-latest
+    env:
+      DOTNET_NOLOGO: true
+      DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+    steps:
+      - name: 🛎️ Checkout repository
+        uses: actions/checkout@v4
+
+      - name: 🛠️ Setup .NET SDKs
+        uses: actions/setup-dotnet@v4
+        with:
+            dotnet-version: '8.x'
+
+      # Builds and runs the minimal host against samples/hello with scripted
+      # answers (buy the sword, then leave); the gold total proves the round trip.
+      - name: 🏃 Run HelloHost
+        run: |
+          dotnet run --project samples/HelloHost/HelloHost.csproj --configuration Release -- samples/hello 1 5 | tee hello.txt
+          grep -q "gold is now 15" hello.txt

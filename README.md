@@ -1,122 +1,159 @@
 # GameScript
 
-**GameScript** is a lightweight, indentation-based scripting language and toolchain built for game development. It compiles to a compact bytecode format executed by a small embeddable VM, and ships with a full Language Server for first-class editor support.
+**GameScript** is a small, indentation-based scripting language for games. Scripts compile to compact bytecode that runs on an embeddable C# VM, and the toolchain ships a language server so scripts get real editor support: diagnostics as you type, hover docs, navigation, rename, and a debugger.
 
----
-
-## Language at a Glance
-
-GameScript has three scalar types (`bool`, `int`, `string`), a `func` reference type, named types over `int`/`string` that keep content ids distinct, and a mark-based identifier system that makes every symbol's role visible at a glance — all in one `.gs` grammar:
+It is built for the code games are full of — dialogue, quests, UI handlers, item logic. The host game decides what scripts can do by declaring `command`s; scripts stay small, safe to hot-reload, and cheap to run.
 
 ```gamescript
-// named types — aliases over a root type; erase at codegen
-type npc : int
+// core.gs — the host implements commands in C#; triggers are events it fires
+command println(string text)
+command ask_number() returns int
+trigger on_talk
 
-// constants (typed or plain)
-npc ^npc_knight = 2
-int ^max_level = 99
+// items.gs — a named type and a constant table
+type item : int
+item ^item_sword  = 1
+item ^item_shield = 2
 
-// context variables — backed by a host-provided slot
-bool @logged_in = 0
+table stock(item id, string name, int price)
+    ^item_sword,  "Sword",  25
+    ^item_shield, "Shield", 15
 
-// methods
-command print(string value)           // host-implemented opcode, no body
-command npc_spawn(npc kind, int coord) // takes an npc id — ^max_level is a compile error here
+// shop.gs
+int @gold = 1                      // a context variable, backed by a host slot
 
-// trigger kinds — one per engine dispatch point (core.gs)
-trigger mn_button_1
+on_talk blacksmith                 // a handler: the host fires "on_talk blacksmith"
+    println("Blacksmith: Need something forged?")
+    int choice = ask_number()      // suspends until the player answers
+    if choice == 5: return
+    buy(item(choice))              // final statement: tail transfer
 
-func greet(string name, string suffix = "!")   // trailing params may default
-    print("Hello, {name}{suffix}")
-
-mn_button_1 login:submit              // trigger handler — UI event entry point
-    greet("adventurer")               // final statement → tail transfer
-
-// constant tables — rows of constants with keyed lookup, no runtime cost
-table skill(key int id, key string name, int jingle)
-    ^skill_attack, "Attack", ^jingle_melee
-    ^skill_mining, "Mining", ^jingle_gather
-
-func level_up(int s)
-    play(skill[s].jingle)             // t[key].col — compiles to a compare chain
+func buy(item id)
+    if not stock.has(id): return
+    if @gold < stock[id].price
+        println("Blacksmith: Come back richer.")
+        return
+    @gold -= stock[id].price
+    println("Blacksmith: One {stock[id].name}. {@gold} gold left.")
 ```
 
-| Kind        | Keyword    | Returns? | Notes                                              |
-| ----------- | ---------- | -------- | -------------------------------------------------- |
-| `func`      | `func`     | ✅        | Script routine; tail-position calls tail-transfer  |
-| `command`   | `command`  | ✅        | Declares a host opcode; no body allowed            |
-| `trigger`   | `trigger`  | ❌        | Declares an event dispatch point                   |
-| handler     | *(kind)*   | ❌        | Event entry point; cannot be called from script    |
-| `table`     | `table`    | —        | Compile-time constant rows; `t[k].col`, `t.at(i)`, `t.count`, `for r in t` |
+---
 
-| Symbol       | Mark   | Declared by                       |
-| ------------ | ------ | --------------------------------- |
-| Local var    | —      | `TYPE name` inside a func         |
-| Constant     | `^`    | `TYPE ^name = literal` (top level) |
-| Context var  | `@`    | `TYPE @name = slot` (top level)   |
-| Named type   | —      | `type NAME : int\|string` (top level) |
-| Table        | —      | `table NAME(...)` (top level)     |
+## Get started
 
-**Learn more:**
+**Writing scripts**
 
-- **[LANGUAGE.md](LANGUAGE.md)** — full language reference: types, operators, control flow, triggers, and common patterns
-- **[EMBEDDING.md](EMBEDDING.md)** — hosting GameScript in your C# game: compiling, running, suspending, and debugging scripts
+1. Install the editor extension — **GameScript Tools** in the VS Code marketplace ([details](GameScript.Vscode/README.md)) or the Visual Studio 2022 marketplace ([details](GameScript.VisualStudio/README.md)).
+2. Clone this repo and open [samples/hello](samples/hello/) in the editor. You get diagnostics, hover docs, and navigation immediately.
+3. Work through **[TUTORIAL.md](TUTORIAL.md)** — it builds that sample up one step at a time.
+
+**Running scripts**
+
+Scripts run inside a host program, not on their own. The repo includes a minimal one:
+
+```
+dotnet run --project samples/HelloHost -- samples/hello
+```
+
+**Embedding in your game**
+
+Add the NuGet packages and follow **[EMBEDDING.md](EMBEDDING.md)**; [samples/HelloHost/Program.cs](samples/HelloHost/Program.cs) is its worked example.
+
+| Package                       | Purpose                                                                       |
+| ----------------------------- | ----------------------------------------------------------------------------- |
+| **`GameScript.Bytecode`**     | The VM — register opcode handlers, create a `ScriptState`, run bytecode. netstandard2.1 / net8.0. |
+| **`GameScript.Language`**     | The front end — parse, index, analyze, compile to bytecode. net8.0.            |
+| **`GameScript.DebugAdapter`** | In-process Debug Adapter Protocol server — attach VS Code to a running game.  |
 
 ---
 
-## Repo Layout
+## Documentation
 
-| Folder                       | Purpose                                                              |
-| ---------------------------- | -------------------------------------------------------------------- |
-| `GameScript.Language/`       | Lexer, parser, AST, visitors (index, semantic, type), bytecode compiler |
-| `GameScript.Bytecode/`       | Bytecode VM and runtime (`ScriptState`, `ScriptRunner`)              |
-| `GameScript.DebugAdapter/`   | DAP debug server — embed in your game to debug scripts from VS Code |
-| `GameScript.LanguageServer/` | LSP server executable                                                |
-| `GameScript.Vscode/`         | VS Code extension                                                    |
-| `GameScript.VisualStudio/`   | Visual Studio 2022 extension                                         |
+- **[TUTORIAL.md](TUTORIAL.md)** — learn the language by building a small project.
+- **[LANGUAGE.md](LANGUAGE.md)** — the language reference: types, declarations, operators, control flow, tables, triggers, and common patterns.
+- **[EMBEDDING.md](EMBEDDING.md)** — hosting GameScript in a C# game: compiling, running, suspending, context variables, debugging.
+- **[CHANGELOG.md](CHANGELOG.md)** — release notes, including breaking changes and upgrade notes.
+- **[CONTRIBUTING.md](CONTRIBUTING.md)** — building, testing, and submitting changes.
 
 ---
 
-## NuGet Packages
+## Language at a glance
 
-| Package                   | Purpose                                                                       |
-| ------------------------- | ----------------------------------------------------------------------------- |
-| **`GameScript.Bytecode`** | Embed the VM — register opcode handlers, create `ScriptState`, run bytecode.  |
-| **`GameScript.Language`** | Full toolchain — parse source, build the symbol index, run analysis passes, compile to bytecode. |
-| **`GameScript.DebugAdapter`** | In-process DAP server — attach VS Code to a running game and debug live scripts. |
+| Kind        | Keyword    | Returns? | Notes                                                        |
+| ----------- | ---------- | -------- | ------------------------------------------------------------ |
+| `func`      | `func`     | ✅        | Script routine; a call in tail position replaces the frame   |
+| `command`   | `command`  | ✅        | Host-implemented operation; no body in script                |
+| `trigger`   | `trigger`  | ❌        | Declares a game-event dispatch point                         |
+| handler     | *(kind)*   | ❌        | `<kind> <subject>` — entry point fired by the host           |
+| `table`     | `table`    | —        | Compile-time constant rows: `t[k].col`, `t.has(k)`, `t.at(i)`, `t.count`, `for r in t` |
+| `type`      | `type`     | —        | Named type over `int` or `string`; erases at compile time    |
 
----
+| Symbol       | Mark   | Declared by                            |
+| ------------ | ------ | -------------------------------------- |
+| Local var    | —      | `TYPE name` inside a func              |
+| Constant     | `^`    | `TYPE ^name = literal` (top level)     |
+| Context var  | `@`    | `TYPE @name = slot` (top level)        |
+| Named type   | —      | `type NAME : int\|string` (top level)  |
+| Table        | —      | `table NAME(...)` (top level)          |
 
-## Editor Support
-
-The **VS Code extension** (`GameScript.Vscode`) bundles the language server and provides:
-
-- Semantic syntax highlighting for `.gs` files, named types and casts included
-- Completions, hover tooltips, and real-time diagnostics
-- Sub-projects: a `gamescript.json` marker scopes its folder as an isolated project (e.g. `content/server` and `content/client` with separate core.gs command sets)
-- Go to Definition, Find All References, Document Highlights
-- Rename Symbol, Document Symbols, Workspace Symbols
-- Script debugging — attach to a running game, set breakpoints, step, and inspect variables (see [EMBEDDING.md](EMBEDDING.md#10-debugging-dap))
-- Syntax highlighting and constant completion for Object Definition files (`.varp`, `.varn`, `.item`, `.npc`, `.menu`, `.obj`, `.tile`, `.inv`, `.anim`, `.param`, `.tex`, `.rig`, `.fx`, `.option`)
-
-A **Visual Studio 2022 extension** (`GameScript.VisualStudio`) is also available.
+Scalar types are `bool`, `int` (32-bit), and `string`; `func` holds a method reference for scheduling.
 
 ---
 
-## Building
+## Repo layout
+
+| Folder                        | Purpose                                                                |
+| ----------------------------- | ---------------------------------------------------------------------- |
+| `GameScript.Language/`        | Lexer, parser, AST, analysis visitors, symbol indexing, bytecode compiler |
+| `GameScript.Bytecode/`        | Bytecode VM and runtime (`ScriptState`, `ScriptRunner`)                |
+| `GameScript.DebugAdapter/`    | DAP debug server — embed in your game to debug scripts from VS Code    |
+| `GameScript.LanguageServer/`  | LSP server executable (bundled by both editor extensions)              |
+| `GameScript.Language.Tests/`  | xUnit suite: parser, analysis, execution, and doc-sample tests         |
+| `GameScript.Vscode/`          | VS Code extension                                                      |
+| `GameScript.VisualStudio/`    | Visual Studio 2022 extension                                           |
+| `samples/`                    | `hello/` script project and `HelloHost/` minimal C# host               |
+| `Scripts/`                    | Release packaging scripts (language server publish, VSIX packaging)    |
+
+---
+
+## Building and testing
+
+Requires the .NET 8 SDK.
 
 ```bash
 git clone https://github.com/Juiix/GameScript.git
 cd GameScript
-dotnet build
+
+# front end, VM, language server, and the test suite
+dotnet test GameScript.Language.Tests/GameScript.Language.Tests.csproj
+
+# debug adapter
+dotnet build GameScript.DebugAdapter
+
+# the sample host
+dotnet run --project samples/HelloHost -- samples/hello 1 5
 ```
+
+`GameScript.VisualStudio` is a classic VSIX project: build it from Visual Studio 2022 (with the *Visual Studio extension development* workload) or with `msbuild`, not the `dotnet` CLI. The VS Code extension builds with `npm install && npm run compile` inside `GameScript.Vscode`. See [CONTRIBUTING.md](CONTRIBUTING.md) for the release scripts.
+
+---
+
+## Editor support
+
+Both extensions bundle the language server and provide:
+
+- Semantic highlighting for `.gs` files, named types and casts included
+- Completions, hover tooltips, signature help, and real-time diagnostics
+- Go to Definition, Find All References, Document Highlights, Rename, Document and Workspace Symbols
+- Sub-projects: a `gamescript.json` marker scopes its folder as an isolated project, so `content/server` and `content/client` can each have their own `core.gs`
+- VS Code: attach the debugger to a running game — breakpoints, stepping, locals, context variables (see [EMBEDDING.md §10](EMBEDDING.md#10-debugging-dap))
 
 ---
 
 ## Contributing
 
 Pull requests are welcome. Please open an issue first to discuss major changes.
-See [CONTRIBUTING.md](CONTRIBUTING.md) for coding standards and branch workflow.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the build, test, and release workflow.
 
 ---
 

@@ -24,6 +24,7 @@
 "*.varn"="source.objectdef"
 "*.fx"="source.objectdef"
 "*.option"="source.objectdef"
+"*.palette"="source.objectdef"
 
 ;----------------------------------------
 ; Map scope name → specific grammar file
@@ -64,4 +65,6 @@
 [$RootKey$\ShellFileAssociations\.fx]
 "DefaultIconMoniker"="KnownMonikers.ComponentFile"
 [$RootKey$\ShellFileAssociations\.option]
+"DefaultIconMoniker"="KnownMonikers.ComponentFile"
+[$RootKey$\ShellFileAssociations\.palette]
 "DefaultIconMoniker"="KnownMonikers.ComponentFile"

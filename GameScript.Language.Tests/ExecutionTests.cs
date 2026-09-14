@@ -1021,4 +1021,43 @@ public class ExecutionTests
 		host.Start(program, "main");
 		Assert.Equal(new[] { "2000:5", "2001:6" }, host.Context.Printed);
 	}
+
+	[Fact]
+	public void Return_Call_In_Void_Func_Is_A_Tail_Transfer()
+	{
+		// LANGUAGE.md §7: 'return final()' from the middle of a void func. The
+		// self-recursion runs far past the 64-frame budget, so it only completes
+		// if both 'return' calls replace the frame instead of pushing one.
+		var (host, program) = Build("""
+			func loop_test(int i)
+			    if i >= 200
+			        print("Loop finished")
+			        return final()
+			    return loop_test(i + 1)
+
+			func final()
+			    print("Script complete.")
+
+			func main()
+			    loop_test(0)
+			    print("after")
+			""");
+		var exec = host.Start(program, "main");
+		Assert.Equal(ScriptExecution.Finished, exec);
+		Assert.Equal(new[] { "Loop finished", "Script complete.", "after" }, host.Context.Printed);
+	}
+
+	[Fact]
+	public void Return_Void_Command_Runs_The_Command_Then_Returns()
+	{
+		var (host, program) = Build("""
+			func main()
+			    int x = 1
+			    print("a")
+			    if x == 1: return print("b")
+			    print("c")
+			""");
+		host.Start(program, "main");
+		Assert.Equal(new[] { "a", "b" }, host.Context.Printed);
+	}
 }

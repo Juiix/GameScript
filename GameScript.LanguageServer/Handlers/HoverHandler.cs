@@ -222,7 +222,8 @@ internal sealed class HoverHandler(
 			builder.AppendLine(symbol.Summary);
 		builder.AppendLine();
 		builder.AppendLine("```gamescript");
-		if (symbol.LiteralValue != null)
+		// constants show their value; a context variable's literal is its slot id, not a value
+		if (symbol.LiteralValue != null && symbol.IdentifierType == GameScript.Language.Ast.IdentifierType.Constant)
 		{
 			builder.Append(symbol.Signature);
 			builder.Append(" = ");

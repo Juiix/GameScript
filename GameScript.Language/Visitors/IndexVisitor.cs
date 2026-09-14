@@ -90,7 +90,7 @@ namespace GameScript.Language.Visitors
 				null,
 				null,
 				node.Name.Summary,
-				null,
+				ParseLiteral(node.Initializer),   // the host slot id, so analysis can spot two variables on one slot
 				_context.FilePath,
 				node.Name.FileRange
 			);

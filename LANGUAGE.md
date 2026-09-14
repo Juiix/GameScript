@@ -1,10 +1,8 @@
 # GameScript — Language Reference
 
-> **Scope** This guide covers writing GameScript 2.5: files, types (named types included), methods, constant tables, operators, control flow, and common patterns.
+> **Scope** The reference for writing GameScript 2.5: files, types, declarations, methods, constant tables, operators, control flow, and common patterns.
 >
-> Embedding the compiler/VM in a C# game? See **[EMBEDDING.md](EMBEDDING.md)**.
->
-> Migrating 1.x content? See the **[CHANGELOG](CHANGELOG.md)** for the full list of syntax changes.
+> New to the language? Start with **[TUTORIAL.md](TUTORIAL.md)**. Embedding the compiler and VM in a C# game? See **[EMBEDDING.md](EMBEDDING.md)**. Upgrading content from an earlier release? Each release's *breaking* section in the **[CHANGELOG](CHANGELOG.md)** lists what to rename.
 
 ---
 
@@ -24,20 +22,20 @@
 
 ## 1 Files & the Global Namespace
 
-| Extension  | Content                                                                 |
-| ---------- | ----------------------------------------------------------------------- |
-| `.gs`      | Every declaration: named types, constants (`^name`), context variables (`@name`), tables, funcs, commands, triggers, handlers |
+A project is a folder of `.gs` files. Every kind of declaration — named types, constants (`^name`), context variables (`@name`), tables, funcs, commands, triggers, handlers — may appear in any file, in any order, and one file may mix them freely: an `items.gs` can hold `type item : int`, its constants, and a table keyed on them.
 
-Declarations may be mixed in one file in any order — a `hit_type.gs` can hold
-`type hit_type : int`, its constants, and a table keyed on them. (Before 2.5,
-constants and contexts lived in separate `.const`/`.context` files; those are
-now plain `.gs` files — rename them.)
+**There are no imports.** All files in a project share one global namespace: any `func`, `^constant`, `@context` variable, table, or named type is visible from every file, whether it is declared earlier or later. Projects typically organize by feature folder and generate `.gs` files as symbol tables for game data (one `type` per content kind plus its typed constants: item ids, menu ids, sounds, …).
 
-**There are no imports.** All files in a project share one global namespace: any `func`, `^constant`, `@context` variable, table, or named type is visible from every script. Projects typically organize by feature folder and generate `.gs` files as symbol tables for game data (one `type` per content kind plus its typed constants: item IDs, menu IDs, sounds, …).
+**Sub-projects.** A workspace may hold several independent script projects (e.g. `content/server/` and `content/client/`, each with its own `core.gs`). Place a `gamescript.json` marker file — its contents are ignored — in each project's root folder; the editor tooling then treats each subtree as its own namespace, so identically-named commands or funcs across projects don't conflict. Files outside every marker belong to the workspace root's default project.
 
-**Sub-projects**: a workspace may hold several independent script projects (e.g. `content/server/` and `content/client/`, each with its own core.gs). Place a `gamescript.json` marker file in each project's root folder — the editor tooling then treats each subtree as its own namespace, so identically-named commands/funcs across projects don't conflict. Files outside every marker belong to the workspace root's default project.
+### How a script runs
 
-The editor tooling also recognizes **object definition** data files (`.varp`, `.varn`, `.item`, `.npc`, `.menu`, `.obj`, `.tile`, `.inv`, `.anim`, `.param`, `.tex`, `.rig`, `.fx`, `.option`) — these hold game data referenced from scripts via `^constants`, not GameScript code.
+Scripts do not start themselves. The host game compiles every file in a project together, then:
+
+- **starts a func by name** when it wants to (a load routine, a scheduled action), and
+- **fires a trigger handler** when a game event happens (a button press, an NPC interaction, a tick).
+
+Both are entry points chosen by the host; there is no reserved name (`main` in the examples is only a convention of the sample host). A `command` call may *suspend* the script — for input, dialogue, or a timer — and the host resumes it later with the result. See [§8](#8-commands--the-host).
 
 ### Indentation
 
@@ -51,9 +49,7 @@ func entry()
 
 Statements end at the newline — semicolons are illegal.
 
-**Implicit line joining**: inside `(...)` newlines and indentation are not
-significant, so long signatures, call sites, and conditions may wrap freely
-(continuation-line indentation is unrestricted):
+**Implicit line joining**: inside `(...)` newlines and indentation are not significant, so long signatures, call sites, and conditions may wrap freely (continuation-line indentation is unrestricted):
 
 ```gamescript
 func input_choice_npc(string text, string c1, string c2, string c3 = "",
@@ -73,10 +69,11 @@ func input_choice_npc(string text, string c1, string c2, string c3 = "",
 spanning multiple lines */
 ```
 
-A comment immediately above a declaration is captured as the symbol's summary and shown in hover tooltips:
+A comment **immediately above** a declaration is captured as the symbol's documentation and shown in hover tooltips. Consecutive comment lines are joined; a blank line between the comment and the declaration breaks the attachment, so a comment that ends two lines above a `func` documents nothing:
 
 ```gamescript
-// Kills the player and resets their position
+// Kills the player and resets their position.
+// Fires the 'death' trigger afterwards.
 command kill_player()
 ```
 
@@ -89,10 +86,7 @@ Only two marks exist; everything else is a bare identifier resolved by declarati
 | `^`    | Constant    | `TYPE ^name = literal`   | `^max_level`                 |
 | `@`    | Context var | `TYPE @name = slot`      | `@tutorial_progress`         |
 
-Locals, params, funcs, commands, and triggers are bare identifiers: `count`,
-`skill_name(skill)`, `queue(close_gate, 10)`. The compiler resolves bare names
-against declarations; a local may not share a name with any func or command
-(compile error), so bare names are never ambiguous.
+Locals, params, funcs, commands, tables, types, and triggers are bare identifiers: `count`, `skill_name(skill)`, `queue(close_gate, 10)`. The compiler resolves bare names against declarations; a local may not share a name with any func, command, or table (compile error), so bare names are never ambiguous.
 
 Convention: `snake_case` for funcs/commands/triggers/constants/context vars, `camelCase` for locals.
 
@@ -100,32 +94,32 @@ Convention: `snake_case` for funcs/commands/triggers/constants/context vars, `ca
 
 `func` `command` `trigger` `table` `return` `returns` `if` `else` `while`
 `switch` `case` `default` `for` `in` `break` `continue` `and` `or` `not`
-`true` `false` — these cannot be used as identifiers. (`key` and `type` are
+`true` `false` `label` — these cannot be used as identifiers. (`key` and `type` are
 contextual: `key` only means "key column" inside a `table` header, and `type`
 only opens a declaration on a top-level line of the form `type NAME : root`;
 both are otherwise normal names, so `int type = npc_type()` stays legal.)
 
 ### Literals
 
+<!-- fragment -->
 ```gamescript
 int    a = 42
 int    b = -7          // negative literals allowed, including in constant declarations
-int    c = 0x1f        // hex
+int    c = 0x1f        // hex (and -0x1f)
 bool   d = true
 string e = "Hello"
 ```
 
 ### String interpolation
 
-`{expr}` inside a string literal embeds any expression, with the same coercion
-rules as `+` concatenation. `{{` and `}}` produce literal braces:
+`{expr}` inside a string literal embeds any expression, with the same coercion rules as `+` concatenation ([§6](#operand-rules)). `{{` and `}}` produce literal braces:
 
+<!-- fragment -->
 ```gamescript
 message("Congratulations, your {skill_name(skill)} level is now {after}!")
 ```
 
-Interpolation is parser-only sugar — it compiles to the same bytecode as the
-equivalent `+` chain.
+An interpolated string must sit on one line, and `{…}` does not nest: the fragment runs to the first `}`, so a nested string literal cannot contain braces. Interpolation is parser-only sugar — it compiles to the same bytecode as the equivalent `+` chain.
 
 ---
 
@@ -144,8 +138,7 @@ The type checker is strict in script, but the **runtime boundary is forgiving**:
 
 ### Named types
 
-A *named type* is an alias over `int` or `string` that the compiler keeps
-distinct, so content ids stop being interchangeable integers:
+A *named type* is an alias over `int` or `string` that the compiler keeps distinct, so content ids stop being interchangeable integers:
 
 ```gamescript
 // The id of an item definition
@@ -160,16 +153,11 @@ command mn_open(menu m)
 command inv_count(int inv, item id) returns int
 ```
 
-- `type NAME : int|string` is a top-level declaration (anywhere a `func` or
-  `table` may appear). `type` is contextual: only a top-level line of exactly
-  this shape declares one; elsewhere `type` is an ordinary identifier.
-- Type names share the func/command/trigger/table namespace, but a **local or
-  parameter may shadow a type name** — inside that method the name is the local
-  (and `item(x)` there is a call on the local, not a cast).
+- `type NAME : int|string` is a top-level declaration (anywhere a `func` or `table` may appear). `type` is contextual: only a top-level line of exactly this shape declares one; elsewhere `type` is an ordinary identifier.
+- Type names share the func/command/trigger/table namespace, but a **local or parameter may shadow a type name** — inside that method the name is the local (and `item(x)` there is a call on the local, not a cast).
 - The `//` comment above the declaration is the type's doc (hover text).
 
-**Assignability.** A named type widens to its root implicitly; the reverse,
-and any named-to-named conversion, needs a cast:
+**Assignability.** A named type widens to its root implicitly; the reverse, and any named-to-named conversion, needs a cast:
 
 | From → To                       | Rule                                    |
 | ------------------------------- | --------------------------------------- |
@@ -178,29 +166,15 @@ and any named-to-named conversion, needs a cast:
 | `item` → `menu`                 | cast: `menu(x)` — the roots must match  |
 | literal `0` / `""` → any named  | implicit — the "none" id                |
 
-So `mn_open(^item_iron_sword)` is a compile error, while an `int` parameter
-keeps accepting `^item_iron_sword` — hosts can retype declarations one at a
-time. Default parameter values, tuple destructuring (`(item a, int b) = f()`),
-`switch` cases, table cells and table keys all follow the same rule.
+So `mn_open(^item_iron_sword)` is a compile error, while an `int` parameter keeps accepting `^item_iron_sword` — hosts can retype declarations one at a time. Default parameter values, tuple destructuring (`(item a, int b) = f()`), `switch` cases, table cells and table keys all follow the same rule.
 
-**Operators.** `==`/`!=` compare a named type with itself or with its root
-(`if held != 0`); two different named types never compare. Arithmetic and
-ordering widen to the root and yield the root — `menu + 1` is an `int` — so
-`x += 1` and `x++` on a named-typed variable are errors: write
-`x = menu(x + 1)`. String interpolation prints the root value.
+**Operators.** `==`/`!=` compare a named type with itself or with its root (`if held != 0`); two different named types never compare. Arithmetic and ordering widen to the root and yield the root — `menu + 1` is an `int` — so `x += 1` and `x++` on a named-typed variable are errors: write `x = menu(x + 1)`. String interpolation prints the root value.
 
-**Casts.** `NAME(expr)` — the type name applied as a one-argument call; the
-argument's root must be the type's root. A cast compiles to nothing and is not
-a constant expression: `case` values, table cells and default values must be
-`^constants` or literals.
+**Casts.** `NAME(expr)` — the type name applied as a one-argument call; the argument's root must be the type's root. A cast compiles to nothing and is not a constant expression: `case` values, table cells and default values must be `^constants` or literals.
 
-**Overloads.** An exact named-type match outranks one that needs widening, so
-a typed overload may sit beside an `int` one. A bare `0`/`""` converts to every
-named type: `f(0)` against `f(item)` and `f(menu)` alone is ambiguous (with an
-`int` overload present, `int` wins).
+**Overloads.** An exact named-type match outranks one that needs widening, so a typed overload may sit beside an `int` one. A bare `0`/`""` converts to every named type: `f(0)` against `f(item)` and `f(menu)` alone is ambiguous (with an `int` overload present, `int` wins).
 
-Named types erase at codegen: no runtime tag, no new opcodes, and the host sees
-the same `Value` slots as before.
+Named types erase at codegen: no runtime tag, no new opcodes, and the host sees the same `Value` slots as before.
 
 ---
 
@@ -214,13 +188,11 @@ type item : int
 type provider : string
 ```
 
-See [Named types](#named-types) for the rules. Root types are `int` and
-`string` only.
+See [Named types](#named-types) for the rules. Root types are `int` and `string` only.
 
 ### Constants
 
-Compile-time literals — `int` (decimal, hex, or negative), `bool`, `string`,
-or a named type (the literal fits the root):
+Compile-time literals — `int` (decimal, hex, or negative), `bool`, `string`, or a named type (the literal fits the root):
 
 ```gamescript
 int ^tutorial_killed_rat = 10
@@ -230,6 +202,8 @@ string ^example_message = "Hello, world"
 item ^item_iron_sword = 42
 provider ^provider_google = "google"
 ```
+
+A constant's initializer must be a literal (optionally negated); it cannot name another constant. Constants are folded into the bytecode's constant pool — reading one costs nothing at runtime.
 
 ### Context variables
 
@@ -243,8 +217,13 @@ int @skill_strength = 4
 item @held_item = 1030
 ```
 
-### Local variables (`.gs` bodies)
+Each slot id may be declared once per project; two context variables on one slot would silently alias the same host value, so the compiler reports it.
 
+### Local variables
+
+Inside a func body:
+
+<!-- fragment -->
 ```gamescript
 int x = 0
 bool active = true
@@ -255,21 +234,21 @@ int a, b
 string first, last
 ```
 
-Locals may not shadow a func, command, or table name — pick a different name.
-They *may* shadow a named type (`int item = inv_get_item(...)` is fine).
+Locals may not shadow a func, command, or table name — pick a different name. They *may* shadow a named type (`int item = inv_get_item(...)` is fine).
+
+**Scoping is function-flat.** A local is visible from its declaration to the end of the func, regardless of the block it was declared in — a variable declared inside an `if` is still there after the `if`. Consequently:
+
+- A name may be declared **once** per func. Declaring `int price` in both branches of an `if` is an error (`'price' is already defined in this context.`); declare it before the `if` and assign in the branches.
+- A local cannot be used above its declaration line.
+- The one exception: a later `for` may reuse an earlier `for`'s loop variable ([§7](#loops)).
+
+**Uninitialized locals.** `int a, b` allocates the variables without assigning them. An unassigned local reads as the type's zero — `0`, `false`, or `""` in `+` and interpolation — but its runtime value is *null*, not `""`: an unset `string s` makes `s == ""` **false** and never matches a `""` table key. Initialize strings you intend to compare.
 
 ### Constant tables (`table`)
 
-A `table` is a compile-time table of constants with keyed and positional
-lookup. It replaces data-in-code ladders — "tier → outputs" assignment blocks,
-menu-id `if` chains, `skill_name`/`skill_jingle` switches, desktop/mobile twin
-branches — with declared rows. There is **no runtime table**: every access
-compiles to the same compare-chain bytecode a `switch` produces, so tables are
-for the 4–10-row cases; the compiler warns above 64 rows.
+A `table` is a compile-time table of constants with keyed and positional lookup. It replaces data-in-code ladders — "tier → outputs" assignment blocks, menu-id `if` chains, `skill_name`/`skill_jingle` switches, desktop/mobile twin branches — with declared rows. There is **no runtime table**: every access compiles to the same compare-chain bytecode a `switch` produces, so tables are for the 4–10-row cases; the compiler warns above 64 rows.
 
-A table is a top-level declaration (anywhere a `func` may appear). The header
-names typed columns; the body is one row per line, indented, cells
-comma-separated:
+A table is a top-level declaration (anywhere a `func` may appear). The header names typed columns; the body is one row per line, indented, cells comma-separated:
 
 ```gamescript
 // bar tier -> the anvil outputs, in display order
@@ -282,22 +261,14 @@ func tier_sword(int bar) returns int
     return smith_tier[bar].sword          // keyed lookup on the first column
 ```
 
-- Column types are `int`, `string`, `bool`, or a named type
-  (`table smith_tier(item bar, item sword, ...)`).
-- Cells are `^const` or `int`/`string`/`bool` literals — no expressions, no
-  variables. A cell's type must match its column (a named-type column takes
-  constants of that type or the zero literal); every row has the header's
-  arity; a table needs at least one row. Key arguments follow the same
-  assignability rule, and `for r in t` cursors read typed cells.
-- Table names share the func/command/trigger namespace and are visible
-  wherever funcs declared in the same compile root are visible.
+- Column types are `int`, `string`, `bool`, or a named type (`table smith_tier(item bar, item sword, ...)`).
+- Cells are `^const` or `int`/`string`/`bool` literals — no expressions, no variables. A cell's type must match its column (a named-type column takes constants of that type or the zero literal); every row has the header's arity; a table needs at least one row. Key arguments follow the same assignability rule, and `for r in t` cursors read typed cells.
+- Table names share the func/command/trigger namespace and are visible wherever funcs declared in the same project are visible.
 - The `//` comment above the declaration is the table's doc (hover text).
 
-**Keys.** With no modifier, the leading column(s) are the key. The compiler
-works out the table's *key width* — the smallest number of leading columns
-whose values are unique across the rows — so `smith_tier[bar]` keys on column
-0, while a table whose first column repeats keys on the leading pair:
+**Keys.** With no modifier, the leading column(s) are the key. The compiler works out the table's *key width* — the smallest number of leading columns whose values are unique across the rows — so `smith_tier[bar]` keys on column 0, while a table whose first column repeats keys on the leading pair:
 
+<!-- fragment -->
 ```gamescript
 table choice_ui(bool mobile, bool three, int menu, int title, int opt1, int opt2, int opt3)
     false, false, ^menu_choice_2,   ^menu_choice_2_title,   ^menu_choice_2_opt_1,   ^menu_choice_2_opt_2,   0
@@ -308,15 +279,11 @@ table choice_ui(bool mobile, bool three, int menu, int title, int opt1, int opt2
 int menu = choice_ui[m, three].menu       // compound key: leading columns, positionally
 ```
 
-A positional lookup passes at least the key width and at most the column
-count; the arguments match the leading columns positionally, by type. Two
-identical rows are a compile error.
+A positional lookup passes at least the key width and at most the column count; the arguments match the leading columns positionally, by type. Two identical rows are a compile error.
 
-Mark additional columns `key` to make them independently lookup-able with
-`t[name: k]`. A bare `[k]` still means the leading key; the compiler never
-infers the key from the argument's type. Each `key` column must be unique on
-its own; a lookup on a non-key column is a compile error.
+Mark additional columns `key` to make them independently lookup-able with `t[name: k]`. A bare `[k]` still means the leading key; the compiler never infers the key from the argument's type. Each `key` column must be unique on its own; a lookup on a non-key column is a compile error.
 
+<!-- fragment -->
 ```gamescript
 table skill(key int id, key string name, int jingle)
     ^skill_attack,  "Attack",  ^jingle_level_up_attack
@@ -339,9 +306,7 @@ skill[jingle: j].id        // compile error: jingle is not a key column
 | `t.count`                                           | `int`    | row count                                |
 | `for r in t`                                        | —        | positional iteration; `r.col` reads a cell |
 
-- A missing key (or an out-of-range `at` index) yields the column's zero
-  value: `0`, `""`, `false`. An optional `default:` row (same syntax as
-  `switch`) overrides that per column:
+- A missing key (or an out-of-range `at` index) yields the column's zero value: `0`, `""`, `false`. An optional `default:` row (same syntax as `switch`) overrides that per column:
 
   ```gamescript
   table death_msg(int i, string text)
@@ -350,21 +315,12 @@ skill[jingle: j].id        // compile error: jingle is not a key column
       default: 0, "You were defeated."
   ```
 
-  The `default:` row is not a real row: it does not count toward `count`, is
-  not reachable via `at` or `has`, and its key cells are ignored (write `0`/`""`).
-- A bare `t[k]` or `t.at(i)` is a row, not a value — always select a column.
-  `count`, `has`, and `at` are reserved column names.
-- `for r in t` declares `r` as a row cursor: `r.col` is its only valid use;
-  `r` itself cannot be assigned, passed, or compared. Function-flat scoping and
-  the `break`/`continue` rules are those of `for … in a..b`; a later `for` may
-  reuse the cursor name only over the same table.
-- `.count`, and any lookup whose keys are all constants, fold to the cell value
-  at compile time — zero runtime cost. A constant key that matches no row is a
-  warning (unless the table has a `default:` row).
-- The key expressions are evaluated once per access. Inside `for r in t`, each
-  `r.col` read is its own compare chain on the hidden row index — the honest
-  cost of "no runtime tables".
-- An unset `string` local is *null*, not `""`, and never matches a `""` key.
+  The `default:` row is not a real row: it does not count toward `count`, is not reachable via `at` or `has`, and its key cells are ignored (write `0`/`""`).
+- A bare `t[k]` or `t.at(i)` is a row, not a value — always select a column. `count`, `has`, and `at` are reserved column names.
+- `for r in t` declares `r` as a row cursor: `r.col` is its only valid use; `r` itself cannot be assigned, passed, or compared. Function-flat scoping and the `break`/`continue` rules are those of `for … in a..b`; a later `for` may reuse the cursor name only over the same table.
+- `.count`, and any lookup whose keys are all constants, fold to the cell value at compile time — zero runtime cost. A constant key that matches no row is a warning (unless the table has a `default:` row).
+- The key expressions are evaluated once per access. Inside `for r in t`, each `r.col` read is its own compare chain on the hidden row index — the honest cost of "no runtime tables".
+- An unset `string` local is *null*, not `""`, and never matches a `""` key (see [Local variables](#local-variables)).
 
 ```gamescript
 // display-inventory slot -> lock label + bar-count label, desktop / mobile
@@ -385,9 +341,7 @@ func set_smith_bar(int bar)
         mn_set_text_color(bc, bar_count_color(item))
 ```
 
-Deliberately **not** included: column-by-index (`t[k].col(i)`), row values as
-first-class locals, mutation, or lookups on non-key columns. Those turn tables
-into arrays; if arrays are wanted, they will be their own feature.
+Deliberately **not** included: column-by-index (`t[k].col(i)`), row values as first-class locals, mutation, or lookups on non-key columns. Those turn tables into arrays; if arrays are wanted, they will be their own feature.
 
 ---
 
@@ -396,19 +350,13 @@ into arrays; if arrays are wanted, they will be their own feature.
 | Kind      | Keyword   | Call Syntax | Returns? | Notes                                                |
 | --------- | --------- | ----------- | -------- | ---------------------------------------------------- |
 | `func`    | `func`    | `name()`    | ✅        | Script routine; calls in tail position tail-transfer |
-| `command` | `command` | `name()`    | ✅        | Host-implemented opcode; no body in script           |
+| `command` | `command` | `name()`    | ✅        | Host-implemented operation; no body in script        |
 | `trigger` | `trigger` | —           | ❌        | Declares a game-event dispatch point (see below)     |
 | handler   | *(kind)*  | —           | ❌        | Game-event entry point; cannot be called from script |
 
-Funcs and commands share one call syntax. Two declarations may share a name if
-their **parameter signatures** differ (overloading, see [§8](#8-commands--the-host));
-return types don't participate.
+Funcs and commands share one call syntax. Two declarations may share a name if their **parameter signatures** differ (overloading, see [§8](#8-commands--the-host)); return types don't participate.
 
-> **Where did `label` go?** 1.x split script routines into `func` and `label`
-> (one-way jumps). In 2.0 everything is a `func`: a call that is the last thing
-> a func does compiles to a **tail transfer** — the current frame is replaced,
-> so state-machine chains and dialogue loops still run with zero stack growth.
-> See [§7](#7-control-flow--tail-calls).
+There are no one-way jumps or gotos: a call that is the last thing a func does compiles to a **tail transfer** — the current frame is replaced — so state-machine chains and dialogue loops run with zero stack growth. See [§7](#tail-calls).
 
 ```gamescript
 func multiply_and_add(int x, int y) returns int
@@ -434,6 +382,7 @@ func get_numbers() returns (int num1, int num2)
 
 Receive them with a tuple assignment — declaring inline is the idiomatic form:
 
+<!-- fragment -->
 ```gamescript
 (int a, int b) = get_numbers()
 
@@ -450,10 +399,9 @@ command send_login() returns (bool success, string error)
 
 ### Default parameter values
 
-Trailing parameters of funcs and commands may declare a default — a literal
-(including a negated number) or a `^constant`. Call sites may omit arguments
-only from the end; the compiler bakes the default into the call site:
+Trailing parameters of funcs and commands may declare a default — a literal (including a negated number) or a `^constant`. Call sites may omit arguments only from the end; the compiler bakes the default into the call site:
 
+<!-- fragment -->
 ```gamescript
 func input_choice_npc(string text, string c1, string c2, string c3 = "",
         int anim = ^anim_human_still) returns int
@@ -464,18 +412,13 @@ input_choice_npc("What'll it be?", "Gossip", "Just passing through")
 Rules:
 
 - Defaults are allowed only on a **contiguous trailing group** of parameters.
-- Default values must be compile-time constants — they are baked into the call
-  site, so the runtime never sees them.
-- If omitting defaults makes a call site match more than one overload, that is
-  an ambiguity error — pass the arguments explicitly.
+- Default values must be compile-time constants — they are baked into the call site, so the runtime never sees them.
+- If omitting defaults makes a call site match more than one overload, that is an ambiguity error — pass the arguments explicitly.
 - Trigger handler parameters cannot declare defaults (the host supplies them).
 
 ### Triggers
 
-Trigger *kinds* are declared with the `trigger` keyword — one declaration per
-engine dispatch point, conventionally collected in `core.gs` next to the
-command declarations. The declaration lists the parameters the engine passes,
-and its `//` comment is the kind's authoritative doc:
+Trigger *kinds* are declared with the `trigger` keyword — one declaration per engine dispatch point, conventionally collected in `core.gs` next to the command declarations. The declaration lists the parameters the engine passes, and its `//` comment is the kind's authoritative doc:
 
 ```gamescript
 // Player clicks option 1 on a world object; Obj pointer is set
@@ -486,11 +429,7 @@ trigger npc_queue_1(int arg0, int arg1)
 trigger mn_text(string text)
 ```
 
-Trigger *handlers* are entry points fired by the host. They cannot be called
-from script and cannot return values. The header format is
-`<trigger-kind> <subject>`, stored internally as `"<trigger-kind> <subject>"`.
-A handler takes `(...)` only when it declares parameters — an empty `()` is an
-error:
+Trigger *handlers* are entry points fired by the host. They cannot be called from script and cannot return values. The header format is `<trigger-kind> <subject>`, stored internally as `"<trigger-kind> <subject>"` — the name the host starts. A handler takes `(...)` only when it declares parameters — an empty `()` is an error:
 
 ```gamescript
 // Object interaction
@@ -508,21 +447,12 @@ mn_text username:input(string text)
 
 The compiler validates handler headers against the declarations:
 
-- The trigger kind must be declared — a typo'd kind (`obj_po_1`) is a compile
-  error instead of a silently dead handler.
-- The handler's parameters must be a **prefix** of the declared parameters —
-  handlers may ignore trailing arguments.
-- Subjects (`old_door`, `hud:logout`) are **not** validated — they remain
-  content-bound names resolved at dispatch time.
-- Trigger names share the global namespace with funcs and commands but are
-  never callable, so a trigger may not share a name with either.
+- The trigger kind must be declared — a typo'd kind (`obj_po_1`) is a compile error instead of a silently dead handler.
+- The handler's parameters must be a **prefix** of the declared parameters — handlers may ignore trailing arguments.
+- Subjects (`old_door`, `hud:logout`) are **not** validated — they remain content-bound names resolved at dispatch time. A subject is one identifier, optionally followed by `:` and a second identifier (`menu:component`); other characters are not allowed.
+- Trigger names share the global namespace with funcs and commands but are never callable, so a trigger may not share a name with either.
 
-**Variadic triggers.** A kind declared as `trigger NAME(...)` lets each handler
-declare its *own* parameter list — the host binds arguments by position from
-the handler's compiled signature (`BytecodeMethod.ParamTypes`) rather than from
-the declaration. Only `int`, `string` and `bool` parameters are allowed, since
-those are the types a host can parse from raw input. The typical use is chat
-commands, where the command line is split according to the handler it targets:
+**Variadic triggers.** A kind declared as `trigger NAME(...)` lets each handler declare its *own* parameter list — the host binds arguments by position from the handler's compiled signature (`BytecodeMethod.ParamTypes`) rather than from the declaration. Only `int`, `string` and `bool` parameters are allowed, since those are the types a host can parse from raw input. The typical use is chat commands, where the command line is split according to the handler it targets:
 
 ```gamescript
 // Chat command "/name args…"; handlers pick their own params
@@ -553,11 +483,9 @@ Operators from highest to lowest precedence:
 | Logical or     | `or`                             |                                          |
 | Assignment     | `=` `+=` `-=` `*=` `/=` `%=`     | Also tuple assignment `(a, b) = …`       |
 
-The `!` prefix is removed — write `not`. (`!=` is unaffected.)
+Logical not is spelled `not`; there is no `!` prefix (`!=` is unaffected). The `..` range operator appears only in `for` headers (`for i in 0..10`) — it is not a general expression operator.
 
-The `..` range operator appears only in `for` headers (`for i in 0..10`) — it
-is not a general expression operator.
-
+<!-- fragment -->
 ```gamescript
 if level >= 10 and not @tutorial_done
     bonus += level * 2
@@ -566,15 +494,32 @@ if level >= 10 and not @tutorial_done
 
 Assignment targets are locals and context variables (`@`). Constants are read-only.
 
+### Operand rules
+
+| Operator                 | Accepts                                                        | Result   |
+| ------------------------ | -------------------------------------------------------------- | -------- |
+| `+`                      | two `int`s; or **either** operand a `string` — the other is converted | `int` / `string` |
+| `-` `*` `/` `%`          | `int` operands (named types widen to their root)               | `int`    |
+| `<` `>` `<=` `>=`        | `int` operands (named types widen)                             | `bool`   |
+| `==` `!=`                | two values of the same type, or a named type and its root      | `bool`   |
+| `and` `or` `not`         | `bool` operands                                                | `bool`   |
+| `++` `--` `+=` … `%=`    | an `int` variable (not a named-typed one)                      |          |
+
+Converting to a string prints an `int` as decimal and a `bool` as `True` / `False`; a named type prints its root value. Strings compare by content and cannot be ordered with `<`.
+
+### Integer semantics
+
+`int` is a 32-bit two's-complement integer. `+`, `-`, `*` wrap silently on overflow; `/` truncates toward zero (`-7 / 2` is `-3`); `%` takes the sign of the dividend (`-7 % 2` is `-1`). **Division or modulo by zero aborts the script** — the VM raises an exception to the host, which sees the script as `Aborted`. Guard divisors that come from data.
+
 ---
 
 ## 7 Control Flow & Tail Calls
 
 ### Branching
 
-Conditions are bare — wrapping the whole condition in parentheses is an error
-(`if (x)` → `if x`). Inner grouping is fine: `if (a or b) and c`.
+Conditions are bare — wrapping the whole condition in parentheses is an error (`if (x)` → `if x`). Inner grouping is fine: `if (a or b) and c`.
 
+<!-- fragment -->
 ```gamescript
 if @logged_in
     println("Welcome back!")
@@ -584,9 +529,9 @@ else
     login_flow()
 ```
 
-An `if` or `else` body may be written inline as a single statement after a `:`
-— the same rule as `case` bodies:
+An `if` or `else` body may be written inline as a single statement after a `:` — the same rule as `case` bodies:
 
+<!-- fragment -->
 ```gamescript
 if coin_count() < cost: return false
 else: remove_coins(cost)
@@ -596,10 +541,7 @@ An inline statement and an indented block cannot be combined.
 
 ### `switch`
 
-`switch` compares one expression against constant cases. The first matching
-case runs and the switch exits — there is no fallthrough. It compiles to the
-same bytecode as the equivalent `else if` ladder (with the subject evaluated
-once):
+`switch` compares one expression against constant cases. The first matching case runs and the switch exits — there is no fallthrough. It compiles to the same bytecode as the equivalent `else if` ladder (with the subject evaluated once):
 
 ```gamescript
 func skill_name(int skill) returns string
@@ -612,24 +554,18 @@ func skill_name(int skill) returns string
         default: return "Unknown"
 ```
 
-- Subjects may be `int`, `string`, or `bool`.
-- Case values must be constants: `^const` or literals. Duplicate case values
-  are a compile error.
-- A case body is either **inline** (a single statement after the `:`) or a
-  **block** (indented statements on the following lines) — not both.
-- `default` is optional and must be last; with no match and no default the
-  switch is skipped.
-- A `switch` with a `default` where every arm returns counts as a guaranteed
-  return for return-path analysis.
-- `break` inside a case body binds to the enclosing **loop** (a switch is not
-  a loop).
+- Subjects may be `int`, `string`, `bool`, or a named type.
+- Case values must be constants: `^const` or literals. Duplicate case values are a compile error.
+- A case body is either **inline** (a single statement after the `:`) or a **block** (indented statements on the following lines) — not both.
+- `default` is optional and must be last; with no match and no default the switch is skipped.
+- A `switch` with a `default` where every arm returns counts as a guaranteed return for return-path analysis.
+- `break` inside a case body binds to the enclosing **loop** (a switch is not a loop).
 
 ### Loops
 
-`for` iterates ints over the half-open range `[START, END)`. Both bounds are
-evaluated once, before the first iteration. The header declares the loop
-variable (always `int`):
+`for` iterates ints over the half-open range `[START, END)`. Both bounds are evaluated once, before the first iteration. The header declares the loop variable (always `int`):
 
+<!-- fragment -->
 ```gamescript
 for i in 0..inv_size(^inv_backpack)      // half-open: 0, 1, …, size-1
     int itemType = inv_get_item(^inv_backpack, i)
@@ -639,15 +575,13 @@ for i in 0..inv_size(^inv_backpack)      // half-open: 0, 1, …, size-1
         break
 ```
 
-Function-flat scoping is unchanged — the loop variable stays visible after the
-loop. As a special case, a later `for` in the same func may reuse the same
-variable name.
+Scoping is function-flat, so the loop variable stays visible after the loop. As a special case, a later `for` in the same func may reuse the same variable name.
 
-`for r in TABLE` iterates the rows of a constant table positionally; `r.col`
-reads the current row. See [Constant tables](#constant-tables-table).
+`for r in TABLE` iterates the rows of a constant table positionally; `r.col` reads the current row. See [Constant tables](#constant-tables-table).
 
 `while` loops on a bare bool condition:
 
+<!-- fragment -->
 ```gamescript
 int i = 0
 while i < 10
@@ -660,10 +594,15 @@ while i < 10
     i++
 ```
 
-`break` and `continue` work in both `for` and `while` (in a `for`, `continue`
-still increments). Outside a loop they are compile errors.
+`break` and `continue` work in both `for` and `while` (in a `for`, `continue` still increments). Outside a loop they are compile errors.
 
-### Early returns
+### Returns and return paths
+
+A func with no `returns` clause leaves with a bare `return` (or by reaching its end). A func that declares `returns` must return a value on **every** path — the compiler checks:
+
+- an `if` chain counts only when it ends in an `else` and every branch returns;
+- a `switch` counts only when it has a `default` and every case returns;
+- loops never count, since they may run zero times.
 
 ```gamescript
 func try_pay(int cost) returns bool
@@ -676,20 +615,20 @@ func try_pay(int cost) returns bool
 
 ### Tail calls
 
-A func call in **tail position** compiles to a frame *replacement*, not a stack
-push. Tail position means:
+A call in **tail position** compiles to a frame *replacement*, not a stack push. Tail position means:
 
-- `return f(...)` where `f`'s return arity matches the current func's, or
+- `return f(...)` where `f` is a script func whose return arity matches the current func's — including zero: in a func with no `returns` clause, `return f()` is legal when `f` returns nothing too, and means "transfer to `f`"; or
 - a call as the final statement of a func with no return values.
 
-This is what makes long state-machine chains and self-recursive loops safe — the
-call stack never grows, even across suspends:
+Only script funcs transfer. `return cmd()` in a void func, where `cmd` is a command returning nothing, is allowed and simply calls the command and returns.
+
+This is what makes long state-machine chains and self-recursive loops safe — the call stack never grows, even across suspends:
 
 ```gamescript
 func loop_test(int i)
     if i >= 3
         println("Loop finished")
-        return final()          // tail transfer
+        return final()          // tail transfer from the middle of a branch
     println(i)
     loop_test(i + 1)            // final statement → tail transfer, no stack growth
 
@@ -697,14 +636,13 @@ func final()
     println("Script complete.")
 ```
 
-A call that is *not* in tail position (a result is used, or statements follow)
-is an ordinary call and returns normally.
+A call that is *not* in tail position (a result is used, or statements follow) is an ordinary call and returns normally. Ordinary calls do consume stack: the default `ScriptState` allows 64 nested frames, and exceeding it aborts the script — so deep recursion must be written in tail form.
 
 ---
 
 ## 8 Commands & the Host
 
-Commands declare host-implemented opcodes. No body is allowed in script — the host registers a C# handler for each one. A project's command declarations (conventionally collected in a `core.gs`) are effectively its standard library:
+Commands declare host-implemented operations. No body is allowed in script — the host registers a C# handler for each one. A project's command declarations (conventionally collected in a `core.gs`) are effectively its standard library:
 
 ```gamescript
 // Print a value
@@ -717,17 +655,9 @@ command suspend_for_int() returns int
 
 ### Overloading and `=` op bindings
 
-Funcs and commands may **overload**: same name, different parameter signatures
-(count or types). Call sites resolve by argument count and types; a call that
-matches no overload — or would be ambiguous — is a compile error. Return types
-do not participate in overload resolution. An exact named-type match outranks
-one that needs widening, so `f(item)` may sit beside `f(int)` and
-`f(^item_iron_sword)` picks the typed one; the call's result type is that
-overload's return type.
+Funcs and commands may **overload**: same name, different parameter signatures (count or types). Call sites resolve by argument count and types; a call that matches no overload — or would be ambiguous — is a compile error. Return types do not participate in overload resolution. An exact named-type match outranks one that needs widening, so `f(item)` may sit beside `f(int)` and `f(^item_iron_sword)` picks the typed one; the call's result type is that overload's return type.
 
-Each command overload binds to its own engine op. By default the binding is the
-declared name; `= internal_name` binds explicitly, which lets one script name
-fan out to several engine ops:
+Each command overload binds to its own engine op. By default the binding is the declared name; `= internal_name` binds explicitly, which lets one script name fan out to several engine ops:
 
 ```gamescript
 // Enqueue a func on the strong queue with a delay
@@ -738,13 +668,13 @@ command queue_strong(func method, int delay, int arg0) = queue_strong_int
 command queue_strong(func method, int delay, string arg0) = queue_strong_str
 ```
 
-The compiler resolves the overload and emits the bound op id — the engine's
-handler registry is untouched.
+The compiler resolves the overload and emits the bound op id — the engine's handler registry is untouched.
 
 ### Suspending commands
 
 A command may **pause the script** and resume it later with a result — this is how dialogue and input work. From the script's point of view it's just a call that takes a while:
 
+<!-- fragment -->
 ```gamescript
 int answer = suspend_for_int()   // script sleeps here until the player responds
 ```
@@ -753,8 +683,7 @@ Any func — including one reached through tail transfers — can suspend.
 
 ### Scheduling with `func` values
 
-The `func` type passes a method reference to the host for later execution. A
-bare func name in a `func`-typed argument position is a reference, not a call:
+The `func` type passes a method reference to the host for later execution. A bare func name in a `func`-typed argument position is a reference, not a call:
 
 ```gamescript
 command queue(func method, int delay)
@@ -766,7 +695,9 @@ func light_fuse()
     queue(explode, 5)      // run explode in 5 ticks
 ```
 
-Any func is queueable; a queued func's return values are discarded.
+- Any func may be referenced, including one with parameters (the host supplies the arguments, as with `queue_strong(..., arg0)` above); a queued func's return values are discarded.
+- Commands and trigger handlers cannot be referenced, and neither can an overloaded name — a reference must pick out exactly one method.
+- `func` values may be stored in locals and compared with `==`.
 
 ### Dot-prefixed commands
 
@@ -860,8 +791,26 @@ func close_gate()
     play_sound(^sound_gate_close)
 ```
 
+### Data-driven lookups with a table
+
+Replace an `if`/`else` ladder of ids with a table and a typed key:
+
+```gamescript
+type skill : int
+
+// skill -> the jingle played on level-up
+table level_up(skill id, int jingle)
+    ^skill_attack,  ^jingle_level_up_attack
+    ^skill_defense, ^jingle_level_up_attack
+    ^skill_mining,  ^jingle_level_up_gather
+
+func on_level_up(skill s, int after)
+    message("Your {skill_name(s)} level is now {after}!")
+    if level_up.has(s): play_sound(level_up[s].jingle)
+```
+
 ---
 
-## License / Contribution
+## Contributing
 
-Feel free to open PRs to improve this guide or the engine itself.
+Corrections and additions to this reference are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md). Every ```` ```gamescript ```` block in this file is parsed by the test suite, so examples cannot silently go stale.

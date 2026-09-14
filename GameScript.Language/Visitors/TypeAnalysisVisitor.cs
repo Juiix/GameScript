@@ -91,7 +91,19 @@ namespace GameScript.Language.Visitors
 			var returnType = _context.Types.GetTuple(Method.ReturnTypes?.Select(x => x.Type.Name));
 			if (Method.ReturnTypes == null)
 			{
-				if (node.Expression != null)
+				// 'return f()' in a func with no 'returns' clause is legal when f returns
+				// nothing too: it means "call f, then return" (a tail transfer when f is
+				// a script func). Anything that yields a value has nowhere to go.
+				if (node.Expression is CallExpressionNode call &&
+					call.FunctionName.Type != IdentifierType.Type)
+				{
+					if (ResolvedCalls.TryGetValue(call, out var callee) && callee.Type != null)
+					{
+						Error($"{Method.Name.Type} has no return type declared; 'return {callee.Name}(...)' is only allowed when '{callee.Name}' returns nothing too.", node);
+					}
+					// unresolved calls are reported by the call check itself
+				}
+				else if (node.Expression != null)
 				{
 					Error($"{Method.Name.Type} has no return type declared.", node);
 				}
@@ -505,9 +517,9 @@ namespace GameScript.Language.Visitors
 				Error($"Type mismatch, cannot operate '{leftType}' and '{rightType}'", node);
 			}
 
-			if (!isStringAdd &&
-				(node.Operator & BinaryOperator.Relational) == BinaryOperator.Unknown &&
-				leftType.RootKind != TypeKind.Int)
+			// '- * / %' and the ordering operators '< > <= >=' are int-only: the VM
+			// reads both operands as ints, so a string or bool here would fail at runtime
+			if (!isStringAdd && leftType.RootKind != TypeKind.Int)
 			{
 				Error($"'{node.OperatorNode.Operator}' can only be used with 'int' type.", node);
 			}
@@ -522,7 +534,7 @@ namespace GameScript.Language.Visitors
 			if (node.Operator == UnaryOperator.Not &&
 				operandType?.RootKind != TypeKind.Bool)
 			{
-				Error("'!' operator can only be used on 'bool' types.", node);
+				Error("'not' operator can only be used on 'bool' types.", node);
 			}
 
 			if ((node.Operator & UnaryOperator.Numeric) != UnaryOperator.Unknown)

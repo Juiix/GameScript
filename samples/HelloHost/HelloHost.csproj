@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>HelloHost</RootNamespace>
+  </PropertyGroup>
+
+  <!-- A real game references the NuGet packages GameScript.Language and GameScript.Bytecode instead. -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\GameScript.Language\GameScript.Language.csproj" />
+    <ProjectReference Include="..\..\GameScript.Bytecode\GameScript.Bytecode.csproj" />
+  </ItemGroup>
+
+</Project>

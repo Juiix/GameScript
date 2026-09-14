@@ -1,22 +1,24 @@
 # GameScript — Embedding Guide
 
-> **Scope** This guide covers hosting GameScript in a C# game: parsing source, compiling to bytecode, running scripts, backing context variables, and attaching the VS Code debugger.
+> **Scope** Hosting GameScript in a C# game: compiling source to bytecode, running scripts, suspending and resuming them, backing context variables, and attaching the VS Code debugger.
 >
-> Writing scripts? See **[LANGUAGE.md](LANGUAGE.md)** for the language reference.
+> The sections below follow the order a host executes them, and **[samples/HelloHost/Program.cs](samples/HelloHost/Program.cs)** is the complete, runnable version — about 150 lines, with comments numbered to match these sections. Read it alongside this guide.
+>
+> Writing scripts? See **[LANGUAGE.md](LANGUAGE.md)**.
 
 ---
 
 ## Contents
 
 1. [Architecture Overview](#1-architecture-overview)
-2. [Parsing Source Files](#2-parsing-source-files)
-3. [Mapping Commands → Enum](#3-mapping-commands--enum)
-4. [Bytecode Compilation](#4-bytecode-compilation)
-5. [Opcode Handlers & the Runner](#5-opcode-handlers--the-runner)
-6. [ScriptState Lifecycle](#6-scriptstate-lifecycle)
+2. [The Command Enum](#2-the-command-enum)
+3. [Parsing & Indexing](#3-parsing--indexing)
+4. [Analysis](#4-analysis)
+5. [Compilation](#5-compilation)
+6. [Opcode Handlers & the Runner](#6-opcode-handlers--the-runner)
 7. [Context Variables (`IScriptContext`)](#7-context-variables-iscriptcontext)
-8. [Frame Introspection](#8-frame-introspection)
-9. [Indexing & Static Analysis](#9-indexing--static-analysis)
+8. [ScriptState Lifecycle](#8-scriptstate-lifecycle)
+9. [Frame Introspection](#9-frame-introspection)
 10. [Debugging (DAP)](#10-debugging-dap)
 
 ---
@@ -26,62 +28,28 @@
 The toolchain is a straight pipeline:
 
 ```
-.gs source  →  parse  →  (index & analyze)  →  compile  →  run
-               AstParser   visitors            BytecodeCompiler   ScriptRunner
+.gs source  →  parse  →  index  →  analyze  →  compile  →  run
+               AstParser  IndexVisitor  4 visitors  BytecodeCompiler  ScriptRunner
 ```
 
-| Package                     | Role                                                                    |
-| --------------------------- | ----------------------------------------------------------------------- |
-| **`GameScript.Language`**   | Lexer, parser, AST, analysis visitors, symbol indexing, bytecode compiler |
-| **`GameScript.Bytecode`**   | The embeddable VM — `Value`, `ScriptState`, `ScriptRunner`, host interfaces |
-| **`GameScript.DebugAdapter`** | DAP server — embed in your game to debug scripts from VS Code           |
+| Package                       | Role                                                                    |
+| ----------------------------- | ----------------------------------------------------------------------- |
+| **`GameScript.Language`**     | Lexer, parser, AST, symbol indexing, analysis visitors, bytecode compiler (net8.0) |
+| **`GameScript.Bytecode`**     | The embeddable VM — `Value`, `ScriptState`, `ScriptRunner`, host interfaces (netstandard2.1 / net8.0) |
+| **`GameScript.DebugAdapter`** | Debug Adapter Protocol server — embed in your game to debug scripts from VS Code |
 
-A minimal host only needs `GameScript.Bytecode` (ship precompiled programs) — add `GameScript.Language` to compile scripts at load time, and `GameScript.DebugAdapter` for debugging.
+A minimal host only needs `GameScript.Bytecode` (ship precompiled programs). Add `GameScript.Language` to compile scripts at load time, and `GameScript.DebugAdapter` for debugging.
+
+Two facts shape everything else:
+
+- **All files compile together.** There are no imports; a name used in one file may be declared in any other. Index every file before analyzing any of them.
+- **The host owns control flow.** Scripts run only when the host starts a method by name, and a `command` handler may pause a script for the host to resume later.
 
 ---
 
-## 2 Parsing Source Files
+## 2 The Command Enum
 
-```csharp
-string path = "scripts/player.gs";
-var parser  = new AstParser(path, File.ReadAllText(path));
-ProgramNode ast = parser.ParseProgram();
-
-if (parser.Errors.Count > 0)
-    foreach (var e in parser.Errors)
-        Console.WriteLine(e);
-```
-
-There is one grammar and one entry point (2.5+): constants, context variables and
-named types are top-level declarations like methods and tables, in any order and
-in any file.
-
-| Entry point      | Returns       | Node lists                                                        |
-| ---------------- | ------------- | ----------------------------------------------------------------- |
-| `ParseProgram()` | `ProgramNode` | `.Methods`, `.Tables`, `.Constants`, `.Contexts`, `.Types` (`.Declarations` in source order) |
-
-`ParseConstants()` / `ParseContexts()` remain for one release as `[Obsolete]`
-filtered views over `ParseProgram()` (they report any other declaration as an
-error); stop routing by extension and rename legacy `.const`/`.context` files to
-`.gs`.
-
-Every AST node stores its `FilePath` and `FileRange` for diagnostics.
-
----
-
-## 3 Mapping Commands → Enum
-
-`command` declarations in script resolve to cases of an enum you define. The compiler converts each enum case name to a command name by inserting an underscore before every uppercase letter and every digit group, then lowercasing:
-
-```
-Int2Str     →   int_2_str
-StrLength   →   str_length
-```
-
-Two numbering rules:
-
-- **Core opcodes `0–99` are reserved** for the VM (`CoreOpCode`); `ScriptRunnerBuilder.Register` rejects them.
-- **Command enum values must be `>= 1000`** — the compiler ignores enum cases below 1000 when building its command table, so a command mapped to a lower value fails to compile with *"Command '…' is not a supported operation."*
+Every `command` declared in script resolves to a case of an enum you define. Pick the enum before compiling: the compiler needs it to bind call sites.
 
 ```csharp
 public enum ServerOpCode : ushort
@@ -96,12 +64,18 @@ public enum ServerOpCode : ushort
 }
 ```
 
-### Overloads and `=` op bindings
+**Numbering.** Core opcodes `0–99` are reserved for the VM (`CoreOpCode`); `ScriptRunnerBuilder.Register` rejects them. Command values must be **`>= 1000`** — the compiler ignores lower cases when building its command table, and a command mapped to one fails to compile with *"Command '…' is not a supported operation."*
 
-Script-side command **overloads** (same name, different parameter signatures) each
-bind to their own enum case via the `= internal_name` clause; the bound name goes
-through the same enum-name mapping. No engine changes are needed — one script name
-simply fans out to several ops:
+**Naming.** The compiler derives each case's script name by inserting an underscore before every uppercase letter and before the first digit of each run of digits, then lowercasing:
+
+```
+Int2Str     →   int_2_str
+StrLength   →   str_length
+Vec3f       →   vec_3f
+NPCName     →   n_p_c_name      (every uppercase letter, not every word — prefer NpcName)
+```
+
+**Overloads.** Script-side command overloads (same name, different parameter signatures) each bind to their own enum case via the `= internal_name` clause; the bound name goes through the same mapping. One script name fans out to several ops with no engine changes:
 
 ```gamescript
 command queue(func method, int delay) = queue
@@ -110,36 +84,101 @@ command queue(func method, int delay, int arg0) = queue_int
 
 ---
 
-## 4 Bytecode Compilation
+## 3 Parsing & Indexing
 
-Collect the parsed nodes from **all** files, then compile them together in one call:
+*Program.cs step 3.* For each `.gs` file: parse it, then run the `IndexVisitor` to publish its declarations into the project-wide tables.
 
 ```csharp
-// resolvedCalls comes from the TypeAnalysisVisitor pass (see §9.3) — it maps each
-// call site to the overload chosen during analysis. Required whenever any name
-// is overloaded; merge the per-file dictionaries into one.
+var types      = new GlobalTypeIndex();      // built-in types; named types resolve through the symbols
+var symbols    = new GlobalSymbolTable();
+var references = new GlobalReferenceTable();
+
+var parser = new AstParser(path, File.ReadAllText(path));
+ProgramNode root = parser.ParseProgram();        // parser.Errors: syntax diagnostics
+
+var fileIndex = new FileIndex();
+var indexer   = new IndexVisitor(fileIndex, new VisitorContext(types, symbols, path));
+root.Accept(indexer);                             // indexer.Errors, indexer.LocalIndexes
+
+references.AddFile(path, fileIndex.FileReferences);
+symbols.AddFile(path, fileIndex.FileSymbols);
+```
+
+- `ParseProgram()` returns a `ProgramNode` whose lists — `.Constants`, `.Contexts`, `.Types`, `.Methods`, `.Tables` — hold every declaration of that kind; `.Declarations` keeps them in source order. Every node carries its `FilePath` and `FileRange` for diagnostics.
+- Keep `indexer.LocalIndexes` (a `Dictionary<MethodDefinitionNode, LocalIndex>`) per file; the analysis passes need it.
+- Files may be indexed in any order, and in parallel: a named type or constant referenced from a file indexed earlier is resolved during analysis, not indexing.
+
+---
+
+## 4 Analysis
+
+*Program.cs step 4.* Once **every** file is indexed, run the four analysis visitors over each file, in this order, with a fresh `VisitorContext` per file:
+
+```csharp
+var context     = new VisitorContext(types, symbols, path);
+var typeVisitor = new TypeAnalysisVisitor(locals, context);
+IAstVisitor[] passes =
+[
+    new NameResolutionVisitor(locals, context),   // MUST be first
+    new SymbolAnalysisVisitor(locals, context),
+    new SemanticAnalysisVisitor(locals, context),
+    typeVisitor,
+];
+foreach (var pass in passes)
+{
+    root.Accept(pass);
+    diagnostics.AddRange(pass.Errors);
+}
+foreach (var (call, symbol) in typeVisitor.ResolvedCalls)   // merge across files
+    resolvedCalls[call] = symbol;
+```
+
+| Visitor                    | Checks                                               |
+| -------------------------- | ---------------------------------------------------- |
+| `NameResolutionVisitor`    | Classifies bare identifiers (local, func, command, table, type) — every later pass and the compiler rely on it |
+| `SymbolAnalysisVisitor`    | Duplicate declarations, local/global name collisions, handler headers against trigger declarations |
+| `SemanticAnalysisVisitor`  | Control flow, mark rules, `break`/`continue` scope, return paths, table shape (row arity, constant cells, >64-row warning), table/cursor misuse, duplicate context slots |
+| `TypeAnalysisVisitor`      | Type inference, overload resolution (exact match outranks widening), named-type assignability and casts, table cell types, key uniqueness / key width, lookup arity and key types |
+
+Every visitor collects `FileError`s (`Message`, `FileRange`, `Severity` — `Error`, `Warning`, `Information`, `Hint`). Stop on any `Error`; warnings are advisory.
+
+`TypeAnalysisVisitor.ResolvedCalls` records which overload each call site chose. Merge the per-file dictionaries into one and hand it to the compiler — it is required whenever any name is overloaded.
+
+---
+
+## 5 Compilation
+
+*Program.cs step 5.* Collect the declaration lists from **all** files and compile them in one call:
+
+```csharp
 var compiler = new BytecodeCompiler<ServerOpCode>(resolvedCalls);
-var result   = compiler.Compile(constantNodes, contextNodes, methodNodes, tableNodes, typeNodes);
+BytecodeCompilerResult result = compiler.Compile(
+    roots.SelectMany(r => r.Constants ?? []),
+    roots.SelectMany(r => r.Contexts  ?? []),
+    roots.SelectMany(r => r.Methods   ?? []),
+    roots.SelectMany(r => r.Tables    ?? []),
+    roots.SelectMany(r => r.Types     ?? []));
 
 BytecodeProgram         prog = result.Program;   // methods + constant pool
 BytecodeProgramMetadata meta = result.Metadata;  // per-method line/file maps, local names, context slot names
 ```
 
-- Every argument is the concatenation of the matching `ProgramNode` list across the root: `.Constants`, `.Contexts`, `.Methods`, `.Tables`, `.Types`.
-- `tableNodes` is every `ProgramNode.Tables` entry across the root (2.4+). The 3-argument `Compile(constants, contexts, methods)` overload still exists for content without tables; a table that is *used* but not passed is a compile error.
-- `typeNodes` is every `ProgramNode.Types` entry (2.5+). Named types erase to their root at codegen — no new opcodes, the same `Value` slots — and the list only tells the compiler which root each name erases to (a `string`-rooted type erases to `String` in `ParamTypes` and table fallbacks). The 4-argument overload still compiles content that declares no types.
-- Constant declarations are folded into the constant pool at compile time — there is no init step to run.
-- Constant tables produce no bytecode of their own: each access site compiles to a compare chain over the table's rows (all-constant keys fold to the cell), so a table only costs where it is read.
-- `func` and trigger-handler methods compile to bytecode; `command` declarations resolve to your opcode enum, and `trigger` declarations produce no bytecode (they only validate handler headers).
-- Every `BytecodeMethod` carries `ParamTypes` (2.4.2+): one `ValueType` per parameter, aligned with locals `0..ParamCount-1` (`func`/label refs report as `Int`). Hosts binding arguments by position — e.g. handlers of a variadic `trigger NAME(...)` — read it to decide how to parse each argument. If you persist bytecode yourself, serialize it; a `null` `ParamTypes` means "unknown" (pre-2.4.2 programs).
-- A call in tail position (`return f(...)`, or a call as the final statement of a void func) compiles to the `TailCall` opcode — the VM replaces the current frame instead of pushing one, so state-machine chains never grow the stack.
-- Keep `meta` if you want stack traces or debugging — it maps every instruction back to a file and line, and names every local and context slot.
+(Shorter `Compile` overloads without `tables` and `types` still exist for content that declares neither.)
+
+What the compiler produces:
+
+- `func`s and trigger handlers become `BytecodeMethod`s. Handlers are named `"<kind> <subject>"` — the string the host uses to start them.
+- `command` declarations resolve to your opcode enum; `trigger` declarations produce no bytecode (they only validate handler headers).
+- Constants fold into the constant pool; there is no init step. Constant tables produce no bytecode of their own — each access compiles to a compare chain over the rows, and all-constant keys fold to the cell. Named types erase to their root; the host sees plain `Value` slots.
+- Every `BytecodeMethod` carries `ParamTypes`: one `ValueType` per parameter, aligned with locals `0..ParamCount-1` (`func` references report as `Int`). Hosts binding arguments by position — handlers of a variadic `trigger NAME(...)` — read it to decide how to parse each argument. If you persist bytecode yourself, serialize it; a `null` `ParamTypes` means "unknown".
+- A call in tail position (`return f(...)` with matching return arity, or a call as the final statement of a void func) compiles to `TailCall`: the VM replaces the current frame instead of pushing one.
+- Keep `meta` if you want stack traces or debugging — it maps every instruction back to a file and line and names every local and context slot.
 
 ---
 
-## 5 Opcode Handlers & the Runner
+## 6 Opcode Handlers & the Runner
 
-Register a handler for each command opcode, then build the runner:
+*Program.cs step 6.* Register a handler for each command opcode, then build the runner:
 
 ```csharp
 var builder = new ScriptRunnerBuilder<MyCtx>();
@@ -152,7 +191,7 @@ builder.Register((ushort)ServerOpCode.Int2Str, state =>
 
 builder.Register((ushort)ServerOpCode.SuspendForInt, state =>
 {
-    state.Execution = ScriptExecution.Paused;   // suspend — see §6
+    state.Execution = ScriptExecution.Paused;   // suspend — see §8.2
 });
 
 ScriptRunner<MyCtx> runner = builder.Build();
@@ -160,7 +199,9 @@ ScriptRunner<MyCtx> runner = builder.Build();
 
 For stateful or allocation-sensitive handlers, implement `IScriptHandler<TContext>` instead of a lambda and pass it to the same `Register` overload.
 
-> **Pop-push discipline:** Arguments are pushed left to right, so the **last** parameter is on top of the stack. A handler must pop all of its parameters and push exactly the return value(s) its `command` declaration promises.
+> **Pop-push discipline:** Arguments are pushed left to right, so the **last** parameter is on top of the stack. A handler must pop all of its parameters and push exactly the return value(s) its `command` declaration promises — `Value.FromInt`, `FromBool`, `FromString`.
+
+A `func`-typed argument arrives as an `int`: the index into `prog.Methods` of the referenced method. Store it and later `Start` that method (see the `queue` handler in the sample).
 
 ### Dot-prefixed commands
 
@@ -177,55 +218,9 @@ builder.Register((ushort)ServerOpCode.Anim, state =>
 
 ---
 
-## 6 ScriptState Lifecycle
-
-### 6.1 Create, start, run
-
-`ScriptState` owns the value stack and call frames. Construct it once (sizes are fixed at construction), then `Start` it for each script execution:
-
-```csharp
-var state = new ScriptState<MyCtx>(stackSize: 1024, frameSize: 64);
-
-var entry = prog.Methods.First(m => m.Name == "mn_button_1 hud:logout");
-state.Start(prog, ctx, entry /*, args… */);
-
-ScriptExecution exec = runner.Run(state);
-```
-
-`Run` executes until the script finishes, pauses, or throws:
-
-| `ScriptExecution` | Meaning                                             |
-| ----------------- | --------------------------------------------------- |
-| `Finished`        | Ran to completion                                   |
-| `Paused`          | A handler set `Execution = Paused` (suspended)      |
-| `Aborted`         | A handler threw — the exception propagates to you   |
-| `Running`         | Only observed mid-execution (e.g. from a debugger)  |
-
-### 6.2 Suspend & resume
-
-A handler suspends the script by setting `state.Execution = ScriptExecution.Paused` — typically after showing UI and before waiting for player input. When the response arrives, push the value(s) the suspending `command` promised to return, then run again:
-
-```csharp
-// handler: suspend_for_int() returns int
-builder.Register((ushort)ServerOpCode.SuspendForInt, state =>
-{
-    state.Execution = ScriptExecution.Paused;
-});
-
-// later, when the player submits a number:
-state.Push(Value.FromInt(playerInput));
-runner.Run(state);   // resumes right after the suspending command
-```
-
-### 6.3 Reuse
-
-`Start` fully resets the state, so a pooled `ScriptState` can be re-`Start`ed for a new script with no allocation. Call `Clear()` when parking a state long-term — it drops the program/context references so they can be collected.
-
----
-
 ## 7 Context Variables (`IScriptContext`)
 
-`@context` variables are backed by host storage, keyed by the slot ID from the `TYPE @name = slot` declaration (the declared type may be a named type; the slot is still an `int`):
+*Program.cs step 7.* `@context` variables are backed by host storage, keyed by the slot ID from the `TYPE @name = slot` declaration (the declared type may be a named type; the slot is still an `int`):
 
 ```csharp
 public sealed class MyCtx : IScriptContext
@@ -247,11 +242,64 @@ public sealed class MyCtx : IScriptContext
 ```
 
 - **Dot prefix:** script can read/write `.@var` (one dot max). The dot flag arrives in the high 16 bits of `id` — conventionally it selects the *other* party's context in an interaction. Mask with `& 0xFFFF` if you don't use it.
-- **Coercion:** the VM is forgiving about bool/int mismatches — `Value.Bool` treats any non-zero int as `true`, `Value.Int` reads `true` as `1`, and `Null` reads as `0`/`false`. Returning `Value.FromInt(1)` for a `bool @flag` works.
+- **Coercion:** the VM is forgiving about bool/int mismatches — `Value.Bool` treats any non-zero int as `true`, `Value.Int` reads `true` as `1`, and `Null` reads as `0`/`false`/`""`. Returning `Value.FromInt(1)` for a `bool @flag` works.
+- The compiler rejects two declarations on one slot, so a slot id identifies exactly one variable; `meta.ContextNames` maps slots back to names for tooling.
 
 ---
 
-## 8 Frame Introspection
+## 8 ScriptState Lifecycle
+
+*Program.cs steps 8–9.*
+
+### 8.1 Create, start, run
+
+`ScriptState` owns the value stack and call frames. Construct it once (sizes are fixed at construction — the defaults are a 1024-slot stack and 64 call frames), then `Start` it for each script execution:
+
+```csharp
+var state = new ScriptState<MyCtx>();            // or (stackSize: 1024, frameSize: 64)
+
+var entry = prog.Methods.First(m => m.Name == "mn_button_1 hud:logout");
+state.Start(prog, ctx, entry /*, args… */);
+
+ScriptExecution exec = runner.Run(state);
+```
+
+`Run` executes until the script finishes, pauses, or throws:
+
+| `ScriptExecution` | Meaning                                             |
+| ----------------- | --------------------------------------------------- |
+| `Finished`        | Ran to completion                                   |
+| `Paused`          | A handler set `Execution = Paused` (suspended)      |
+| `Aborted`         | A handler or the VM threw — the exception propagates to you (division by zero, more than `frameSize` nested calls, a handler's own exception) |
+| `Running`         | Only observed mid-execution (e.g. from a debugger)  |
+
+Tail transfers do not consume frames, so a script that recurses in tail position never hits the frame limit.
+
+### 8.2 Suspend & resume
+
+A handler suspends the script by setting `state.Execution = ScriptExecution.Paused` — typically after showing UI and before waiting for player input. When the response arrives, push the value(s) the suspending `command` promised to return, then run again:
+
+```csharp
+// handler: suspend_for_int() returns int
+builder.Register((ushort)ServerOpCode.SuspendForInt, state =>
+{
+    state.Execution = ScriptExecution.Paused;
+});
+
+// later, when the player submits a number:
+state.Push(Value.FromInt(playerInput));
+runner.Run(state);   // resumes right after the suspending command
+```
+
+A paused `ScriptState` holds the whole call stack, so keep it around (one per in-flight script) until it finishes.
+
+### 8.3 Reuse
+
+`Start` fully resets the state, so a pooled `ScriptState` can be re-`Start`ed for a new script with no allocation. Call `Clear()` when parking a state long-term — it drops the program/context references so they can be collected.
+
+---
+
+## 9 Frame Introspection
 
 For stack traces, watchdogs, or custom tooling, `ScriptState` exposes its call stack read-only:
 
@@ -264,76 +312,7 @@ For stack traces, watchdogs, or custom tooling, `ScriptState` exposes its call s
 | `GetContextValue(slot)`               | Read a context variable through the state's context  |
 | `OpCount`                             | Instructions executed — useful for runaway-script limits |
 
-Pair frame data with `BytecodeProgramMetadata` (`LineNumbers`, `FilePath`, `LocalNames`, `ContextNames`) to render human-readable traces.
-
----
-
-## 9 Indexing & Static Analysis
-
-> **Multi-file builds:** Run `IndexVisitor` over every file first to populate global tables, then run the analysis passes. This two-phase approach ensures cross-file symbol lookups succeed.
-
-### 9.1 Global indexes
-
-```csharp
-var types      = new GlobalTypeIndex();     // the built-in types only
-var symbols    = new GlobalSymbolTable();
-var references = new GlobalReferenceTable();
-```
-
-Named types (`type item : int`) are ordinary symbols in `symbols`; `VisitorContext`
-wraps `types` in a `ProjectTypeIndex` that also answers them. The index pass records
-a named type by name only and the analysis passes resolve it through the symbol
-table, so files may be indexed in any order (and in parallel).
-
-### 9.2 Per-file indexing
-
-```csharp
-var errors    = new List<FileError>();
-var fileIndex = new FileIndex();
-var context   = new VisitorContext(types, symbols, filePath);
-var indexer   = new IndexVisitor(fileIndex, context);
-VisitAst(rootNode, indexer, errors);
-
-references.AddFile(filePath, fileIndex.FileReferences);
-symbols.AddFile(filePath,    fileIndex.FileSymbols);
-```
-
-`indexer.LocalIndexes` maps each `MethodDefinitionNode` to its local symbol table.
-
-### 9.3 Analysis passes
-
-```csharp
-// NameResolutionVisitor MUST run first — it classifies bare identifiers
-// (local vs func vs command) that every later pass and the compiler rely on.
-VisitAst(rootNode, new NameResolutionVisitor(indexer.LocalIndexes, context),   errors);
-VisitAst(rootNode, new SymbolAnalysisVisitor(indexer.LocalIndexes, context),   errors);
-VisitAst(rootNode, new SemanticAnalysisVisitor(indexer.LocalIndexes, context), errors);
-
-var typeVisitor = new TypeAnalysisVisitor(indexer.LocalIndexes, context);
-VisitAst(rootNode, typeVisitor, errors);
-
-// merge per-file resolved-overload maps for the compiler (see §4)
-foreach (var (call, symbol) in typeVisitor.ResolvedCalls)
-    resolvedCalls[call] = symbol;
-
-static void VisitAst<T>(AstNode n, T v, List<FileError> errs) where T : IAstVisitor
-{
-    n.Accept(v);
-    errs.AddRange(v.Errors);
-}
-```
-
-| Visitor                    | Checks                                               |
-| -------------------------- | ---------------------------------------------------- |
-| `NameResolutionVisitor`    | Classifies bare identifiers against symbol tables    |
-| `SymbolAnalysisVisitor`    | Duplicate declarations, local/global name collisions |
-| `SemanticAnalysisVisitor`  | Control flow, mark rules, break/continue scope, table shape (row arity, constant cells, >64-row warning), table/cursor misuse |
-| `TypeAnalysisVisitor`      | Type inference, overload resolution (exact match outranks widening), named-type assignability and casts, table cell types, key uniqueness / key width, lookup arity and key types |
-
-All visitors collect `FileError` instances for easy aggregation and reporting.
-Table key uniqueness is checked at analysis time (not indexing) because cells
-may name `^` constants from files indexed later — run every file's `IndexVisitor`
-before any analysis pass, as the LSP and `TestCompilation` do.
+Pair frame data with `BytecodeProgramMetadata` (`MethodMetadata` — line numbers, file path, local names per method — and `ContextNames`) to render human-readable traces.
 
 ---
 
@@ -393,6 +372,6 @@ While paused you get stack traces, stepping, locals, and the script's context va
 
 ---
 
-## License / Contribution
+## Contributing
 
-Feel free to open PRs to improve this guide or the engine itself.
+Corrections to this guide are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md). When the host API changes, update the sample host in the same change; CI builds and runs it.
