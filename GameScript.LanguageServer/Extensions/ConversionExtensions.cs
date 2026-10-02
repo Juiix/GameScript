@@ -1,6 +1,7 @@
 ﻿using GameScript.Language.Ast;
 using GameScript.Language.File;
 using GameScript.Language.Symbols;
+using GameScript.LanguageServer.Tools;
 using OmniSharp.Extensions.LanguageServer.Protocol;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using System.Runtime.InteropServices;
@@ -51,6 +52,9 @@ namespace GameScript.LanguageServer.Extensions
 		///   <item><description><c>/C:/dir/file.gs</c> → <c>C:\dir\file.gs</c></description></item>
 		///   <item><description><c>file:///C:/dir/file.gs</c> → <c>C:\dir\file.gs</c></description></item>
 		/// </list>
+		/// On case-insensitive file systems the result is also given the file's one known
+		/// spelling (see <see cref="PathSpellings"/>), so differently-cased paths to the
+		/// same file share a key.
 		/// </remarks>
 		public static string NormalizePath(this string raw)
 		{
@@ -75,7 +79,8 @@ namespace GameScript.LanguageServer.Extensions
 				full = char.ToUpperInvariant(full[0]) + full[1..];
 			}
 
-			return full;
+			// 5) One spelling per file where the file system ignores case.
+			return PathSpellings.Default.Canonicalize(full);
 		}
 
 		/// <summary>

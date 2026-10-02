@@ -62,7 +62,7 @@ Build `GameScript.VisualStudio` from Visual Studio (open `GameScript.sln`) or wi
 
 ### The test suite
 
-`GameScript.Language.Tests` is an xUnit suite covering the tokenizer, parser, analysis diagnostics, named types, end-to-end execution, position lookup, the language server's project registry, and the documentation samples. Things to know when adding tests:
+`GameScript.Language.Tests` is an xUnit suite covering the tokenizer, parser, analysis diagnostics, named types, end-to-end execution, position lookup, the language server's project registry and path spellings, and the documentation samples. Things to know when adding tests:
 
 - Scripts under test are inline C# raw strings. The shared `core.gs` (command and trigger declarations matching the `TestOp` enum) is `Harness/Fixtures.cs`; the fake host that records prints, queues, and suspensions is `Harness/TestRuntime.cs`.
 - `Build`/`ErrorsFor` treat **warnings as failures**, so execution tests must be warning-free (for example, a constant table key that matches no row warns).

@@ -2,6 +2,14 @@
 
 All notable changes to GameScript will be documented in this file.
 
+## [2.6.1]
+
+**Tooling fix — language server on case-insensitive file systems.** No language, compiler, or VM change.
+
+### Tooling
+- Language server: a file reached under two casings on Windows or macOS (a workspace opened as `Design/…` while a document is opened as `design/…`) is now one file. It was cached and indexed once per spelling, so every top-level symbol in it was reported as `'x' is already defined in this context`. Paths are given one spelling when normalised — the first seen, with new files taking their folder's — so a workspace keeps the casing the editor opened it with.
+- Language server: diagnostics for an open document are published under the URI the editor opened it with, and moved back when it closes, so they attach to the editor even when that URI is spelled differently from the workspace's.
+
 ## [2.6.0]
 
 **Feature release — documentation, samples, and diagnostics.** A public-facing rewrite of the docs with a tutorial and a runnable sample, plus the compiler gaps the rewrite uncovered. One language relaxation (`return f()` in void funcs) and stricter checks that turn runtime failures into compile errors; no VM change.

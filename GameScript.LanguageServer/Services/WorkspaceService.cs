@@ -154,6 +154,9 @@ internal sealed class WorkspaceService : IAsyncDisposable
 			toReanalyze = OnRemovedFile(e.FullPath);
 		}
 
+		// the path may come back under a different casing (a case-only rename)
+		PathSpellings.Default.Forget(e.FullPath.NormalizePath());
+
 		// reanalyze dependent files
 		foreach (var filePath in toReanalyze)
 		{
@@ -198,6 +201,9 @@ internal sealed class WorkspaceService : IAsyncDisposable
 		{
 			OnRemovedFile(e.OldFullPath);
 		}
+
+		// a case-only rename must not keep the old spelling for the new name
+		PathSpellings.Default.Forget(e.OldFullPath.NormalizePath());
 
 		// then treat the new path like a create
 		args = new FileSystemEventArgs(
@@ -255,6 +261,8 @@ internal sealed class WorkspaceService : IAsyncDisposable
 	private IEnumerable<string> OnRemovedFile(string filePath)
 	{
 		if (!ExtensionFilter.IsGameScript(filePath)) return [];
+
+		filePath = filePath.NormalizePath();
 
 		// clear
 		_textCache.Remove(filePath);

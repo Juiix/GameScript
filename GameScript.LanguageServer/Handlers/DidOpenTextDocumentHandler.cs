@@ -11,10 +11,12 @@ namespace GameScript.LanguageServer.Handlers;
 
 internal class DidOpenTextDocumentHandler(
 	OpenDocumentCache openDocumentCache,
-	FileProcessingService fileProcessingService) : IDidOpenTextDocumentHandler
+	FileProcessingService fileProcessingService,
+	DiagnosticsService diagnosticsService) : IDidOpenTextDocumentHandler
 {
 	private readonly OpenDocumentCache _openDocumentCache = openDocumentCache;
 	private readonly FileProcessingService _fileProcessingService = fileProcessingService;
+	private readonly DiagnosticsService _diagnosticsService = diagnosticsService;
 
 	public Task<Unit> Handle(DidOpenTextDocumentParams request, CancellationToken cancellationToken)
 	{
@@ -25,6 +27,7 @@ internal class DidOpenTextDocumentHandler(
 		var text = request.TextDocument.Text;
 
 		_openDocumentCache.Update(filePath, text, request.TextDocument.Version ?? 0);
+		_diagnosticsService.DocumentOpened(filePath, request.TextDocument.Uri);
 
 		if (ExtensionFilter.IsGameScript(filePath))
 			_fileProcessingService.Queue(filePath);
